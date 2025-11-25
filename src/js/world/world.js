@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import Experience from '../experience.js'
 import Environment from './environment.js'
 import Grid from './grid.js'
+import Player from './player.js'
 
 export default class World {
   constructor() {
@@ -10,24 +11,20 @@ export default class World {
     this.scene = this.experience.scene
     this.resources = this.experience.resources
 
-    this.scene.add(new THREE.AxesHelper(5))
-    this.grid = new Grid()
+    // this.scene.add(new THREE.AxesHelper(5))
+    this.grid = new Grid(400, 1)
 
-    const box = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.2, 0.2),
-      new THREE.MeshBasicMaterial({
-        color: 'red',
-      }),
-    )
-    this.scene.add(box)
     // Environment
     this.resources.on('ready', () => {
       // Setup
+      this.player = new Player()
       this.environment = new Environment()
     })
   }
 
   update() {
+    if (this.player)
+      this.player.update()
     if (this.grid)
       this.grid.update()
   }

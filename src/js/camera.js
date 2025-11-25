@@ -14,7 +14,7 @@ export default class Camera {
     this.debug = this.experience.debug
     this.debugActive = this.experience.debug.active
 
-    this.position = new THREE.Vector3(0, 0, 1)
+    this.position = new THREE.Vector3(0, 5, 5)
     this.target = new THREE.Vector3(0, 0, 0)
 
     this.setInstance()
@@ -33,7 +33,7 @@ export default class Camera {
         this.frustumSize,
         -this.frustumSize,
         -1,
-        100,
+        1000,
       )
     }
     else {
@@ -41,7 +41,7 @@ export default class Camera {
         34,
         this.sizes.width / this.sizes.height,
         0.1,
-        100,
+        1000,
       )
     }
     this.instance.position.copy(this.position)

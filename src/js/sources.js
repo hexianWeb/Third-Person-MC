@@ -29,5 +29,9 @@ export default [
       'textures/environmentMap/nz.jpg',
     ],
   },
-
+  {
+    name: 'playerModel',
+    type: 'gltfModel',
+    path: 'models/character/character.glb',
+  },
 ]

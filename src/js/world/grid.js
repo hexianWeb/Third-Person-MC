@@ -4,7 +4,7 @@ import vertexShader from '../../shaders/grid/vertex.glsl'
 import Experience from '../experience.js'
 
 export default class Grid {
-  constructor() {
+  constructor(_planeSize = 200, _planeSubdiv = 1) {
     this.experience = new Experience()
     this.scene = this.experience.scene
     this.debug = this.experience.debug
@@ -23,6 +23,9 @@ export default class Grid {
       uSubdiv: 2.0,
     }
 
+    this.planeSize = _planeSize
+    this.planeSubdiv = _planeSubdiv
+
     this.setGeometry()
     this.setMaterial()
     this.setMesh()
@@ -35,7 +38,7 @@ export default class Grid {
   setGeometry() {
     // Create a plane geometry
     // Size should be large enough to cover the view, but we will move it with camera
-    this.geometry = new THREE.PlaneGeometry(200, 200, 1, 1)
+    this.geometry = new THREE.PlaneGeometry(this.planeSize, this.planeSize, this.planeSubdiv, this.planeSubdiv)
     this.geometry.rotateX(-Math.PI / 2)
   }
 
