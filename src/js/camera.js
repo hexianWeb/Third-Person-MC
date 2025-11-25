@@ -14,7 +14,7 @@ export default class Camera {
     this.debug = this.experience.debug
     this.debugActive = this.experience.debug.active
 
-    this.position = new THREE.Vector3(0, 5, 5)
+    this.position = new THREE.Vector3(1, 2, -5)
     this.target = new THREE.Vector3(0, 0, 0)
 
     this.setInstance()
@@ -53,8 +53,14 @@ export default class Camera {
     // OrbitControls 设置
     this.orbitControls = new OrbitControls(this.instance, this.canvas)
     this.orbitControls.enableDamping = true
-    this.orbitControls.enableZoom = false // 禁用缩放
+    this.orbitControls.enableZoom = true // Allow zoom for follow mode
     this.orbitControls.target.copy(this.target)
+
+    // Constraints for Third Person Follow
+    this.orbitControls.maxPolarAngle = Math.PI / 2 - 0.1 // Prevent going below ground
+    this.orbitControls.minDistance = 2
+    this.orbitControls.maxDistance = 15
+    this.orbitControls.enablePan = false
 
     // TrackballControls 设置
     this.trackballControls = new TrackballControls(this.instance, this.canvas)
@@ -116,6 +122,22 @@ export default class Camera {
   }
 
   update() {
+    if (this.experience.world?.player?.model) {
+      const playerParams = this.experience.world.player
+      const playerMesh = playerParams.model
+
+      // Target should look at player center (e.g. height 1.0)
+      const targetV = new THREE.Vector3(
+        playerMesh.position.x + 2,
+        playerMesh.position.y + 1.0,
+        playerMesh.position.z - 5,
+      )
+
+      // this.instance.position.copy(targetV)
+      this.orbitControls.target.copy(targetV)
+      this.trackballControls.target.copy(targetV)
+    }
+
     this.orbitControls.update()
     this.trackballControls.update()
   }

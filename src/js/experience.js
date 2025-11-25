@@ -5,6 +5,7 @@ import Renderer from './renderer.js'
 import sources from './sources.js'
 import Debug from './utils/debug.js'
 import IMouse from './utils/imouse.js'
+import InputManager from './utils/input.js'
 import Resources from './utils/resources.js'
 import Sizes from './utils/sizes.js'
 import Stats from './utils/stats.js'
@@ -39,6 +40,7 @@ export default class Experience {
     this.resources = new Resources(sources)
     this.physics = new PhysicsWorld()
     this.iMouse = new IMouse()
+    this.input = new InputManager()
     this.world = new World()
 
     this.sizes.on('resize', () => {
@@ -61,5 +63,6 @@ export default class Experience {
     this.renderer.update() // 切换为手动更新
     this.stats.update()
     this.iMouse.update()
+    this.physics.update()
   }
 }

@@ -14,7 +14,7 @@ onMounted(() => {
 <template>
   <div class="relative w-screen h-screen">
     <!-- three.js 渲染的 canvas -->
-    <canvas ref="threeCanvas" class="three-canvas absolute inset-0 z-[999]" />
+    <canvas ref="threeCanvas" class="three-canvas absolute inset-0 z-0" />
     <!-- 示例 UI 组件 -->
     <ExamplePanel class="absolute top-4 right-4 z-10" />
   </div>

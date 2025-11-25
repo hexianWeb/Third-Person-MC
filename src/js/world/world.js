@@ -1,8 +1,7 @@
 import * as THREE from 'three'
-
 import Experience from '../experience.js'
 import Environment from './environment.js'
-import Grid from './grid.js'
+import Floor from './floor.js'
 import Player from './player.js'
 
 export default class World {
@@ -11,8 +10,8 @@ export default class World {
     this.scene = this.experience.scene
     this.resources = this.experience.resources
 
-    // this.scene.add(new THREE.AxesHelper(5))
-    this.grid = new Grid(400, 1)
+    this.scene.add(new THREE.AxesHelper(5))
+    this.floor = new Floor(400, 1)
 
     // Environment
     this.resources.on('ready', () => {
@@ -25,7 +24,7 @@ export default class World {
   update() {
     if (this.player)
       this.player.update()
-    if (this.grid)
-      this.grid.update()
+    if (this.floor)
+      this.floor.update()
   }
 }
