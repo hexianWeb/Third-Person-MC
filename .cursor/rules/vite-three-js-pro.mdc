@@ -1,0 +1,90 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# vite-three-js 项目开发规则（mdc 规范）
+
+---
+
+## 1. 代码结构与风格
+
+- 所有 Three.js 相关逻辑应通过 `src/js/experience.js` 的 `Experience` 单例访问和管理。
+- 新建 3D 组件时，务必采用类组件方式，并通过 `this.experience = new Experience()` 获取全局依赖。
+- 仅获取当前组件所需的 Experience 属性，避免冗余依赖。
+- 所有新增/修改代码需配备中文注释，说明关键逻辑和参数含义。
+- 自定义 Shader 必须存放于 `src/shaders/` 目录，且通过 `vite-glsl-plugin` 引入。
+
+---
+
+## 2. 资源与模型管理
+
+- 所有模型、纹理等资源需在 `src/js/sources.js` 统一声明。
+- 通过 `this.experience.resources.items['资源名称']` 访问已加载资源。
+- `Resources` 会根据 type 自动选择加载器，无需手动指定。
+
+---
+
+## 3. 组件通信与事件（Pinia + mitt 协同）
+
+- 状态同步优先用 Pinia。如需让 Three.js 层感知 UI 操作（如当前模式、选中建筑类型等），应优先通过 Pinia 全局状态管理（参考 `useGameState.js`）。
+- Three.js 层通过 `useGameState().currentMode` 获取当前模式，或监听 Pinia 的变化响应 UI 操作。
+- mitt 用于事件驱动，仅当需要触发即时事件（如弹窗、提示、动画完成等）时，使用 mitt 事件总线进行通信。
+- Pinia 负责全局状态同步，mitt 负责事件通知，二者结合实现高效解耦的通信机制。
+
+---
+
+## 4. 组件开发规范
+
+- 所有 Vue 组件必须放在 `src/components/` 目录下，如有需要可在该目录下新建子文件夹以细分组件职能。
+- 每个 Vue 组件应职责单一，复杂 UI 可拆分为多个子组件，便于维护和复用。
+- 组件文件名采用大驼峰，子组件建议以父组件为前缀。
+- 每个 3D 组件应实现 `debugInit` 方法，利用 `this.debug.ui` 创建可控面板，颜色调控统一用 `view: 'color'`。
+- 如有更新/自适应行为，需实现 `update` 和 `resize` 方法，并由父组件主动调用。
+- 所有父子组件或跨组件通信统一使用 mitt，不再继承 `EventEmitter`。
+
+---
+
+## 5. ShaderMaterial 组件调试
+
+- 凡是包含 `ShaderMaterial` 的类组件，必须为所有关键 `uniform` 参数提供调试面板（`debugInit`），便于实时调整和开发。
+- 颜色类 uniform 必须用 `view: 'color'`，数值/向量等参数用 `addBinding`。
+- 面板结构应清晰分组，便于查找和操作。
+- shader 参数变化可通过 mitt 通知其他相关组件或 UI 层。
+
+---
+
+## 6. 鼠标与交互
+
+- 射线拾取统一使用 `this.experience.iMouse.normalizedMouse` 获取 NDC 坐标，禁止手动计算。
+- 如需复杂交互，建议封装于 `src/js/tools/` 下的工具类。
+
+---
+
+## 7. UI 与 3D 场景分离（Pinia 特殊情况）
+
+- UI 层（Vue）与 3D 场景（Three.js）严格分离，UI 只负责界面和用户输入，Three.js 只负责场景渲染和逻辑。
+- Pinia 用于全局状态同步，如当前模式、选中对象、资源数量等，Vue 和 Three.js 层均可读写这些状态，实现双向同步。
+- mitt 用于事件通知，如弹窗、toast、动画完成等即时事件。
+- 禁止直接在 Vue 组件中操作 Three.js 实例，所有交互均通过 Pinia 状态或 mitt 事件完成，保持解耦。
+- 如需在 Three.js 层主动通知 UI 层（如场景状态变化），可通过 Pinia 更新状态或 mitt 发送事件，Vue 层监听并响应。
+
+---
+
+## 8. 代码提交与测试
+
+- 每次功能完善或修复后，需进行 Git 提交，保持历史清晰。
+- 所有新增/修改功能需编写对应测试用例，确保稳定性。
+- 严禁未确认情况下删除代码或数据，涉及破坏性操作需二次确认。
+
+---
+
+## 9. 其他约定
+
+- 遵循项目现有风格，变量命名、缩进、分号等保持一致。
+- 代码需易于理解和维护，适当增加注释，避免晦涩写法。
+- 遇到新需求或难题时，优先从本质出发分析和设计解决方案（第一性原理）。
+
+---
+
+如需补充或细化规则，请在本文件下方追加说明。

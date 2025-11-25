@@ -151,6 +151,68 @@ XXXFolder.addBinding(PARAMS, 'background', {
 *   **代码风格:** 编写新的 3D 组件或逻辑时，请遵循这种通过 `Experience` 单例获取依赖的方式，以保持代码风格的统一和易于维护。尽量将相关的 3D 逻辑封装在独立的类中。且代码中的注释需要为中文注释
 *   **着色器风格:** 因为框架集成了 `vite-glsl-plugin` 在编写 `ShaderMaterial` 或者带有着色器部分的代码片段时，需要将着色器放入 `src`的`shaders`文件夹下.
 
+---
+
+## Vue 与 Three.js 场景通信规范
+
+### 1. 职责分离
+
+- **Vue 层**：主要负责实现游戏 UI（gameui），如按钮、面板、信息展示等，处理用户输入、界面交互和状态管理。
+- **Three.js 层**：专注于 3D 场景（game scene）的渲染、物理、动画、模型加载等三维相关逻辑。
+
+### 2. 通信机制
+
+- **统一使用 mitt 事件总线** 作为 Vue 层与 Three.js 层的通信桥梁。
+- mitt 实例应在全局唯一，建议在 `src/js/tools/` 或 `src/js/utils/` 下新建 `event-bus.js`，导出 mitt 实例，供 Vue 和 Three.js 层共同引入使用。
+
+### 3. 通信流程
+
+- **Vue 层** 通过 mitt 发送事件（如用户点击、参数调整等），Three.js 层监听并响应。
+- **Three.js 层** 通过 mitt 发送事件（如场景状态变化、动画完成等），Vue 层监听并更新 UI。
+- 事件命名建议采用 `game:`、`ui:` 前缀区分来源，例如：`game:player-move`、`ui:toggle-menu`。
+
+### 4. 示例代码
+
+#### event-bus.js
+```js
+// src/js/utils/event-bus.js
+import mitt from 'mitt'
+const emitter = mitt()
+export default emitter
+```
+
+#### Vue 组件中使用
+```js
+import emitter from '@/js/utils/event-bus.js'
+
+// 发送事件
+emitter.emit('ui:toggle-menu', { open: true })
+
+// 监听事件
+emitter.on('game:player-move', (data) => {
+  // 处理 Three.js 场景反馈
+})
+```
+
+#### Three.js 组件中使用
+```js
+import emitter from './utils/event-bus.js'
+
+// 监听 UI 事件
+emitter.on('ui:toggle-menu', (data) => {
+  // 控制场景暂停/继续等
+})
+
+// 发送事件
+emitter.emit('game:player-move', { x: 1, y: 2 })
+```
+
+### 5. 其他注意事项
+
+- **不要直接在 Vue 组件中操作 Three.js 实例**，所有交互均通过 mitt 事件完成，保持解耦。
+- mitt 事件参数建议为对象，便于扩展和维护。
+- 事件监听应在组件销毁时及时移除，防止内存泄漏。
+
 
 
 
