@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 import Experience from '../experience.js'
 import Environment from './environment.js'
+import Grid from './grid.js'
 
 export default class World {
   constructor() {
@@ -10,6 +11,7 @@ export default class World {
     this.resources = this.experience.resources
 
     this.scene.add(new THREE.AxesHelper(5))
+    this.grid = new Grid()
 
     const box = new THREE.Mesh(
       new THREE.BoxGeometry(0.2, 0.2, 0.2),
@@ -26,5 +28,7 @@ export default class World {
   }
 
   update() {
+    if (this.grid)
+      this.grid.update()
   }
 }
