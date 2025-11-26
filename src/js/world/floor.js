@@ -1,5 +1,4 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import * as THREE from 'three'
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
 import Grid from './grid.js'
@@ -54,7 +53,6 @@ export default class Floor {
       RAPIER.ColliderDesc.cuboid(this.planeSize / 2, 0.1, this.planeSize / 2),
       this.rigidBody,
     )
-    console.log('Floor physics body created')
   }
 
   update() {

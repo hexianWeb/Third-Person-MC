@@ -23,7 +23,7 @@ export default class Environment {
 
   setSunLight() {
     this.sunLightColor = '#ffffff'
-    this.sunLightIntensity = 8
+    this.sunLightIntensity = 1
     this.sunLight = new THREE.DirectionalLight(
       this.sunLightColor,
       this.sunLightIntensity,
