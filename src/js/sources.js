@@ -30,6 +30,11 @@ export default [
     ],
   },
   {
+    name: 'environmentMapHDRTexture',
+    type: 'hdrTexture',
+    path: 'textures/environmentMap/HDRI_110.hdr',
+  },
+  {
     name: 'playerModel',
     type: 'gltfModel',
     path: 'models/character/character.glb',

@@ -50,8 +50,9 @@ export default class Environment {
   setEnvironmentMap() {
     this.environmentMap = {}
     this.environmentMap.intensity = 1
-    this.environmentMap.texture = this.resources.items.environmentMapTexture
-    this.environmentMap.texture.colorSpace = THREE.SRGBColorSpace
+    this.environmentMap.texture = this.resources.items.environmentMapHDRTexture
+    this.environmentMap.texture.mapping = THREE.EquirectangularReflectionMapping
+    // this.environmentMap.texture.colorSpace = THREE.SRGBColorSpace // RGBELoader usually handles this, or it might be Linear. Let's check standard implementation.
 
     this.scene.environment = this.environmentMap.texture
     this.scene.background = this.environmentMap.texture

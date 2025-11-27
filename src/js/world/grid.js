@@ -13,11 +13,11 @@ export default class Grid {
     // Initialize params for all uniforms
     this.params = {
       uSize: 2.0,
-      uColor: new THREE.Color('#ffffff'),
+      uColor: new THREE.Color(0.58, 0.58, 0.58),
       uFadeDistance: 100.0,
       uThickness: 1.0,
-      uBaseColor: new THREE.Color('#544f4f'),
-      uPlusColor: new THREE.Color('#2cdada'),
+      uBaseColor: new THREE.Color(0, 0, 0),
+      uPlusColor: new THREE.Color(0.36, 0.42, 0.61),
       uPlusScale: 0.5,
       uPlusThickness: 3.0,
       uSubdiv: 2.0,
@@ -88,7 +88,7 @@ export default class Grid {
   debugInit() {
     this.debugFolder = this.debug.ui.addFolder({
       title: 'Infinite Grid',
-      expanded: true,
+      expanded: false,
     })
 
     this.debugFolder.addBinding(this.params, 'uSize', {
