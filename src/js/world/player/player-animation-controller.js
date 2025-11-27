@@ -4,8 +4,10 @@ import {
   AnimationClips,
   animationSettings,
   AnimationStates,
+  animationSubGroupMap,
   BLEND_DIRECTIONS,
   LocomotionProfiles,
+  timeScaleConfig,
   transitionDurations,
 } from './animation-config.js'
 import { PlayerAnimationStateMachine } from './animation-state-machine.js'
@@ -24,8 +26,8 @@ export class PlayerAnimationController {
 
     // State Machine
     this.stateMachine = new PlayerAnimationStateMachine(this)
-    // Start in Locomotion
-    this.stateMachine.setState(AnimationStates.LOCOMOTION)
+    // Start in Intro
+    this.stateMachine.setState(AnimationStates.INTRO)
   }
 
   initActions(animations) {
@@ -43,7 +45,7 @@ export class PlayerAnimationController {
           action.clampWhenFinished = true
         }
         // TimeScale will be managed dynamically, but set base here
-        action.timeScale = settings.timeScale
+        action.timeScale = this.getEffectiveTimeScale(clip.name)
       }
     })
 
@@ -74,8 +76,47 @@ export class PlayerAnimationController {
     })
   }
 
+  /**
+   * Calculate the effective time scale based on hierarchical config
+   * Formula: Base * Global * Category * SubGroup
+   */
+  getEffectiveTimeScale(clipName) {
+    const settings = animationSettings[clipName]
+    if (!settings)
+      return 1.0
+
+    const baseScale = settings.timeScale || 1.0
+    const globalScale = timeScaleConfig.global || 1.0
+
+    const category = settings.category
+    const categoryScale = timeScaleConfig.categories[category] || 1.0
+
+    const subGroup = animationSubGroupMap[clipName]
+    const subGroupScale = subGroup ? (timeScaleConfig.subGroups[subGroup] || 1.0) : 1.0
+
+    return baseScale * globalScale * categoryScale * subGroupScale
+  }
+
+  /**
+   * Update time scales for all active actions
+   * Should be called whenever debug config changes
+   */
+  updateTimeScales() {
+    for (const [name, action] of Object.entries(this.actions)) {
+      if (action) {
+        action.setEffectiveTimeScale(this.getEffectiveTimeScale(name))
+      }
+    }
+  }
+
   update(dt, playerState) {
     this.mixer.update(dt * 0.001)
+
+    // In debug mode, we might want to continuously update timescales if we expect them to change per frame
+    // But for performance, we usually rely on the debug panel callback to trigger updateTimeScales()
+    // However, to be safe and simple for this implementation, we can call it if debug is active
+    // or just let the debug panel callbacks handle it.
+    // Let's assume debug panel callbacks will handle it for efficiency.
 
     // Update State Machine
     this.stateMachine.update(dt, {
@@ -117,7 +158,8 @@ export class PlayerAnimationController {
 
     // 設置新動作
     newAction.reset()
-    newAction.setEffectiveTimeScale(animationSettings[name]?.timeScale || 1)
+    // Ensure we use the latest calculated time scale
+    newAction.setEffectiveTimeScale(this.getEffectiveTimeScale(name))
     newAction.setEffectiveWeight(1)
     newAction.play()
 
@@ -151,27 +193,26 @@ export class PlayerAnimationController {
   /**
    * 更新移動混合樹 (Blend Tree Logic)
    * 這是核心邏輯：統一 Walk/Run/Crouch，只依賴 LocomotionProfile
+   *
+   * @param {number} dt Delta time
+   * @param {object} inputState Boolean state of keys
+   * @param {boolean} isMoving Whether player is moving
+   * @param {object} profile Current speed profile (Walk/Run/Crouch)
+   * @param {object} directionWeights Normalized weights from InputResolver { forward: 0.5, ... }
    */
-  updateLocomotion(dt, inputState, isMoving, profile) {
+  updateLocomotion(dt, inputState, isMoving, profile, directionWeights = {}) {
     const transitionSpeed = 0.1
 
     // 1. Idle Weight
-    // 如果當前有其他 One-shot action 正在播放且權重很高（例如攻擊未結束），這裡的權重計算應該暫停或被覆蓋？
-    // 由於 StateMachine 只有在 LOCOMOTION 狀態才呼叫此方法，所以這裡假設是純移動狀態
-
-    // 計算目標 Idle 權重
-    let targetIdleWeight = profile.idleWeight // Walk=1, Run=0, Crouch=0
-    if (isMoving) {
-      targetIdleWeight = 0 // 移動時 idle 權重歸零
-    }
-    // 特例：Crouch 下不移動時也是 idle 嗎？Crouch Idle?
-    // 根據舊代碼：Crouch 時 targetIdleWeight = 0 (即使不移動?)
-    // 舊代碼：if (isMoving && isCrouching) targetIdleWeight = 0
-    // 實際上 Crouch Idle 應該有獨立動畫，目前沒有，所以 Crouch 靜止時可能會顯示 weird
-    // 暫時沿用 profile 設定
+    // 核心邏輯：不移動時顯示 idle，移動時 idle 權重歸零
+    // 無論當前是 WALK/RUN/CROUCH profile，靜止時都應該顯示 idle
+    const targetIdleWeight = isMoving ? 0 : 1
 
     const idleAction = this.actions[AnimationClips.IDLE]
     if (idleAction) {
+      // Ensure idle speed is updated
+      idleAction.setEffectiveTimeScale(this.getEffectiveTimeScale(AnimationClips.IDLE))
+
       const currentWeight = idleAction.getEffectiveWeight()
       idleAction.setEffectiveWeight(THREE.MathUtils.lerp(currentWeight, targetIdleWeight, transitionSpeed))
     }
@@ -182,8 +223,6 @@ export class PlayerAnimationController {
 
     // 遍歷所有方向
     BLEND_DIRECTIONS.forEach((dir) => {
-      const isActiveDir = inputState[dir] // true/false
-
       // 當前 Profile 對應的動畫名稱
       const targetClipName = profile.nodeMap[dir];
 
@@ -198,11 +237,20 @@ export class PlayerAnimationController {
         if (!action)
           return
 
+        // Ensure active locomotion actions have updated speed
+        // Optimization: only update if weight > 0 or about to be > 0
+        // But simple approach is just update always or rely on global update
+        if (action.getEffectiveWeight() > 0 || (isMoving && clipName === targetClipName)) {
+          action.setEffectiveTimeScale(this.getEffectiveTimeScale(clipName))
+        }
+
         // 判斷是否為目標動畫
         const isTarget = (clipName === targetClipName)
 
-        // 目標權重：必須是 (移動中) && (按下該方向鍵) && (是當前 Profile 的動畫)
-        const targetWeight = (isMoving && isActiveDir && isTarget) ? 1.0 : 0.0
+        // 目標權重：必須是 (移動中) && (是當前 Profile 的動畫) -> 使用歸一化權重
+        // 如果 directionWeights[dir] 存在則使用，否則為 0
+        const weight = directionWeights[dir] || 0
+        const targetWeight = (isMoving && isTarget) ? weight : 0.0
 
         const currentWeight = action.getEffectiveWeight()
         if (Math.abs(currentWeight - targetWeight) > 0.01) {

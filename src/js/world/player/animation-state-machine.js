@@ -1,5 +1,4 @@
-import * as THREE from 'three'
-import { AnimationStates } from './animation-config.js'
+import { AnimationClips, AnimationStates } from './animation-config.js'
 
 /**
  * 基礎狀態機類，提供狀態註冊與切換邏輯
@@ -71,19 +70,42 @@ export class PlayerAnimationStateMachine extends AnimationStateMachine {
 
   initStates() {
     // ==========================================
+    // 0. Intro State
+    // ==========================================
+    this.addState(AnimationStates.INTRO, {
+      enter: () => {
+        this.anim.playAction(AnimationClips.STANDUP)
+      },
+      update: (_dt, _params) => {
+        const currentAction = this.anim.currentAction
+        if (currentAction) {
+          const clipName = currentAction.getClip().name
+          // Check if finished
+          if (clipName === AnimationClips.STANDUP && !currentAction.isRunning()) {
+            this.setState(AnimationStates.LOCOMOTION)
+          }
+        }
+        else {
+          this.setState(AnimationStates.LOCOMOTION)
+        }
+      },
+    })
+
+    // ==========================================
     // 1. Locomotion State (Idle, Walk, Run, Crouch)
     // ==========================================
     this.addState(AnimationStates.LOCOMOTION, {
-      enter: (prevState, params) => {
-        // 從其他狀態進入時，通常需要重新激活 blend tree
-        if (prevState === AnimationStates.COMBAT || prevState === AnimationStates.AIRBORNE) {
+      enter: (prevState, _params) => {
+        // 從其他狀態進入時，需要重新激活 blend tree
+        // 包括 INTRO, COMBAT, AIRBORNE 等非 LOCOMOTION 狀態
+        if (prevState && prevState !== AnimationStates.LOCOMOTION) {
           this.anim.fadeToLocomotion()
         }
       },
       update: (dt, params) => {
         // 持續更新方向混合權重
-        const { inputState, isMoving, speedProfile } = params
-        this.anim.updateLocomotion(dt, inputState, isMoving, speedProfile)
+        const { inputState, isMoving, speedProfile, directionWeights } = params
+        this.anim.updateLocomotion(dt, inputState, isMoving, speedProfile, directionWeights)
 
         // 狀態轉換檢查
         if (!params.isGrounded) {
@@ -97,15 +119,27 @@ export class PlayerAnimationStateMachine extends AnimationStateMachine {
     // ==========================================
     this.addState(AnimationStates.AIRBORNE, {
       enter: (prevState) => {
-        // 如果是跳躍，會在 controller 外部直接觸發 jump action，這裡主要處理 falling
-        // 但通常 airborne 是一個持續狀態
+        // 進入空中狀態時，預設播放 falling 動畫
+        // 如果是跳躍觸發的，triggerJump() 會立即覆蓋播放 jump 動畫
         if (prevState !== AnimationStates.AIRBORNE) {
           this.anim.playAction('falling', 0.2)
         }
       },
       update: (dt, params) => {
+        // 檢查是否落地
         if (params.isGrounded) {
           this.setState(AnimationStates.LOCOMOTION)
+          return
+        }
+
+        // 如果當前在播放 jump 動畫且已結束（LoopOnce），切換到 falling
+        const currentAction = this.anim.currentAction
+        if (currentAction) {
+          const clipName = currentAction.getClip().name
+          // 如果是 jump 動畫且已經播放完畢（時間到達末尾）
+          if (clipName === 'jump' && !currentAction.isRunning()) {
+            this.anim.playAction('falling', 0.15)
+          }
         }
       },
     })

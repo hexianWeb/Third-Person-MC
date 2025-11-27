@@ -9,6 +9,7 @@ export const AnimationCategories = Object.freeze({
 
 // ===== 动画状态常量（状态机用） =====
 export const AnimationStates = Object.freeze({
+  INTRO: 'intro',
   LOCOMOTION: 'locomotion',
   AIRBORNE: 'airborne',
   COMBAT: 'combat',
@@ -70,6 +71,7 @@ export const animationSettings = {
   [AnimationClips.RIGHT_STRAIGHT_PUNCH]: { timeScale: 1.5, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
   [AnimationClips.RIGHT_HOOK_PUNCH]: { timeScale: 1.5, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
   [AnimationClips.RIGHT_BLOCK]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
+  [AnimationClips.STANDUP]: { timeScale: 1.0, category: AnimationCategories.ACTION, loop: THREE.LoopOnce },
 }
 
 // ===== 状态间过渡时长配置 =====
@@ -125,3 +127,55 @@ export const CombatAnimations = Object.freeze([
   AnimationClips.RIGHT_HOOK_PUNCH,
   AnimationClips.RIGHT_BLOCK,
 ])
+
+// ===== 播放速率配置（层级化） =====
+export const timeScaleConfig = {
+  global: 1.0,
+  categories: {
+    [AnimationCategories.LOCOMOTION]: 1.0,
+    [AnimationCategories.ACTION]: 1.0,
+    [AnimationCategories.COMBAT]: 1.0,
+  },
+  subGroups: {
+    // Locomotion
+    walk: 1.17,
+    sneak: 0.9,
+    run: 1.2,
+    idle: 1.8,
+    // Combat
+    punch: 1.0,
+    block: 1.0,
+    // Action
+    jump: 1.0,
+    fall: 1.0,
+    standup: 1.0,
+  },
+}
+
+// ===== 动画子分组映射 =====
+export const animationSubGroupMap = {
+  [AnimationClips.IDLE]: 'idle',
+  [AnimationClips.WALK_FORWARD]: 'walk',
+  [AnimationClips.WALK_BACK]: 'walk',
+  [AnimationClips.WALK_LEFT]: 'walk',
+  [AnimationClips.WALK_RIGHT]: 'walk',
+  [AnimationClips.SNEAK_FORWARD]: 'sneak',
+  [AnimationClips.SNEAK_BACK]: 'sneak',
+  [AnimationClips.SNEAK_LEFT]: 'sneak',
+  [AnimationClips.SNEAK_RIGHT]: 'sneak',
+  [AnimationClips.RUN_FORWARD]: 'run',
+  [AnimationClips.RUN_BACK]: 'run',
+  [AnimationClips.RUN_LEFT]: 'run',
+  [AnimationClips.RUN_RIGHT]: 'run',
+  [AnimationClips.JUMP]: 'jump',
+  [AnimationClips.FALL]: 'fall',
+  [AnimationClips.STRAIGHT_PUNCH]: 'punch',
+  [AnimationClips.HOOK_PUNCH]: 'punch',
+  [AnimationClips.QUICK_COMBO]: 'punch',
+  [AnimationClips.RIGHT_STRAIGHT_PUNCH]: 'punch',
+  [AnimationClips.RIGHT_HOOK_PUNCH]: 'punch',
+  [AnimationClips.BLOCK]: 'block',
+  [AnimationClips.RIGHT_BLOCK]: 'block',
+  [AnimationClips.STANDUP]: 'standup',
+  [AnimationClips.TPOSE]: 'idle',
+}

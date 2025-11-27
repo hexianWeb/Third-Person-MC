@@ -1,7 +1,13 @@
 import * as THREE from 'three'
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
-import { AnimationClips, AnimationStates } from './player/animation-config.js'
+import {
+  AnimationCategories,
+  AnimationClips,
+  AnimationStates,
+  timeScaleConfig,
+} from './player/animation-config.js'
+import { resolveDirectionInput } from './player/input-resolver.js'
 import { PlayerAnimationController } from './player/player-animation-controller.js'
 import { PlayerMovementController } from './player/player-movement-controller.js'
 
@@ -20,7 +26,7 @@ export default class Player {
         walk: 1.5,
         run: 3.2,
       },
-      jumpForce: 5,
+      jumpForce: 2.1,
     }
 
     // Input state
@@ -111,15 +117,19 @@ export default class Player {
   update() {
     const isCombat = this.animation.stateMachine.currentState?.name === AnimationStates.COMBAT
 
+    // Resolve Input (Conflict & Normalize)
+    const { resolvedInput, weights } = resolveDirectionInput(this.inputState)
+
     // Update Movement
-    this.movement.update(this.inputState, isCombat)
+    this.movement.update(resolvedInput, isCombat)
 
     // Prepare state for animation
     const playerState = {
-      inputState: this.inputState,
-      isMoving: this.movement.isMoving(this.inputState),
+      inputState: resolvedInput,
+      directionWeights: weights, // Pass normalized weights
+      isMoving: this.movement.isMoving(resolvedInput),
       isGrounded: this.movement.isGrounded,
-      speedProfile: this.movement.getSpeedProfile(this.inputState),
+      speedProfile: this.movement.getSpeedProfile(resolvedInput),
     }
 
     // Update Animation
@@ -145,6 +155,67 @@ export default class Player {
         debugState.state = this.animation.stateMachine.currentState.name
       }
     })
+
+    // ===== Animation Speed Control =====
+    const animSpeedFolder = this.debugFolder.addFolder({
+      title: 'Animation Speed',
+      expanded: false,
+    })
+
+    // Helper to update time scales
+    const updateTimeScales = () => {
+      this.animation.updateTimeScales()
+    }
+
+    // 1. Global Speed
+    animSpeedFolder.addBinding(timeScaleConfig, 'global', {
+      label: 'Global Rate',
+      min: 0.1,
+      max: 3.0,
+      step: 0.1,
+    }).on('change', updateTimeScales)
+
+    // 2. Categories
+    const categoriesFolder = animSpeedFolder.addFolder({ title: 'Categories', expanded: true })
+
+    categoriesFolder.addBinding(timeScaleConfig.categories, AnimationCategories.LOCOMOTION, {
+      label: 'Locomotion',
+      min: 0.1,
+      max: 3.0,
+      step: 0.1,
+    }).on('change', updateTimeScales)
+
+    categoriesFolder.addBinding(timeScaleConfig.categories, AnimationCategories.COMBAT, {
+      label: 'Combat',
+      min: 0.1,
+      max: 3.0,
+      step: 0.1,
+    }).on('change', updateTimeScales)
+
+    categoriesFolder.addBinding(timeScaleConfig.categories, AnimationCategories.ACTION, {
+      label: 'Action',
+      min: 0.1,
+      max: 3.0,
+      step: 0.1,
+    }).on('change', updateTimeScales)
+
+    // 3. SubGroups
+    const subGroupsFolder = animSpeedFolder.addFolder({ title: 'Sub Groups', expanded: false })
+
+    // Locomotion Subgroups
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'walk', { label: 'Walk', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'run', { label: 'Run', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'sneak', { label: 'Sneak', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'idle', { label: 'Idle', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+
+    // Combat Subgroups
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'punch', { label: 'Punch', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'block', { label: 'Block', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+
+    // Action Subgroups
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'jump', { label: 'Jump', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'fall', { label: 'Fall', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'standup', { label: 'Standup', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
   }
 
   destroy() {
