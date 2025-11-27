@@ -8,7 +8,7 @@ export default class InputManager {
       left: false,
       right: false,
       shift: false,
-      ctrl: false,
+      v: false,
       space: false,
       z: false,
       x: false,
@@ -40,8 +40,6 @@ export default class InputManager {
   }
 
   updateKey(key, isPressed) {
-    let action = null
-
     switch (key) {
       case 'w':
       case 'arrowup':
@@ -62,8 +60,8 @@ export default class InputManager {
       case 'shift':
         this.keys.shift = isPressed
         break
-      case 'control':
-        this.keys.ctrl = isPressed
+      case 'v':
+        this.keys.v = isPressed
         break
       case ' ':
         if (isPressed && !this.keys.space) {
