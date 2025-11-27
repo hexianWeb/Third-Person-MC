@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import Experience from '../../experience.js'
 import {
+  AnimationCategories,
   AnimationClips,
   animationSettings,
   AnimationStates,
@@ -156,6 +157,12 @@ export class PlayerAnimationController {
       }
     }
 
+    // 如果是非 Locomotion 动画，淡出 blend tree
+    const settings = animationSettings[name]
+    if (settings && settings.category !== AnimationCategories.LOCOMOTION) {
+      this.fadeOutLocomotion(duration)
+    }
+
     // 設置新動作
     newAction.reset()
     // Ensure we use the latest calculated time scale
@@ -176,6 +183,35 @@ export class PlayerAnimationController {
   }
 
   /**
+   * 淡出所有 Locomotion Blend Tree 动画
+   * 用于进入 Combat/Airborne 等非 Locomotion 状态时
+   */
+  fadeOutLocomotion(duration = 0.1) {
+    const blendAnims = [
+      AnimationClips.IDLE,
+      AnimationClips.WALK_FORWARD,
+      AnimationClips.WALK_BACK,
+      AnimationClips.WALK_LEFT,
+      AnimationClips.WALK_RIGHT,
+      AnimationClips.RUN_FORWARD,
+      AnimationClips.RUN_BACK,
+      AnimationClips.RUN_LEFT,
+      AnimationClips.RUN_RIGHT,
+      AnimationClips.SNEAK_FORWARD,
+      AnimationClips.SNEAK_BACK,
+      AnimationClips.SNEAK_LEFT,
+      AnimationClips.SNEAK_RIGHT,
+    ]
+
+    blendAnims.forEach((name) => {
+      const action = this.actions[name]
+      if (action && action.getEffectiveWeight() > 0) {
+        action.fadeOut(duration)
+      }
+    })
+  }
+
+  /**
    * 從 Combat/Airborne 平滑過渡回 Locomotion Blend Tree
    */
   fadeToLocomotion() {
@@ -188,6 +224,43 @@ export class PlayerAnimationController {
       this.currentAction.fadeOut(0.2)
       this.currentAction = null
     }
+
+    // 重新激活所有 locomotion 动画（因为 fadeOutLocomotion 会禁用它们）
+    this.reactivateLocomotion()
+  }
+
+  /**
+   * 重新激活所有 Locomotion Blend Tree 动画
+   * 在从 Combat/Airborne 返回 Locomotion 时调用
+   */
+  reactivateLocomotion() {
+    const blendAnims = [
+      AnimationClips.IDLE,
+      AnimationClips.WALK_FORWARD,
+      AnimationClips.WALK_BACK,
+      AnimationClips.WALK_LEFT,
+      AnimationClips.WALK_RIGHT,
+      AnimationClips.RUN_FORWARD,
+      AnimationClips.RUN_BACK,
+      AnimationClips.RUN_LEFT,
+      AnimationClips.RUN_RIGHT,
+      AnimationClips.SNEAK_FORWARD,
+      AnimationClips.SNEAK_BACK,
+      AnimationClips.SNEAK_LEFT,
+      AnimationClips.SNEAK_RIGHT,
+    ]
+
+    blendAnims.forEach((name) => {
+      const action = this.actions[name]
+      if (action) {
+        // 重新启用动画并播放（权重从 0 开始，由 updateLocomotion 控制）
+        action.enabled = true
+        action.setEffectiveWeight(0)
+        if (!action.isRunning()) {
+          action.play()
+        }
+      }
+    })
   }
 
   /**

@@ -133,7 +133,7 @@ export const timeScaleConfig = {
   global: 1.0,
   categories: {
     [AnimationCategories.LOCOMOTION]: 1.0,
-    [AnimationCategories.ACTION]: 1.0,
+    [AnimationCategories.ACTION]: 1.8,
     [AnimationCategories.COMBAT]: 1.0,
   },
   subGroups: {
@@ -143,8 +143,8 @@ export const timeScaleConfig = {
     run: 1.2,
     idle: 1.8,
     // Combat
-    punch: 1.0,
-    block: 1.0,
+    punch: 1.5,
+    block: 2.0,
     // Action
     jump: 1.0,
     fall: 1.0,
