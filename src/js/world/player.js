@@ -57,7 +57,7 @@ export default class Player {
     if (this.debug.active) {
       this.debugFolder = this.debug.ui.addFolder({
         title: 'Player',
-        expanded: true,
+        expanded: false,
       })
       this.debugInit()
     }
