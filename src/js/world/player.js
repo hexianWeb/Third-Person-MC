@@ -26,7 +26,7 @@ export default class Player {
         walk: 1.5,
         run: 3.2,
       },
-      jumpForce: 2.1,
+      jumpForce: 1.45,
     }
 
     // Input state
@@ -69,6 +69,7 @@ export default class Player {
     this.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true
+        child.material.side = THREE.DoubleSide
       }
     })
 

@@ -3,6 +3,7 @@ import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 
 import Experience from './experience.js'
@@ -29,6 +30,10 @@ export default class Renderer {
       afterimage: {
         enabled: true,
         damp: 0.55, // 残影衰减系数 (0-1)，越大残影越明显
+      },
+      // SMAA 抗锯齿参数
+      smaa: {
+        enabled: true, // 是否启用 SMAA 抗锯齿
       },
     }
 
@@ -82,7 +87,16 @@ export default class Renderer {
     this.afterimagePass.enabled = this.postProcessConfig.afterimage.enabled
     this.composer.addPass(this.afterimagePass)
 
-    // 4. OutputPass - 色调映射与色彩空间转换（确保最终输出正确）
+    // 4. SMAAPass - SMAA 抗锯齿（子像素形态学抗锯齿）
+    // 注意：需要传入实际渲染分辨率（宽高 × 像素比）
+    this.smaaPass = new SMAAPass(
+      this.sizes.width * this.sizes.pixelRatio,
+      this.sizes.height * this.sizes.pixelRatio,
+    )
+    this.smaaPass.enabled = this.postProcessConfig.smaa.enabled
+    this.composer.addPass(this.smaaPass)
+
+    // 5. OutputPass - 色调映射与色彩空间转换（确保最终输出正确）
     this.outputPass = new OutputPass()
     this.composer.addPass(this.outputPass)
   }
@@ -155,6 +169,18 @@ export default class Renderer {
     }).on('change', (ev) => {
       this.afterimagePass.uniforms.damp.value = ev.value
     })
+
+    // ===== SMAA 抗锯齿控制 =====
+    const smaaFolder = postProcessFolder.addFolder({
+      title: 'SMAA 抗锯齿',
+      expanded: true,
+    })
+
+    smaaFolder.addBinding(this.postProcessConfig.smaa, 'enabled', {
+      label: '启用',
+    }).on('change', (ev) => {
+      this.smaaPass.enabled = ev.value
+    })
   }
 
   resize() {
@@ -164,6 +190,12 @@ export default class Renderer {
     // 同步更新 Composer 尺寸
     this.composer.setSize(this.sizes.width, this.sizes.height)
     this.composer.setPixelRatio(this.sizes.pixelRatio)
+
+    // 更新 SMAA Pass 尺寸（需要实际渲染分辨率）
+    this.smaaPass.setSize(
+      this.sizes.width * this.sizes.pixelRatio,
+      this.sizes.height * this.sizes.pixelRatio,
+    )
   }
 
   update() {
