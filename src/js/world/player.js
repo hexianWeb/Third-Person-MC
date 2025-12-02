@@ -27,6 +27,7 @@ export default class Player {
         run: 3.2,
       },
       jumpForce: 1.45,
+      facingAngle: Math.PI, // 初始朝向角度（弧度），Math.PI = 朝向 -Z 軸
     }
 
     // Input state
@@ -39,6 +40,10 @@ export default class Player {
       v: false,
       space: false,
     }
+
+    // 攻击左右手交替状态（toggle）
+    this._useLeftStraight = true // 直拳：true=左手, false=右手
+    this._useLeftHook = true // 勾拳：true=左手, false=右手
 
     // Resource
     this.resource = this.resources.items.playerModel
@@ -65,7 +70,10 @@ export default class Player {
 
   setModel() {
     this.model = this.resource.scene
+    // 模型始終保持 rotation.y = Math.PI，確保動畫正常播放
+    // 整體朝向通過父容器 movement.group 控制
     this.model.rotation.y = Math.PI
+    this.model.updateMatrixWorld()
     this.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true
@@ -75,6 +83,15 @@ export default class Player {
 
     // Add model to movement controller's group
     this.movement.group.add(this.model)
+  }
+
+  /**
+   * 設置角色朝向角度
+   * @param {number} angle - 朝向角度（弧度），0 = +Z，Math.PI = -Z
+   */
+  setFacing(angle) {
+    this.config.facingAngle = angle
+    this.movement.setFacing(angle)
   }
 
   setupInputListeners() {
@@ -89,30 +106,40 @@ export default class Player {
       }
     })
 
-    // Attack Inputs
-    const attackMap = {
-      'input:punch_straight': AnimationClips.STRAIGHT_PUNCH,
-      'input:punch_hook': AnimationClips.HOOK_PUNCH,
-      'input:block': AnimationClips.BLOCK,
-    }
+    // ==================== 攻击输入 ====================
 
-    for (const [event, animName] of Object.entries(attackMap)) {
-      emitter.on(event, (isBlocking) => {
-        // Special case for blocking toggle
-        if (event === 'input:block') {
-          // Block logic is slightly different (loop/hold), current impl treats as one-shot for now
-          // based on old code structure, block was LoopOnce.
-          // If we want hold-block, we need a HOLD state.
-          // For now, trigger as action.
-          if (isBlocking) {
-            this.animation.triggerAttack(animName)
-          }
-        }
-        else {
-          this.animation.triggerAttack(animName)
-        }
-      })
-    }
+    // 直拳（鼠标左键 / Z键）- 左右交替
+    emitter.on('input:punch_straight', () => {
+      const anim = this._useLeftStraight
+        ? AnimationClips.STRAIGHT_PUNCH // 左直拳
+        : AnimationClips.RIGHT_STRAIGHT_PUNCH // 右直拳
+      this._useLeftStraight = !this._useLeftStraight // 切换下次使用的手
+      this.animation.triggerAttack(anim)
+    })
+
+    // 勾拳（鼠标右键 / X键）- 左右交替
+    emitter.on('input:punch_hook', () => {
+      const anim = this._useLeftHook
+        ? AnimationClips.HOOK_PUNCH // 左勾拳
+        : AnimationClips.RIGHT_HOOK_PUNCH // 右勾拳
+      this._useLeftHook = !this._useLeftHook // 切换下次使用的手
+      this.animation.triggerAttack(anim)
+    })
+
+    // 格挡（C键）- 保持原逻辑
+    emitter.on('input:block', (isBlocking) => {
+      if (isBlocking) {
+        this.animation.triggerAttack(AnimationClips.BLOCK)
+      }
+    })
+
+    // ==================== 鼠标旋转（Pointer Lock 模式） ====================
+    emitter.on('input:mouse_move', ({ movementX }) => {
+      // 鼠标灵敏度
+      const sensitivity = 0.002
+      const newAngle = this.config.facingAngle - movementX * sensitivity
+      this.setFacing(newAngle)
+    })
   }
 
   update() {
@@ -138,6 +165,17 @@ export default class Player {
   }
 
   debugInit() {
+    // ===== 朝向控制 =====
+    this.debugFolder.addBinding(this.config, 'facingAngle', {
+      label: '朝向角度',
+      min: -Math.PI,
+      max: Math.PI,
+      step: 0.01,
+    }).on('change', () => {
+      this.setFacing(this.config.facingAngle)
+    })
+
+    // ===== 速度控制 =====
     this.debugFolder.addBinding(this.config.speed, 'crouch', { label: 'Crouch Speed', min: 0.1, max: 5 })
     this.debugFolder.addBinding(this.config.speed, 'walk', { label: 'Walk Speed', min: 1, max: 10 })
     this.debugFolder.addBinding(this.config.speed, 'run', { label: 'Run Speed', min: 1, max: 20 })

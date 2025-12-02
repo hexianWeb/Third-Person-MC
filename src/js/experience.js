@@ -6,6 +6,7 @@ import sources from './sources.js'
 import Debug from './utils/debug.js'
 import IMouse from './utils/imouse.js'
 import InputManager from './utils/input.js'
+import PointerLockManager from './utils/pointer-lock.js'
 import Resources from './utils/resources.js'
 import Sizes from './utils/sizes.js'
 import Stats from './utils/stats.js'
@@ -41,6 +42,7 @@ export default class Experience {
     this.physics = new PhysicsWorld()
     this.iMouse = new IMouse()
     this.input = new InputManager()
+    this.pointerLock = new PointerLockManager() // 鼠标锁定管理器
     this.world = new World()
 
     this.sizes.on('resize', () => {

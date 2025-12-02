@@ -146,6 +146,12 @@ export default class Camera {
         x: { min: -20, max: 20, step: 0.5 },
         y: { min: 0, max: 30, step: 0.5 },
         z: { min: -20, max: 20, step: 0.5 },
+      }).on('change', () => {
+        // 同步 offset 到 movement 的 cameraAnchor
+        const player = this.experience.world?.player
+        if (player?.movement) {
+          player.movement.setCameraOffset(this.followConfig.offset)
+        }
       })
 
       followFolder.addBinding(this.followConfig, 'targetOffset', {
@@ -153,6 +159,12 @@ export default class Camera {
         x: { min: -20, max: 20, step: 0.5 },
         y: { min: -5, max: 10, step: 0.5 },
         z: { min: -30, max: 10, step: 0.5 },
+      }).on('change', () => {
+        // 同步 targetOffset 到 movement 的 targetAnchor
+        const player = this.experience.world?.player
+        if (player?.movement) {
+          player.movement.setTargetOffset(this.followConfig.targetOffset)
+        }
       })
 
       followFolder.addBinding(this.followConfig, 'smoothSpeed', {
@@ -396,6 +408,19 @@ export default class Camera {
     this.trackballControls.handleResize()
   }
 
+  /**
+   * 初始化錨點偏移（在 player 創建後調用）
+   * 將 followConfig 的 offset 同步到 movement 的錨點
+   */
+  initAnchors() {
+    const player = this.experience.world?.player
+    if (player?.movement) {
+      player.movement.setCameraOffset(this.followConfig.offset)
+      player.movement.setTargetOffset(this.followConfig.targetOffset)
+      this._anchorsInitialized = true
+    }
+  }
+
   update() {
     // 如果启用了OrbitControls，使用OrbitControls更新
     if (this.orbitControls.enabled) {
@@ -406,11 +431,11 @@ export default class Camera {
     // 第三人称跟随逻辑 + Tracking Shot
     if (this.experience.world?.player?.model) {
       const player = this.experience.world.player
-      const playerMesh = player.model
 
-      // 获取玩家位置
-      const playerPos = new THREE.Vector3()
-      playerMesh.getWorldPosition(playerPos)
+      // 首次初始化錨點偏移
+      if (!this._anchorsInitialized) {
+        this.initAnchors()
+      }
 
       // 计算玩家速度（用于 Tracking Shot 效果）
       let speed = 0
@@ -422,15 +447,14 @@ export default class Camera {
       }
       this._playerSpeed = speed
 
-      // 计算目标相机位置（玩家位置 + 偏移）
+      // ===== 從錨點獲取世界位置（自動包含朝向旋轉） =====
       const desiredCameraPos = new THREE.Vector3()
-        .copy(playerPos)
-        .add(this.followConfig.offset)
-
-      // 计算目标观察点（玩家位置 + 目标偏移）
       const desiredTargetPos = new THREE.Vector3()
-        .copy(playerPos)
-        .add(this.followConfig.targetOffset)
+
+      // 從 cameraAnchor 獲取攝像頭目標位置
+      player.movement.cameraAnchor.getWorldPosition(desiredCameraPos)
+      // 從 targetAnchor 獲取觀察目標位置
+      player.movement.targetAnchor.getWorldPosition(desiredTargetPos)
 
       // ===== 位置惯性 (Position Lag) =====
       // 平滑插值相机基础位置

@@ -15,10 +15,51 @@ export class PlayerMovementController {
     this.collider = null
     this.isGrounded = false
 
+    // 角色朝向角度（弧度）- 通過旋轉 group 實現
+    this.facingAngle = config.facingAngle ?? Math.PI
+
+    // 創建父容器 group
     this.group = new THREE.Group()
+    this.group.rotation.y = this.facingAngle // 初始化 group 旋轉
     this.scene.add(this.group)
 
+    // 攝像頭錨點（用於讓攝像頭跟隨，位置相對於 group 本地空間）
+    this.cameraAnchor = new THREE.Object3D()
+    this.cameraAnchor.name = 'CameraAnchor'
+    // 初始 offset 將在 Camera 初始化時設置
+    this.group.add(this.cameraAnchor)
+
+    // 目標點錨點（用於攝像頭 lookAt）
+    this.targetAnchor = new THREE.Object3D()
+    this.targetAnchor.name = 'TargetAnchor'
+    this.group.add(this.targetAnchor)
+
     this.initPhysics()
+  }
+
+  /**
+   * 設置角色朝向角度
+   * @param {number} angle - 朝向角度（弧度）
+   */
+  setFacing(angle) {
+    this.facingAngle = angle
+    this.group.rotation.y = angle
+  }
+
+  /**
+   * 設置攝像頭錨點的本地偏移位置
+   * @param {THREE.Vector3} offset - 攝像頭相對於角色的偏移
+   */
+  setCameraOffset(offset) {
+    this.cameraAnchor.position.copy(offset)
+  }
+
+  /**
+   * 設置目標點錨點的本地偏移位置
+   * @param {THREE.Vector3} offset - 目標點相對於角色的偏移
+   */
+  setTargetOffset(offset) {
+    this.targetAnchor.position.copy(offset)
   }
 
   initPhysics() {
@@ -65,24 +106,33 @@ export class PlayerMovementController {
       return
     }
 
-    let moveX = 0
-    let moveZ = 0
+    // 本地空間輸入（相對於角色朝向）
+    let localX = 0
+    let localZ = 0
 
     if (inputState.forward)
-      moveZ -= 1
+      localZ -= 1
     if (inputState.backward)
-      moveZ += 0.8 // Slower backward
+      localZ += 0.8 // Slower backward
     if (inputState.left)
-      moveX -= 1
+      localX -= 1
     if (inputState.right)
-      moveX += 1
+      localX += 1
 
-    // Normalize
-    const length = Math.sqrt(moveX * moveX + moveZ * moveZ)
+    // 歸一化
+    const length = Math.sqrt(localX * localX + localZ * localZ)
     if (length > 0) {
-      moveX /= length
-      moveZ /= length
+      localX /= length
+      localZ /= length
     }
+
+    // 根據朝向角度旋轉到世界空間
+    // Three.js rotation.y 從上往下看是順時針旋轉（+Z 到 +X）
+    // 順時針旋轉矩陣：[cos, sin; -sin, cos]
+    const cos = Math.cos(this.facingAngle)
+    const sin = Math.sin(this.facingAngle)
+    const worldX = localX * cos + localZ * sin
+    const worldZ = -localX * sin + localZ * cos
 
     // Determine Speed
     let currentSpeed = this.config.speed.walk
@@ -94,9 +144,9 @@ export class PlayerMovementController {
     // Apply Velocity
     const currentVel = this.rigidBody.linvel()
     this.rigidBody.setLinvel({
-      x: moveX * currentSpeed,
+      x: worldX * currentSpeed,
       y: currentVel.y,
-      z: moveZ * currentSpeed,
+      z: worldZ * currentSpeed,
     }, true)
   }
 

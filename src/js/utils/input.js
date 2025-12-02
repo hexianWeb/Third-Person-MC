@@ -1,7 +1,12 @@
 import emitter from './event-bus.js'
 
+/**
+ * InputManager - 统一管理键盘和鼠标输入
+ * 负责监听用户输入并通过 mitt 发送事件
+ */
 export default class InputManager {
   constructor() {
+    // 键盘状态
     this.keys = {
       forward: false,
       backward: false,
@@ -15,20 +20,44 @@ export default class InputManager {
       c: false,
     }
 
+    // 鼠标按键状态
+    this.mouse = {
+      left: false,
+      right: false,
+      middle: false,
+    }
+
+    // 绑定方法（用于移除监听器）
+    this._onKeyDown = this.onKeyDown.bind(this)
+    this._onKeyUp = this.onKeyUp.bind(this)
+    this._onMouseDown = this.onMouseDown.bind(this)
+    this._onMouseUp = this.onMouseUp.bind(this)
+    this._onContextMenu = this.onContextMenu.bind(this)
+
     this.init()
   }
 
   init() {
-    window.addEventListener('keydown', this.onKeyDown.bind(this))
-    window.addEventListener('keyup', this.onKeyUp.bind(this))
+    // 键盘事件
+    window.addEventListener('keydown', this._onKeyDown)
+    window.addEventListener('keyup', this._onKeyUp)
+
+    // 鼠标按键事件
+    window.addEventListener('mousedown', this._onMouseDown)
+    window.addEventListener('mouseup', this._onMouseUp)
+
+    // 阻止右键菜单（游戏中右键用于攻击）
+    window.addEventListener('contextmenu', this._onContextMenu)
   }
+
+  // ==================== 键盘事件 ====================
 
   onKeyDown(event) {
     const key = event.key.toLowerCase()
 
-    // Prevent default actions for game controls
+    // 阻止游戏控制键的默认行为（如空格滚动页面）
     if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(event.key)) {
-      // event.preventDefault() // Optionally prevent scrolling
+      event.preventDefault()
     }
 
     this.updateKey(key, true)
@@ -65,11 +94,12 @@ export default class InputManager {
         break
       case ' ':
         if (isPressed && !this.keys.space) {
-          // Trigger jump only on initial press
+          // 跳跃：仅在初次按下时触发
           emitter.emit('input:jump')
         }
         this.keys.space = isPressed
         break
+      // Z/X 键保留作为备用攻击键
       case 'z':
         if (isPressed && !this.keys.z) {
           emitter.emit('input:punch_straight')
@@ -84,17 +114,73 @@ export default class InputManager {
         break
       case 'c':
         this.keys.c = isPressed
-        // Block logic might need continuous state
+        // 格挡：需要持续状态
         emitter.emit('input:block', isPressed)
         break
     }
 
-    // Emit continuous state update
+    // 发送连续状态更新
     emitter.emit('input:update', this.keys)
   }
 
+  // ==================== 鼠标事件 ====================
+
+  /**
+   * 鼠标按下事件
+   * - 左键 (button 0): 直拳
+   * - 右键 (button 2): 勾拳
+   */
+  onMouseDown(event) {
+    switch (event.button) {
+      case 0: // 左键 - 直拳
+        if (!this.mouse.left) {
+          this.mouse.left = true
+          emitter.emit('input:punch_straight')
+        }
+        break
+      case 2: // 右键 - 勾拳
+        if (!this.mouse.right) {
+          this.mouse.right = true
+          emitter.emit('input:punch_hook')
+        }
+        break
+      case 1: // 中键（预留）
+        this.mouse.middle = true
+        break
+    }
+  }
+
+  /**
+   * 鼠标松开事件
+   */
+  onMouseUp(event) {
+    switch (event.button) {
+      case 0: // 左键
+        this.mouse.left = false
+        break
+      case 2: // 右键
+        this.mouse.right = false
+        break
+      case 1: // 中键
+        this.mouse.middle = false
+        break
+    }
+  }
+
+  /**
+   * 阻止右键菜单弹出
+   */
+  onContextMenu(event) {
+    event.preventDefault()
+  }
+
+  // ==================== 清理 ====================
+
   destroy() {
-    window.removeEventListener('keydown', this.onKeyDown.bind(this))
-    window.removeEventListener('keyup', this.onKeyUp.bind(this))
+    window.removeEventListener('keydown', this._onKeyDown)
+    window.removeEventListener('keyup', this._onKeyUp)
+    window.removeEventListener('mousedown', this._onMouseDown)
+    window.removeEventListener('mouseup', this._onMouseUp)
+    window.removeEventListener('contextmenu', this._onContextMenu)
   }
 }
