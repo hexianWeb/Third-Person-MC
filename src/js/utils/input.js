@@ -56,8 +56,13 @@ export default class InputManager {
     const key = event.key.toLowerCase()
 
     // 阻止游戏控制键的默认行为（如空格滚动页面）
-    if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(event.key)) {
+    if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'tab'].includes(key)) {
       event.preventDefault()
+    }
+
+    if (key === 'tab') {
+      emitter.emit('input:toggle_camera_side')
+      return
     }
 
     this.updateKey(key, true)

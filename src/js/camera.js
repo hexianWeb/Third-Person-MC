@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 
 import Experience from './experience.js'
+import emitter from './utils/event-bus.js'
 
 export default class Camera {
   constructor(orthographic = false) {
@@ -74,6 +75,18 @@ export default class Camera {
     this.setInstance()
     this.setControls()
     this.setDebug()
+
+    emitter.on('input:toggle_camera_side', () => {
+      this.toggleSide()
+    })
+  }
+
+  toggleSide() {
+    this.followConfig.offset.x *= -1
+    const player = this.experience.world?.player
+    if (player?.movement) {
+      player.movement.setCameraOffset(this.followConfig.offset)
+    }
   }
 
   setInstance() {
