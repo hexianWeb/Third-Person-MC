@@ -18,6 +18,7 @@ export default class Player {
     this.resources = this.experience.resources
     this.time = this.experience.time
     this.debug = this.experience.debug
+    this.renderer = this.experience.renderer // 用于控制速度线效果
 
     // Config
     this.config = {
@@ -29,7 +30,16 @@ export default class Player {
       jumpForce: 1.45,
       facingAngle: Math.PI, // 初始朝向角度（弧度），Math.PI = 朝向 -Z 軸
       mouseSensitivity: 0.002, // 鼠标灵敏度
+      // 速度线配置
+      speedLines: {
+        fadeInSpeed: 5.0, // 淡入速度
+        fadeOutSpeed: 3.0, // 淡出速度
+        targetOpacity: 0.8, // 冲刺时的目标透明度
+      },
     }
+
+    // 速度线当前透明度
+    this._speedLineOpacity = 0
 
     // Input state
     this.inputState = {
@@ -161,6 +171,41 @@ export default class Player {
 
     // Update Animation
     this.animation.update(this.time.delta, playerState)
+
+    // ==================== 速度线控制 ====================
+    this.updateSpeedLines(resolvedInput)
+  }
+
+  /**
+   * 更新速度线效果
+   * 当玩家按住 Shift + 方向键冲刺时，显示速度线
+   * @param {object} inputState - 输入状态
+   */
+  updateSpeedLines(inputState) {
+    // 检查是否处于冲刺状态：shift + 任意方向键
+    const isMoving = inputState.forward || inputState.backward || inputState.left || inputState.right
+    const isSprinting = inputState.shift && isMoving
+
+    // 计算时间增量（秒）
+    const deltaTime = this.time.delta * 0.001
+
+    // 平滑过渡透明度
+    if (isSprinting) {
+      // 淡入：向目标透明度靠近
+      this._speedLineOpacity += (this.config.speedLines.targetOpacity - this._speedLineOpacity)
+        * this.config.speedLines.fadeInSpeed * deltaTime
+    }
+    else {
+      // 淡出：向 0 靠近
+      this._speedLineOpacity -= this._speedLineOpacity
+        * this.config.speedLines.fadeOutSpeed * deltaTime
+    }
+
+    // 限制范围 [0, 1]
+    this._speedLineOpacity = Math.max(0, Math.min(1, this._speedLineOpacity))
+
+    // 更新渲染器中的速度线透明度
+    this.renderer.setSpeedLineOpacity(this._speedLineOpacity)
   }
 
   debugInit() {
