@@ -28,6 +28,7 @@ export default class Player {
       },
       jumpForce: 1.45,
       facingAngle: Math.PI, // 初始朝向角度（弧度），Math.PI = 朝向 -Z 軸
+      mouseSensitivity: 0.002, // 鼠标灵敏度
     }
 
     // Input state
@@ -135,9 +136,7 @@ export default class Player {
 
     // ==================== 鼠标旋转（Pointer Lock 模式） ====================
     emitter.on('input:mouse_move', ({ movementX }) => {
-      // 鼠标灵敏度
-      const sensitivity = 0.002
-      const newAngle = this.config.facingAngle - movementX * sensitivity
+      const newAngle = this.config.facingAngle - movementX * this.config.mouseSensitivity
       this.setFacing(newAngle)
     })
   }
@@ -174,6 +173,16 @@ export default class Player {
     }).on('change', () => {
       this.setFacing(this.config.facingAngle)
     })
+
+    // ===== 鼠标灵敏度控制 =====
+    this.debugFolder.addBinding(this.config, 'mouseSensitivity', {
+      label: '鼠标灵敏度',
+      min: 0.0001,
+      max: 0.01,
+      step: 0.0001,
+    })
+
+    // ===== 速度控制 =====
 
     // ===== 速度控制 =====
     this.debugFolder.addBinding(this.config.speed, 'crouch', { label: 'Crouch Speed', min: 0.1, max: 5 })

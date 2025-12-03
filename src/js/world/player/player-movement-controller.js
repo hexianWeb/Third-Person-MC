@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
+import { MOVEMENT_CONSTANTS, MOVEMENT_DIRECTION_WEIGHTS } from '../../config/player-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event-bus.js'
 import { LocomotionProfiles } from './animation-config.js'
@@ -102,7 +103,8 @@ export class PlayerMovementController {
     if (isCombatActive) {
       // Decelerate during combat
       const vel = this.rigidBody.linvel()
-      this.rigidBody.setLinvel({ x: vel.x * 0.9, y: vel.y, z: vel.z * 0.9 }, true)
+      const deceleration = MOVEMENT_CONSTANTS.COMBAT_DECELERATION
+      this.rigidBody.setLinvel({ x: vel.x * deceleration, y: vel.y, z: vel.z * deceleration }, true)
       return
     }
 
@@ -111,13 +113,13 @@ export class PlayerMovementController {
     let localZ = 0
 
     if (inputState.forward)
-      localZ -= 1
+      localZ -= MOVEMENT_DIRECTION_WEIGHTS.FORWARD
     if (inputState.backward)
-      localZ += 0.8 // Slower backward
+      localZ += MOVEMENT_DIRECTION_WEIGHTS.BACKWARD
     if (inputState.left)
-      localX -= 1
+      localX -= MOVEMENT_DIRECTION_WEIGHTS.LEFT
     if (inputState.right)
-      localX += 1
+      localX += MOVEMENT_DIRECTION_WEIGHTS.RIGHT
 
     // 歸一化
     const length = Math.sqrt(localX * localX + localZ * localZ)
@@ -161,31 +163,31 @@ export class PlayerMovementController {
     const translation = this.rigidBody.translation()
     // 射線起點設置在膠囊體底部附近
     // 膠囊體配置：setTranslation(0, 0.85, 0)，半高 0.55，半徑 0.3
-    // 膠囊體底部（半球中心）= 0.85 - 0.55 = 0.3，最低點 = 0.3 - 0.3 = 0
-    // 射線從稍高於底部的位置發出（translation.y + 0.1）
-    const rayOrigin = { x: translation.x, y: translation.y + 0.1, z: translation.z }
+    // 胶囊体底部（半球中心）= 0.85 - 0.55 = 0.3，最低点 = 0.3 - 0.3 = 0
+    // 射线从稍高于底部的位置发出（translation.y + 0.1）
+    const rayOrigin = { x: translation.x, y: translation.y + MOVEMENT_CONSTANTS.GROUND_CHECK_RAY_OFFSET, z: translation.z }
     const rayDir = { x: 0, y: -1, z: 0 }
     const ray = new RAPIER.Ray(rayOrigin, rayDir)
 
-    // 使用過濾器排除自身碰撞體，防止射線檢測到自己
-    // RAPIER castRay 參數: ray, maxToi, solid, filterFlags, filterGroups, filterExcludeCollider, filterExcludeRigidBody, filterPredicate
+    // 使用过濾器排除自身碰撞体，防止射线检测到自己
+    // RAPIER castRay 参数: ray, maxToi, solid, filterFlags, filterGroups, filterExcludeCollider, filterExcludeRigidBody, filterPredicate
     const hit = this.physics.world.castRay(
       ray,
-      0.25, // 最大檢測距離
+      MOVEMENT_CONSTANTS.GROUND_CHECK_DISTANCE, // 最大检测距离
       true, // solid
       null, // filterFlags
       null, // filterGroups
-      this.collider, // filterExcludeCollider - 排除自身碰撞體
+      this.collider, // filterExcludeCollider - 排除自身碰撞体
       null, // filterExcludeRigidBody
       null, // filterPredicate
     )
 
-    // 只有當確實檢測到地面且角色正在下落或已穩定時才判定為著地
-    if (hit && hit.timeOfImpact < 0.2) {
+    // 只有当确实检测到地面且角色正在下落或已稳定时才判定为着地
+    if (hit && hit.timeOfImpact < MOVEMENT_CONSTANTS.GROUND_CHECK_TOLERANCE) {
       const velY = this.rigidBody.linvel().y
-      // 只有在下落（y速度 <= 0.5）或已穩定時才認為著地
-      // 這可以防止跳躍上升階段被誤判為著地
-      if (velY <= 0.5) {
+      // 只有在下落（y速度 <= 0.5）或已稳定时才认为着地
+      // 这可以防止跳跃上升阶段被误判为着地
+      if (velY <= MOVEMENT_CONSTANTS.GROUND_CHECK_MAX_FALL_SPEED) {
         this.isGrounded = true
       }
     }
