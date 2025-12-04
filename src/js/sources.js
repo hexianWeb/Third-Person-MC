@@ -39,4 +39,19 @@ export default [
     type: 'gltfModel',
     path: 'models/character/character.glb',
   },
+  {
+    name: 'grass',
+    type: 'gltfModel',
+    path: 'models/cube/grass.glb',
+  },
+  {
+    name: 'grass_block_top_texture',
+    type: 'texture',
+    path: 'textures/blocks/grass_block_top.png',
+  },
+  {
+    name: 'grass_block_side_texture',
+    type: 'texture',
+    path: 'textures/blocks/grass_block_side.png',
+  },
 ]

@@ -145,7 +145,7 @@ export default class Camera {
     if (this.debugActive) {
       const cameraFolder = this.debug.ui.addFolder({
         title: 'Camera',
-        expanded: true,
+        expanded: false,
       })
 
       // ===== 基础跟随设置 =====

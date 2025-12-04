@@ -12,7 +12,8 @@
 # production
 /dist
 /dist-ssr
-
+/src copy
+/TD
 # various
 /playwright-report
 TODO.md

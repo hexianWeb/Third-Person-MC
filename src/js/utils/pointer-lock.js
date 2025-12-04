@@ -1,5 +1,5 @@
-import emitter from './event-bus.js'
 import Experience from '../experience.js'
+import emitter from './event-bus.js'
 
 /**
  * PointerLockManager - 管理浏览器 Pointer Lock API
@@ -125,4 +125,3 @@ export default class PointerLockManager {
     }
   }
 }
-
