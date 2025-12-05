@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import Crosshair from './components/Crosshair.vue'
+import MiniMap from './components/MiniMap.vue'
 import Experience from './js/experience.js'
 import ExamplePanel from './vue/ExamplePanel.vue'
 
@@ -20,6 +21,8 @@ onMounted(() => {
     <ExamplePanel class="absolute top-4 right-4 z-10" />
     <!-- 准星（仅在 Pointer Lock 激活时显示） -->
     <Crosshair />
+    <!-- 小地图 -->
+    <MiniMap />
   </div>
 </template>
 

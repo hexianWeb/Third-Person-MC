@@ -12,6 +12,7 @@ import Sizes from './utils/sizes.js'
 import Stats from './utils/stats.js'
 import Time from './utils/time.js'
 import PhysicsWorld from './world/physics-world.js'
+import TerrainDataManager from './world/terrain-data-manager.js'
 import World from './world/world.js'
 
 let instance
@@ -43,6 +44,7 @@ export default class Experience {
     this.iMouse = new IMouse()
     this.input = new InputManager()
     this.pointerLock = new PointerLockManager() // 鼠标锁定管理器
+    this.terrainDataManager = new TerrainDataManager() // 地形数据管理器
     this.world = new World()
 
     this.sizes.on('resize', () => {
