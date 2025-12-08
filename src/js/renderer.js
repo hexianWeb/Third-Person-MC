@@ -148,7 +148,7 @@ export default class Renderer {
   debugInit() {
     const postProcessFolder = this.debug.ui.addFolder({
       title: 'Post Processing',
-      expanded: true,
+      expanded: false,
     })
 
     // ===== Bloom 辉光控制 =====

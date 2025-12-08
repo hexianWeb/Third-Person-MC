@@ -1,29 +1,21 @@
 uniform sampler2D uTopTexture;
 uniform sampler2D uSideTexture;
-uniform vec3 uColor;
 uniform float uTime;
 
+varying vec3 vObjectNormal;
 varying vec2 vUv;
-varying vec3 vPosition;
-varying vec3 vNormal;
+// varying vec3 vColor; // Already defined by Three.js when vertexColors is true
 
-void main()
-{
-    // 简单的纹理采样
+void main() {
     vec4 topColor = texture2D(uTopTexture, vUv);
+    vec4 sideColor = texture2D(uSideTexture, vUv);
     
-    // 颜色混合 (Tinting)
-    // 假设 topTexture 是灰度图，我们需要将其与 uColor (草绿色) 混合
-    vec3 finalColor = topColor.rgb * uColor;
-
-    // 暂时直接输出 Top 纹理颜色
-    // 未来可以根据 vNormal 或高度混合 uSideTexture
+    // 使用对象空间法线判断顶部
+    // Group 不再旋转，局部 Y 轴指向世界 Y（上）
+    // 所以局部 Y+ 面是顶部
+    float isTop = step(0.9, vObjectNormal.y);
     
-    gl_FragColor = vec4(finalColor, 1.0);
+    vec4 finalTextureColor = mix(sideColor, topColor, isTop);
     
-    // 简单的光照模拟 (可选，增加一点立体感)
-    // vec3 light = normalize(vec3(1.0, 1.0, 0.5));
-    // float shading = max(0.0, dot(vNormal, light));
-    // gl_FragColor = vec4(finalColor * (0.5 + 0.5 * shading), 1.0);
+    csm_DiffuseColor = finalTextureColor * vec4(vColor, 1.0);
 }
-

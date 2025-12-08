@@ -32,6 +32,7 @@
     "pinia": "^3.0.2",
     "postcss-import": "^16.1.0",
     "three": "^0.172.0",
+    "three-custom-shader-material": "^6.4.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {

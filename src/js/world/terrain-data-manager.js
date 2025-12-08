@@ -8,8 +8,16 @@ import Experience from '../experience.js'
 import { FBM } from '../tools/noise.js'
 import emitter from '../utils/event-bus.js'
 
+let instance = null
+
 export default class TerrainDataManager {
   constructor(options = {}) {
+    if (instance) {
+      return instance
+    }
+
+    instance = this
+
     this.experience = new Experience()
     this.debug = this.experience.debug
 
@@ -35,7 +43,7 @@ export default class TerrainDataManager {
     this.colors = {
       // 水系（2 段）
       waterDeep: {
-        threshold: -0.6, // height <= -0.6 深海
+        threshold: -0.75, // height <= -0.6 深海
         color: '#003366',
       },
       waterShallow: {
@@ -44,29 +52,29 @@ export default class TerrainDataManager {
       },
       // 过渡区（2 段）
       wetSand: {
-        threshold: -0.05, // -0.2 < height <= -0.05 湿沙/泥滩
+        threshold: -0.10, // -0.2 < height <= -0.05 湿沙/泥滩
         color: '#bd6723',
       },
       drySand: {
-        threshold: 0.05, // -0.05 < height <= 0.05 干沙/海滩
+        threshold: 0.00, // -0.05 < height <= 0.05 干沙/海滩
         color: '#ded3a7',
       },
       // 植被区（2 段）
       lowGrass: {
-        threshold: 0.4, // 0.05 < height <= 0.4 低地草
+        threshold: 0.25, // 0.05 < height <= 0.4 低地草
         color: '#4c752f',
       },
       highGrass: {
-        threshold: 0.7, // 0.4 < height <= 0.7 高地灌木/森林
+        threshold: 0.40, // 0.4 < height <= 0.7 高地灌木/森林
         color: '#145a32',
       },
       // 高山雪区（2 段）
       rock: {
-        threshold: 0.85, // 0.7 < height <= 0.85 裸岩
+        threshold: 0.60, // 0.7 < height <= 0.85 裸岩
         color: '#7f8c8d',
       },
       snow: {
-        threshold: 1, // height > 0.85 积雪
+        threshold: 0.80, // height > 0.85 积雪
         color: '#ecf0f1',
       },
     }
