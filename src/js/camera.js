@@ -98,7 +98,7 @@ export default class Camera {
     emitter.on('input:toggle_camera_side', () => {
       this.toggleSide()
     })
-    emitter.on('terrain:updated', () => {
+    emitter.on('terrain:data-ready', () => {
       this._terrainInfo = this._getTerrainInfo()
       if (this.currentMode !== this.cameraModes.THIRD_PERSON) {
         this._applyTopViewPlacement()
@@ -319,16 +319,16 @@ export default class Camera {
     if (terrainRenderer?.getBoundingInfo) {
       return terrainRenderer.getBoundingInfo()
     }
-    const bounds = this.experience.terrainDataManager?.getBounds()
-    if (bounds) {
-      const width = bounds.maxX - bounds.minX
-      const depth = bounds.maxY - bounds.minY
+    const container = this.experience.terrainContainer
+    if (container?.getSize) {
+      const { width, height } = container.getSize()
+      const depth = width
       const radius = Math.sqrt(width * width + depth * depth) * 0.5
       return {
-        center: new THREE.Vector3(0, 0, 0),
+        center: new THREE.Vector3(0, height * 0.5, 0),
         width,
         depth,
-        height: 10,
+        height,
         radius,
       }
     }

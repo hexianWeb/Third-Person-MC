@@ -1,4 +1,5 @@
 <script setup>
+import { Color } from 'three'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import emitter from '../js/utils/event-bus.js'
 
@@ -12,21 +13,59 @@ const WALKABLE_MIN = -0.05
 const WALKABLE_MAX = 0.3
 const showDialog = ref(false)
 
-// 地形数据管理器引用
-let terrainDataManager = null
+// 地形数据状态（新容器）
+let terrainState = {
+  heightMap: null, // 二维数组 [z][x]
+  size: { width: 0, height: 0 }, // 容器尺寸
+}
 
 // Canvas 尺寸
 const MINI_SIZE = 200
 const DIALOG_SIZE = 600
 
+// 颜色分段（沿用旧逻辑，基于归一化高度 [-1, 1]）
+const COLOR_BANDS = {
+  waterDeep: { threshold: -0.75, color: '#003366' },
+  waterShallow: { threshold: -0.2, color: '#0077be' },
+  wetSand: { threshold: -0.10, color: '#bd6723' },
+  drySand: { threshold: 0.00, color: '#ded3a7' },
+  lowGrass: { threshold: 0.25, color: '#4c752f' },
+  highGrass: { threshold: 0.40, color: '#145a32' },
+  rock: { threshold: 0.60, color: '#7f8c8d' },
+  snow: { threshold: 0.80, color: '#ecf0f1' },
+}
+
 /**
- * 获取 TerrainDataManager 实例
+ * 获取当前地形数据（从 Experience 单例暴露的容器/高度图）
  */
-function getTerrainDataManager() {
-  if (window.Experience && window.Experience.terrainDataManager) {
-    return window.Experience.terrainDataManager
+function getTerrainState() {
+  const exp = window.Experience
+  const container = exp?.terrainContainer
+  const heightMap = exp?.terrainHeightMap || container?.toHeightMap?.()
+  if (!heightMap || !heightMap.length)
+    return null
+  const size = container?.getSize?.() || { width: heightMap.length, height: heightMap.length }
+  return { heightMap, size }
+}
+
+/**
+ * 写入地形数据状态
+ */
+function applyTerrainState(payload) {
+  if (payload?.heightMap?.length) {
+    terrainState = {
+      heightMap: payload.heightMap,
+      size: payload.size || terrainState.size,
+    }
+    return true
   }
-  return null
+
+  const state = getTerrainState()
+  if (state) {
+    terrainState = state
+    return true
+  }
+  return false
 }
 
 /**
@@ -53,6 +92,74 @@ function colorToCSS(color) {
 }
 
 /**
+ * 归一化高度到 [-1, 1]，空位（-1）保持为空
+ */
+function normalizeHeight(rawHeight, maxHeight) {
+  if (rawHeight < 0)
+    return -1
+  const safeMax = Math.max(1, maxHeight)
+  const normalized01 = rawHeight / safeMax
+  return normalized01 * 2 - 1
+}
+
+/**
+ * 基于高度获取颜色（复用旧色带）
+ */
+function getColorForHeight(height) {
+  const {
+    waterDeep,
+    waterShallow,
+    wetSand,
+    drySand,
+    lowGrass,
+    highGrass,
+    rock,
+    snow,
+  } = COLOR_BANDS
+
+  let baseColor
+
+  if (height <= waterDeep.threshold) {
+    baseColor = new Color(waterDeep.color)
+    const depthRatio = (waterDeep.threshold - height) / (waterDeep.threshold + 1)
+    const hsl = { h: 0, s: 0, l: 0 }
+    baseColor.getHSL(hsl)
+    baseColor.setHSL(hsl.h, hsl.s, hsl.l * (1 - depthRatio * 0.4))
+  }
+  else if (height <= waterShallow.threshold) {
+    baseColor = new Color(waterShallow.color)
+    const shallowRatio = (waterShallow.threshold - height) / (waterShallow.threshold - waterDeep.threshold)
+    const hsl = { h: 0, s: 0, l: 0 }
+    baseColor.getHSL(hsl)
+    baseColor.setHSL(hsl.h, hsl.s, hsl.l * (1 - shallowRatio * 0.2))
+  }
+  else if (height <= wetSand.threshold) {
+    baseColor = new Color(wetSand.color)
+  }
+  else if (height <= drySand.threshold) {
+    baseColor = new Color(drySand.color)
+  }
+  else if (height <= lowGrass.threshold) {
+    baseColor = new Color(lowGrass.color)
+    const grassRatio = (height - drySand.threshold) / (lowGrass.threshold - drySand.threshold)
+    const hsl = { h: 0, s: 0, l: 0 }
+    baseColor.getHSL(hsl)
+    baseColor.setHSL(hsl.h, hsl.s * (1 + grassRatio * 0.1), hsl.l * (1 - grassRatio * 0.1))
+  }
+  else if (height <= highGrass.threshold) {
+    baseColor = new Color(highGrass.color)
+  }
+  else if (height <= rock.threshold) {
+    baseColor = new Color(rock.color)
+  }
+  else {
+    baseColor = new Color(snow.color)
+  }
+
+  return baseColor
+}
+
+/**
  * 判断高度是否在可行走范围内，返回黑白颜色
  * @param {number} height - 高度值
  * @returns {string} CSS 颜色字符串（白色或黑色）
@@ -69,40 +176,44 @@ function heightToWalkable(height) {
  * @param {number} size - Canvas 尺寸
  */
 function drawTerrain(canvas, size) {
-  if (!canvas || !terrainDataManager)
+  if (!canvas || !terrainState.heightMap)
     return
 
   const ctx = canvas.getContext('2d')
-  const { resolution } = terrainDataManager.params
-  const heightMapData = terrainDataManager.heightMap
+  const heightMapData = terrainState.heightMap
+  const resolution = heightMapData.length
+  if (!resolution)
+    return
 
-  // 计算每个格子的像素大小
+  // 计算最大高度（用于归一化）
+  const maxHeight = Math.max(1, (terrainState.size?.height ?? resolution) - 1)
   const cellSize = size / resolution
 
   // 清空画布
   ctx.clearRect(0, 0, size, size)
 
-  // 遍历高度图绘制
-  for (let y = 0; y < resolution; y++) {
+  // 遍历高度图绘制（z 行，x 列）
+  for (let z = 0; z < resolution; z++) {
     for (let x = 0; x < resolution; x++) {
-      const height = heightMapData[y][x]
+      const rawHeight = heightMapData[z]?.[x] ?? -1
+      const normalizedHeight = normalizeHeight(rawHeight, maxHeight)
 
       let fillColor
       if (displayMode.value === 'grayscale') {
-        fillColor = heightToGrayscale(height)
+        fillColor = heightToGrayscale(normalizedHeight)
       }
       else if (displayMode.value === 'walkable') {
-        fillColor = heightToWalkable(height)
+        fillColor = heightToWalkable(normalizedHeight)
       }
       else {
-        const color = terrainDataManager.getColorForHeight(height)
+        const color = getColorForHeight(normalizedHeight)
         fillColor = colorToCSS(color)
       }
 
       ctx.fillStyle = fillColor
       ctx.fillRect(
         x * cellSize,
-        y * cellSize,
+        z * cellSize,
         Math.ceil(cellSize),
         Math.ceil(cellSize),
       )
@@ -184,9 +295,9 @@ watch(showDialog, (isOpen) => {
 /**
  * 处理地形更新事件
  */
-function handleTerrainUpdate() {
-  // 确保获取最新的数据管理器引用
-  terrainDataManager = getTerrainDataManager()
+function handleTerrainReady(payload) {
+  if (!applyTerrainState(payload))
+    return
   updateMiniMap()
   if (showDialog.value) {
     updateDialogMap()
@@ -195,13 +306,12 @@ function handleTerrainUpdate() {
 
 // 组件挂载时初始化
 onMounted(() => {
-  // 监听地形更新事件
-  emitter.on('terrain:updated', handleTerrainUpdate)
+  // 监听新地形数据就绪事件
+  emitter.on('terrain:data-ready', handleTerrainReady)
 
   // 等待 Experience 初始化完成
   const checkAndInit = () => {
-    terrainDataManager = getTerrainDataManager()
-    if (terrainDataManager) {
+    if (applyTerrainState()) {
       updateMiniMap()
     }
     else {
@@ -215,8 +325,11 @@ onMounted(() => {
 // 组件卸载时清理
 onUnmounted(() => {
   // 移除事件监听
-  emitter.off('terrain:updated', handleTerrainUpdate)
-  terrainDataManager = null
+  emitter.off('terrain:data-ready', handleTerrainReady)
+  terrainState = {
+    heightMap: null,
+    size: { width: 0, height: 0 },
+  }
 })
 
 // 暴露方法供外部调用（如地形重新生成时）

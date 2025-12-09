@@ -1,6 +1,7 @@
 /**
  * 地形数据管理器
  * 负责生成和管理地形高度数据，提供给 3D 渲染和 2D 小地图使用
+ * @deprecated 已被 TerrainGenerator + TerrainContainer 取代，保留供参考，后续可移除
  */
 
 import { Color, Vector2 } from 'three'

@@ -18,18 +18,6 @@
  */
 export default [
   {
-    name: 'environmentMapTexture',
-    type: 'cubeTexture',
-    path: [
-      'textures/environmentMap/px.jpg',
-      'textures/environmentMap/nx.jpg',
-      'textures/environmentMap/py.jpg',
-      'textures/environmentMap/ny.jpg',
-      'textures/environmentMap/pz.jpg',
-      'textures/environmentMap/nz.jpg',
-    ],
-  },
-  {
     name: 'environmentMapHDRTexture',
     type: 'hdrTexture',
     path: 'textures/environmentMap/HDRI_110.hdr',
@@ -40,18 +28,48 @@ export default [
     path: 'models/character/character.glb',
   },
   {
-    name: 'grass',
-    type: 'gltfModel',
-    path: 'models/cube/grass.glb',
-  },
-  {
     name: 'grass_block_top_texture',
     type: 'texture',
     path: 'textures/blocks/grass_block_top.png',
   },
   {
+    name: 'grass',
+    type: 'texture',
+    path: 'textures/blocks/grass.png',
+  },
+  {
     name: 'grass_block_side_texture',
     type: 'texture',
     path: 'textures/blocks/grass_block_side.png',
+  },
+  {
+    name: 'coal_ore',
+    type: 'texture',
+    path: 'textures/blocks/coal_ore.png',
+  },
+  {
+    name: 'dirt',
+    type: 'texture',
+    path: 'textures/blocks/dirt.png',
+  },
+  {
+    name: 'stone',
+    type: 'texture',
+    path: 'textures/blocks/stone.png',
+  },
+  {
+    name: 'iron_ore',
+    type: 'texture',
+    path: 'textures/blocks/iron_ore.png',
+  },
+  {
+    name: 'sand',
+    type: 'texture',
+    path: 'textures/blocks/sand.png',
+  },
+  {
+    name: 'snow',
+    type: 'texture',
+    path: 'textures/blocks/snow.png',
   },
 ]

@@ -3,7 +3,7 @@ import Experience from '../experience.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
-import TerrainDataManager from './terrain-data-manager.js'
+import TerrainGenerator from './terrain-generator.js'
 import TerrainRenderer from './terrain-renderer.js'
 
 export default class World {
@@ -21,21 +21,21 @@ export default class World {
     // 添加基础光源（确保地形能被照亮）
     this._setupBasicLights()
 
-    // 初始化地形数据管理器（不依赖资源加载）
-    // 由于是单例模式，这里获取的是同一个实例
-    this.terrainDataManager = new TerrainDataManager({
-      resolution: 128, // 128x128 方块
-      scale: 0.05, // 噪声缩放
-      heightMultiplier: 1, // 高度倍数
+    // 初始化地形生成器（不依赖资源加载）
+    this.terrainGenerator = new TerrainGenerator({
+      size: { width: 64, height: 32 },
+      noiseScale: 0.08,
+      heightRatio: 0.75,
     })
-    // 将单例挂载到 Experience 上，供 MiniMap 等组件使用
-    this.experience.terrainDataManager = this.terrainDataManager
+    // 暴露给 Experience，方便其他组件读取
+    this.experience.terrainContainer = this.terrainGenerator.container
+    this.experience.terrainHeightMap = this.terrainGenerator.heightMap
 
     // Environment
     this.resources.on('ready', () => {
-      // 初始化地形渲染器（使用 InstancedMesh）
+      // 初始化地形渲染器（按方块类型分组实例化）
       // 必须在资源加载完成后创建，否则纹理为空
-      this.terrainRenderer = new TerrainRenderer(this.terrainDataManager)
+      this.terrainRenderer = new TerrainRenderer(this.terrainGenerator.container)
 
       // Setup
       this.player = new Player()
