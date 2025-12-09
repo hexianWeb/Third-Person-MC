@@ -60,6 +60,9 @@ export default class Renderer {
     if (this.debug.active) {
       this.debugInit()
     }
+
+    // 将渲染器与相机绑定，支持动态切换相机实例
+    this.camera.attachRenderer(this)
   }
 
   setInstance() {
@@ -340,5 +343,15 @@ export default class Renderer {
 
     // 使用 EffectComposer 渲染（包含所有后期处理）
     this.composer.render()
+  }
+
+  /**
+   * 当相机切换时更新 RenderPass 的相机引用
+   * @param {THREE.Camera} cameraInstance - 当前激活的相机
+   */
+  onCameraSwitched(cameraInstance) {
+    if (this.renderPass) {
+      this.renderPass.camera = cameraInstance
+    }
   }
 }

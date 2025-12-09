@@ -11,10 +11,19 @@ export default class Camera {
     this.sizes = this.experience.sizes
     this.scene = this.experience.scene
     this.canvas = this.experience.canvas
-    this.orthographic = orthographic
     this.debug = this.experience.debug
     this.debugActive = this.experience.debug.active
     this.time = this.experience.time
+
+    // 视角模式枚举
+    this.cameraModes = {
+      THIRD_PERSON: 'third-person',
+      BIRD_PERSPECTIVE: 'bird-perspective',
+      ORTHO_TOP: 'ortho-top',
+    }
+    this.currentMode = null
+    this.previousMode = null
+    this.orthographic = orthographic
 
     this.position = new THREE.Vector3(0, 0, 0)
     this.target = new THREE.Vector3(0, 0, 0)
@@ -71,17 +80,37 @@ export default class Camera {
     this._bobbingRoll = 0
     this._basePosition = new THREE.Vector3() // 计算后的基础位置（不含震动）
     this._playerSpeed = 0 // 缓存玩家速度
+    this._terrainInfo = this._getTerrainInfo()
+    this._topViewConfig = {
+      margin: 1.15, // 鸟瞰/正交时的视野留白
+      birdDistanceRatio: 1.6, // 鸟瞰距离 = 半径 * ratio
+      birdHeightRatio: 1.2, // 鸟瞰高度 = 半径 * ratio
+      orthoHeightRatio: 2.2, // 正交高度 = 半径 * ratio
+    }
+    this._modeLabel = { current: '鸟瞰透视' }
 
-    this.setInstance()
+    // 初始化相机与控制器
+    this.setInstances()
     this.setControls()
+    this.switchMode(orthographic ? this.cameraModes.ORTHO_TOP : this.cameraModes.BIRD_PERSPECTIVE)
     this.setDebug()
 
     emitter.on('input:toggle_camera_side', () => {
       this.toggleSide()
     })
+    emitter.on('terrain:updated', () => {
+      this._terrainInfo = this._getTerrainInfo()
+      if (this.currentMode !== this.cameraModes.THIRD_PERSON) {
+        this._applyTopViewPlacement()
+      }
+    })
   }
 
   toggleSide() {
+    // 仅在第三人称模式下切换左右
+    if (this.currentMode !== this.cameraModes.THIRD_PERSON)
+      return
+
     this.followConfig.offset.x *= -1
     const player = this.experience.world?.player
     if (player?.movement) {
@@ -89,47 +118,57 @@ export default class Camera {
     }
   }
 
-  setInstance() {
-    if (this.orthographic) {
-      const aspect = this.sizes.aspect
-      this.frustumSize = 1
+  setInstances() {
+    // 透视相机（用于第三人称与鸟瞰透视）
+    this.perspectiveCamera = new THREE.PerspectiveCamera(
+      this.trackingConfig.fov.baseFov,
+      this.sizes.width / this.sizes.height,
+      0.1,
+      500,
+    )
+    this.perspectiveCamera.position.copy(this.position)
+    this.perspectiveCamera.lookAt(this.target)
 
-      this.instance = new THREE.OrthographicCamera(
-        -this.frustumSize * aspect,
-        this.frustumSize * aspect,
-        this.frustumSize,
-        -this.frustumSize,
-        -1,
-        1000,
-      )
-    }
-    else {
-      this.instance = new THREE.PerspectiveCamera(
-        this.trackingConfig.fov.baseFov,
-        this.sizes.width / this.sizes.height,
-        0.1,
-        100,
-      )
-    }
-    this.instance.position.copy(this.position)
-    this.instance.lookAt(this.target)
-    this.scene.add(this.instance)
+    // 正交相机（用于顶视）
+    this.frustumSize = 1
+    this.orthographicCamera = new THREE.OrthographicCamera(
+      -this.frustumSize * this.sizes.aspect,
+      this.frustumSize * this.sizes.aspect,
+      this.frustumSize,
+      -this.frustumSize,
+      -50,
+      1000,
+    )
+    this.orthographicCamera.position.set(0, 10, 0)
+    this.orthographicCamera.lookAt(new THREE.Vector3(0, 0, 0))
+
+    // 默认使用透视相机
+    this.instance = this.perspectiveCamera
+    this.scene.add(this.perspectiveCamera)
+    this.scene.add(this.orthographicCamera)
   }
 
   setControls() {
-    // OrbitControls 设置（可选，用于调试）
+    if (this.orbitControls) {
+      this.orbitControls.dispose()
+    }
+    if (this.trackballControls) {
+      this.trackballControls.dispose()
+    }
+
+    // OrbitControls 设置（默认绑定当前相机）
     this.orbitControls = new OrbitControls(this.instance, this.canvas)
     this.orbitControls.enableDamping = true
     this.orbitControls.enableZoom = true
     this.orbitControls.enablePan = false
-    this.orbitControls.enabled = false // 默认禁用，使用自定义跟随
+    this.orbitControls.enabled = false // 第三人称默认禁用
     this.orbitControls.target.copy(this.target)
 
-    // Constraints for Third Person Follow
-    this.orbitControls.maxPolarAngle = Math.PI / 2 - 0.1
+    // 约束
+    this.orbitControls.maxPolarAngle = Math.PI / 2 - 0.05
     this.orbitControls.minDistance = 5
 
-    // TrackballControls 设置
+    // TrackballControls 设置（仅用于缩放，不允许旋转）
     this.trackballControls = new TrackballControls(this.instance, this.canvas)
     this.trackballControls.noRotate = true
     this.trackballControls.noPan = true
@@ -141,11 +180,224 @@ export default class Camera {
     this.trackballControls.target.copy(this.target)
   }
 
+  /**
+   * 切换相机模式
+   * @param {string} mode - 视角模式
+   */
+  switchMode(mode) {
+    if (!Object.values(this.cameraModes).includes(mode))
+      return
+    if (mode === this.currentMode)
+      return
+
+    this.previousMode = this.currentMode
+    this.currentMode = mode
+
+    // 根据模式选择相机实例
+    if (mode === this.cameraModes.ORTHO_TOP) {
+      this.instance = this.orthographicCamera
+    }
+    else {
+      this.instance = this.perspectiveCamera
+      // 确保 FOV 使用基础值
+      this.instance.fov = this.trackingConfig.fov.baseFov
+      this.instance.updateProjectionMatrix()
+    }
+
+    // 重新挂载控制器到当前相机
+    this.setControls()
+
+    if (mode === this.cameraModes.THIRD_PERSON) {
+      // 第三人称跟随：禁用 Orbit，使用自定义逻辑
+      this.orbitControls.enabled = false
+      this.trackballControls.enabled = false
+    }
+    else if (mode === this.cameraModes.BIRD_PERSPECTIVE) {
+      // 鸟瞰透视：启用 Orbit，允许旋转/缩放
+      this._configureBirdViewOrbit()
+      this._applyTopViewPlacement()
+    }
+    else if (mode === this.cameraModes.ORTHO_TOP) {
+      // 正交顶视：启用 Orbit，仅允许缩放
+      this._configureOrthoViewOrbit()
+      this._applyTopViewPlacement()
+    }
+
+    this._modeLabel.current = this._translateMode(mode)
+    if (this._modeBinding) {
+      this._modeBinding.refresh()
+    }
+
+    this._notifyRenderer()
+  }
+
+  /**
+   * 鸟瞰模式的 Orbit 配置
+   */
+  _configureBirdViewOrbit() {
+    const info = this._terrainInfo
+    const radius = info?.radius || 80
+    const minDistance = Math.max(5, radius * 0.3)
+    const maxDistance = radius * 4
+
+    this.orbitControls.enabled = true
+    this.orbitControls.enableRotate = true
+    this.orbitControls.enablePan = false
+    this.orbitControls.enableZoom = true
+    this.orbitControls.minDistance = minDistance
+    this.orbitControls.maxDistance = maxDistance
+    this.orbitControls.minPolarAngle = Math.PI * 0.1
+    this.orbitControls.maxPolarAngle = Math.PI / 2 - 0.05
+    this.trackballControls.enabled = false
+  }
+
+  /**
+   * 正交模式的 Orbit 配置（只允许缩放）
+   */
+  _configureOrthoViewOrbit() {
+    this.orbitControls.enabled = true
+    this.orbitControls.enableRotate = false
+    this.orbitControls.enablePan = false
+    this.orbitControls.enableZoom = true
+    // 限制缩放范围，避免过近导致裁剪
+    this.orbitControls.minZoom = 0.2
+    this.orbitControls.maxZoom = 8
+    this.trackballControls.enabled = false
+  }
+
+  /**
+   * 根据地形信息设置鸟瞰/正交视角的位置与投影
+   */
+  _applyTopViewPlacement() {
+    const info = this._terrainInfo
+    const center = info?.center || new THREE.Vector3(0, 0, 0)
+    const radius = info?.radius || 80
+
+    if (this.currentMode === this.cameraModes.BIRD_PERSPECTIVE) {
+      const distance = radius * this._topViewConfig.birdDistanceRatio
+      const height = radius * this._topViewConfig.birdHeightRatio
+      const offset = new THREE.Vector3(distance, height, distance)
+      this.instance.position.copy(center).add(offset)
+      this.instance.lookAt(center)
+      this.orbitControls.target.copy(center)
+    }
+    else if (this.currentMode === this.cameraModes.ORTHO_TOP) {
+      const height = radius * this._topViewConfig.orthoHeightRatio
+      this.instance.position.set(center.x, center.y + height, center.z)
+      // 保持正交俯视
+      this.instance.up.set(0, 1, 0)
+      this.instance.lookAt(center)
+      this.orbitControls.target.copy(center)
+      this.updateOrthographicFrustum(info)
+    }
+  }
+
+  /**
+   * 更新正交相机的视锥，覆盖整张地形
+   */
+  updateOrthographicFrustum(info = this._terrainInfo) {
+    const width = info?.width || 128
+    const depth = info?.depth || 128
+    const half = Math.max(width, depth) * 0.5 * this._topViewConfig.margin
+    const aspect = this.sizes.width / this.sizes.height
+
+    this.frustumSize = half * 2
+    this.orthographicCamera.left = -half * aspect
+    this.orthographicCamera.right = half * aspect
+    this.orthographicCamera.top = half
+    this.orthographicCamera.bottom = -half
+    this.orthographicCamera.near = -50
+    this.orthographicCamera.far = half * 10 + (info?.height || 20)
+    this.orthographicCamera.updateProjectionMatrix()
+  }
+
+  /**
+   * 获取地形信息：优先使用渲染器的真实包围信息
+   */
+  _getTerrainInfo() {
+    const terrainRenderer = this.experience.world?.terrainRenderer
+    if (terrainRenderer?.getBoundingInfo) {
+      return terrainRenderer.getBoundingInfo()
+    }
+    const bounds = this.experience.terrainDataManager?.getBounds()
+    if (bounds) {
+      const width = bounds.maxX - bounds.minX
+      const depth = bounds.maxY - bounds.minY
+      const radius = Math.sqrt(width * width + depth * depth) * 0.5
+      return {
+        center: new THREE.Vector3(0, 0, 0),
+        width,
+        depth,
+        height: 10,
+        radius,
+      }
+    }
+    // 兜底默认尺寸
+    return {
+      center: new THREE.Vector3(0, 0, 0),
+      width: 128,
+      depth: 128,
+      height: 10,
+      radius: 90,
+    }
+  }
+
+  /**
+   * 绑定渲染器（用于切换相机时通知 RenderPass）
+   */
+  attachRenderer(renderer) {
+    this.rendererRef = renderer
+    this._notifyRenderer()
+  }
+
+  _notifyRenderer() {
+    if (this.rendererRef?.onCameraSwitched) {
+      this.rendererRef.onCameraSwitched(this.instance)
+    }
+  }
+
+  _translateMode(mode) {
+    if (mode === this.cameraModes.THIRD_PERSON)
+      return '第三人称'
+    if (mode === this.cameraModes.ORTHO_TOP)
+      return '正交顶视'
+    return '鸟瞰透视'
+  }
+
   setDebug() {
     if (this.debugActive) {
       const cameraFolder = this.debug.ui.addFolder({
         title: 'Camera',
         expanded: false,
+      })
+
+      // ===== 视角切换 =====
+      const modeFolder = cameraFolder.addFolder({
+        title: '视角切换',
+        expanded: true,
+      })
+
+      this._modeBinding = modeFolder.addBinding(this._modeLabel, 'current', {
+        label: '当前模式',
+        readonly: true,
+      })
+
+      modeFolder.addButton({
+        title: '第三人称',
+      }).on('click', () => {
+        this.switchMode(this.cameraModes.THIRD_PERSON)
+      })
+
+      modeFolder.addButton({
+        title: '鸟瞰透视',
+      }).on('click', () => {
+        this.switchMode(this.cameraModes.BIRD_PERSPECTIVE)
+      })
+
+      modeFolder.addButton({
+        title: '正交顶视',
+      }).on('click', () => {
+        this.switchMode(this.cameraModes.ORTHO_TOP)
       })
 
       // ===== 基础跟随设置 =====
@@ -333,7 +585,7 @@ export default class Camera {
    * 根据玩家速度动态调整 FOV，速度越快 FOV 越大（产生拉伸/推背感）
    */
   updateDynamicFov(speed) {
-    if (!this.trackingConfig.fov.enabled || this.orthographic)
+    if (!this.trackingConfig.fov.enabled || this.currentMode !== this.cameraModes.THIRD_PERSON)
       return
 
     const { baseFov, maxFov, speedThreshold, smoothSpeed } = this.trackingConfig.fov
@@ -404,15 +656,8 @@ export default class Camera {
   }
 
   resize() {
-    if (this.orthographic) {
-      const aspect = this.sizes.width / this.sizes.height
-
-      this.instance.left = (-this.frustumSize * aspect) / 2
-      this.instance.right = (this.frustumSize * aspect) / 2
-      this.instance.top = this.frustumSize / 2
-      this.instance.bottom = -this.frustumSize / 2
-
-      this.instance.updateProjectionMatrix()
+    if (this.currentMode === this.cameraModes.ORTHO_TOP) {
+      this.updateOrthographicFrustum()
     }
     else {
       this.instance.aspect = this.sizes.width / this.sizes.height
@@ -435,7 +680,20 @@ export default class Camera {
   }
 
   update() {
-    // 如果启用了OrbitControls，使用OrbitControls更新
+    // 鸟瞰透视：Orbit 控制视角
+    if (this.currentMode === this.cameraModes.BIRD_PERSPECTIVE) {
+      this.orbitControls.update()
+      this.trackballControls.update()
+      return
+    }
+
+    // 正交顶视：仅处理缩放
+    if (this.currentMode === this.cameraModes.ORTHO_TOP) {
+      this.orbitControls.update()
+      return
+    }
+
+    // 如果第三人称下主动开启 Orbit（调试时），优先使用 Orbit
     if (this.orbitControls.enabled) {
       this.orbitControls.update()
       return
