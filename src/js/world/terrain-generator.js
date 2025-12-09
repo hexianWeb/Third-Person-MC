@@ -1,27 +1,15 @@
 /**
  * 地形生成器
- * - 基于 FBM 生成地形高度，填充草/土/石层
- * - 叠加 3D 噪声生成矿产（石头、煤矿、铁矿）
+ * - 基于 Simplex 噪声生成地形高度，填充草/土/石层
+ * - 使用 Simplex 3D 噪声生成矿产（石头、煤矿、铁矿）
  * - 生成完成后通过 mitt 事件总线广播 terrain:data-ready
  */
-import { Vector2, Vector3 } from 'three'
+import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js'
 import Experience from '../experience.js'
-import { FBM } from '../tools/noise.js'
+import { RNG } from '../tools/rng.js'
 import emitter from '../utils/event-bus.js'
 import { blocks, resources } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
-
-// 简单的可重复随机数生成器（mulberry32）
-function createRng(seed) {
-  let a = seed >>> 0
-  return () => {
-    a |= 0
-    a = (a + 0x6D2B79F5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 export default class TerrainGenerator {
   constructor(options = {}) {
@@ -35,25 +23,17 @@ export default class TerrainGenerator {
     // 参数配置（可调节）
     this.params = {
       seed: options.seed ?? Date.now(),
-      noiseScale: options.noiseScale ?? 0.08, // 地形 2D 噪声缩放
-      heightRatio: options.heightRatio ?? 0.7, // 相对最大高度（占容器高度比例）
-      baseHeight: options.baseHeight ?? 2, // 基础抬升，保证地面不为 0
-      soilDepth: options.soilDepth ?? 3, // 表层土厚度（含草顶层）
-      noiseOffset: options.noiseOffset || { x: 0, z: 0 }, // 采样偏移
-      octaves: options.octaves ?? 5,
-      persistance: options.persistance ?? 0.5,
-      lacunarity: options.lacunarity ?? 2,
-      redistribution: options.redistribution ?? 1.1,
-      oreThreshold: options.oreThreshold ?? 0.68, // 噪声阈值，越高越稀有
-      resourceOffset: options.resourceOffset || { x: 0, y: 0, z: 0 }, // 矿产噪声偏移
+      sizeWidth: size.width,
+      sizeHeight: size.height,
+      terrain: {
+        scale: options.terrain?.scale ?? 35, // 噪声缩放（越大越平滑）
+        magnitude: options.terrain?.magnitude ?? 0.35, // 振幅
+        offset: options.terrain?.offset ?? 0.5, // 基准偏移
+      },
     }
 
     // 内部状态
-    this._rng = createRng(this.params.seed)
     this.heightMap = []
-
-    this.heightNoise = this._createFBM(this.params.seed)
-    this.resourceNoises = this._createResourceNoises()
 
     // 自动生成
     if (options.autoGenerate ?? true) {
@@ -69,55 +49,55 @@ export default class TerrainGenerator {
    * 生成地形 + 矿产
    */
   generate() {
-    this.container.clear()
-    this._buildHeightField()
-    const oreStats = this._generateResources()
+    // 初始化容器尺寸
+    this.initialize()
 
-    // 挂载到 Experience 供其他组件读取
-    this.experience.terrainContainer = this.container
-    this.experience.terrainHeightMap = this.heightMap
+    // 使用同一随机序列驱动 Simplex 噪声（地形与矿产一致）
+    const rng = new RNG(this.params.seed)
+    const simplexTerrain = new SimplexNoise(rng)
+    const simplexResource = new SimplexNoise(rng)
 
-    // 通知外部：数据已准备好
-    emitter.emit('terrain:data-ready', {
-      container: this.container,
-      heightMap: this.heightMap,
-      size: this.container.getSize(),
-      seed: this.params.seed,
-      oreStats,
-    })
+    // 生成地形与矿产
+    this.generateTerrain(simplexTerrain)
+    const oreStats = this.generateResources(simplexResource)
 
-    return {
-      heightMap: this.heightMap,
-      oreStats,
+    // 挂载并生成渲染数据
+    this.generateMeshes(oreStats)
+
+    return { heightMap: this.heightMap, oreStats }
+  }
+
+  /**
+   * 初始化容器（尺寸变更时重置）
+   */
+  initialize() {
+    const currentSize = this.container.getSize()
+    if (currentSize.width !== this.params.sizeWidth || currentSize.height !== this.params.sizeHeight) {
+      this.container.initialize({
+        width: this.params.sizeWidth,
+        height: this.params.sizeHeight,
+      })
     }
+    this.container.clear()
   }
 
   /**
    * 构建高度图并填充草/土/石
    */
-  _buildHeightField() {
+  generateTerrain(simplex) {
     const { width, height } = this.container.getSize()
-    const maxHeight = Math.max(1, Math.floor((height - 1) * this.params.heightRatio))
+    const { scale, magnitude, offset } = this.params.terrain
 
     this.heightMap = []
 
     for (let z = 0; z < width; z++) {
       const row = []
       for (let x = 0; x < width; x++) {
-        // 采样归一化噪声（0~1）
-        const noiseVal = this.heightNoise.get2(new Vector2(
-          (x + this.params.noiseOffset.x) * this.params.noiseScale,
-          (z + this.params.noiseOffset.z) * this.params.noiseScale,
-        ))
-
-        // 映射到真实高度并加入基础抬升
-        const columnHeight = Math.min(
-          height - 1,
-          Math.max(
-            0,
-            Math.floor(this.params.baseHeight + noiseVal * maxHeight),
-          ),
-        )
+        // Simplex 噪声 [-1,1]
+        const n = simplex.noise(x / scale, z / scale)
+        const scaled = offset + magnitude * n
+        let columnHeight = Math.floor(height * scaled)
+        columnHeight = Math.max(0, Math.min(columnHeight, height - 1))
 
         row.push(columnHeight)
 
@@ -156,31 +136,28 @@ export default class TerrainGenerator {
   /**
    * 生成矿产：使用 3D 噪声对石层进行覆盖
    */
-  _generateResources() {
-    const { width } = this.container.getSize()
+  generateResources(simplex) {
+    const { width, height } = this.container.getSize()
     const stats = {}
 
-    resources.forEach((res, index) => {
+    resources.forEach((res) => {
       let placed = 0
-      const fbm = this.resourceNoises[index]
       const scale = res.scale || { x: 20, y: 20, z: 20 }
-      const threshold = res.scarcity ?? this.params.oreThreshold
+      const threshold = res.scarcity ?? 0.7
 
       for (let z = 0; z < width; z++) {
         for (let x = 0; x < width; x++) {
-          const surfaceHeight = this.heightMap[z][x]
-          for (let y = 0; y <= surfaceHeight; y++) {
-            const block = this.container.getBlock(x, y, z)
+          for (let y = 0; y <= height; y++) {
             // 仅在石块内部生成矿产，避免替换表层
+            const block = this.container.getBlock(x, y, z)
             if (block.id !== blocks.stone.id)
               continue
 
-            const sample = new Vector3(
-              (x + this.params.resourceOffset.x) / scale.x,
-              (y + this.params.resourceOffset.y) / scale.y,
-              (z + this.params.resourceOffset.z) / scale.z,
+            const noiseVal = simplex.noise3d(
+              x / scale.x,
+              y / scale.y,
+              z / scale.z,
             )
-            const noiseVal = fbm.get3(sample)
 
             if (noiseVal >= threshold) {
               this.container.setBlockId(x, y, z, res.id)
@@ -197,29 +174,25 @@ export default class TerrainGenerator {
   }
 
   /**
-   * 创建主地形噪声
+   * 创建可重复 RNG（SimplexNoise 依赖 Math.random 接口）
    */
-  _createFBM(seed) {
-    return new FBM({
-      seed,
-      scale: 1,
-      persistance: this.params.persistance,
-      lacunarity: this.params.lacunarity,
-      octaves: this.params.octaves,
-      redistribution: this.params.redistribution,
-    })
-  }
 
   /**
-   * 为每类矿产创建独立噪声实例（使用不同子种子）
+   * 生成渲染层需要的数据并广播事件
    */
-  _createResourceNoises() {
-    const list = []
-    resources.forEach(() => {
-      const subSeed = Math.floor(this._rng() * 1e9)
-      list.push(this._createFBM(subSeed))
+  generateMeshes(oreStats) {
+    // 挂载到 Experience 供其他组件读取
+    this.experience.terrainContainer = this.container
+    this.experience.terrainHeightMap = this.heightMap
+
+    // 通知外部：数据已准备好
+    emitter.emit('terrain:data-ready', {
+      container: this.container,
+      heightMap: this.heightMap,
+      size: this.container.getSize(),
+      seed: this.params.seed,
+      oreStats,
     })
-    return list
   }
 
   /**
@@ -237,109 +210,39 @@ export default class TerrainGenerator {
       expanded: true,
     })
 
-    terrainFolder.addBinding(this.params, 'noiseScale', {
-      label: '噪声缩放',
-      min: 0.01,
-      max: 0.3,
-      step: 0.005,
+    terrainFolder.addBinding(this.params, 'sizeWidth', {
+      label: '地图宽度',
+      min: 8,
+      max: 256,
+      step: 1,
     }).on('change', () => this.generate())
 
-    terrainFolder.addBinding(this.params, 'heightRatio', {
-      label: '高度比例',
-      min: 0.2,
-      max: 0.95,
-      step: 0.05,
+    terrainFolder.addBinding(this.params, 'sizeHeight', {
+      label: '地图高度',
+      min: 4,
+      max: 256,
+      step: 1,
     }).on('change', () => this.generate())
 
-    terrainFolder.addBinding(this.params, 'baseHeight', {
-      label: '基础高度',
+    terrainFolder.addBinding(this.params.terrain, 'scale', {
+      label: '地形缩放',
+      min: 5,
+      max: 120,
+      step: 1,
+    }).on('change', () => this.generate())
+
+    terrainFolder.addBinding(this.params.terrain, 'magnitude', {
+      label: '地形振幅',
       min: 0,
-      max: 8,
-      step: 1,
-    }).on('change', () => this.generate())
-
-    terrainFolder.addBinding(this.params, 'soilDepth', {
-      label: '土层厚度',
-      min: 1,
-      max: 8,
-      step: 1,
-    }).on('change', () => this.generate())
-
-    // 噪声偏移（平移地形）
-    terrainFolder.addBinding(this.params.noiseOffset, 'x', {
-      label: '噪声偏移 X',
-      min: -200,
-      max: 200,
-      step: 1,
-    }).on('change', () => this.generate())
-    terrainFolder.addBinding(this.params.noiseOffset, 'z', {
-      label: '噪声偏移 Z',
-      min: -200,
-      max: 200,
-      step: 1,
-    }).on('change', () => this.generate())
-
-    // 噪声层
-    const fbmFolder = this.debugFolder.addFolder({
-      title: 'FBM',
-      expanded: false,
-    })
-
-    fbmFolder.addBinding(this.params, 'octaves', {
-      label: '八度数',
-      min: 1,
-      max: 8,
-      step: 1,
-    }).on('change', () => this.generate())
-    fbmFolder.addBinding(this.params, 'persistance', {
-      label: '持续度',
-      min: 0.1,
       max: 1,
-      step: 0.05,
-    }).on('change', () => this.generate())
-    fbmFolder.addBinding(this.params, 'lacunarity', {
-      label: '空隙度',
-      min: 1,
-      max: 4,
-      step: 0.1,
-    }).on('change', () => this.generate())
-    fbmFolder.addBinding(this.params, 'redistribution', {
-      label: '重分布',
-      min: 0.6,
-      max: 2.0,
-      step: 0.05,
-    }).on('change', () => this.generate())
-
-    // 矿产
-    const oreFolder = this.debugFolder.addFolder({
-      title: '矿产',
-      expanded: false,
-    })
-    oreFolder.addBinding(this.params, 'oreThreshold', {
-      label: '矿产阈值',
-      min: 0.4,
-      max: 0.95,
       step: 0.01,
     }).on('change', () => this.generate())
 
-    // 矿产噪声偏移
-    oreFolder.addBinding(this.params.resourceOffset, 'x', {
-      label: '矿偏移 X',
-      min: -200,
-      max: 200,
-      step: 1,
-    }).on('change', () => this.generate())
-    oreFolder.addBinding(this.params.resourceOffset, 'y', {
-      label: '矿偏移 Y',
-      min: -200,
-      max: 200,
-      step: 1,
-    }).on('change', () => this.generate())
-    oreFolder.addBinding(this.params.resourceOffset, 'z', {
-      label: '矿偏移 Z',
-      min: -200,
-      max: 200,
-      step: 1,
+    terrainFolder.addBinding(this.params.terrain, 'offset', {
+      label: '地形偏移',
+      min: 0,
+      max: 1,
+      step: 0.01,
     }).on('change', () => this.generate())
 
     // 重新生成按钮
@@ -347,9 +250,6 @@ export default class TerrainGenerator {
       title: '🔄 重新生成',
     }).on('click', () => {
       this.params.seed = Math.floor(Math.random() * 1e9)
-      this._rng = createRng(this.params.seed)
-      this.heightNoise = this._createFBM(this.params.seed)
-      this.resourceNoises = this._createResourceNoises()
       this.generate()
     })
   }

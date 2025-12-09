@@ -489,6 +489,243 @@ export class Perlin {
  * 分形布朗运动（FBM）噪声生成器
  * 通过叠加多个不同频率和振幅的 Perlin 噪声来创建更自然的地形
  */
+/**
+ * Simplex 噪声生成器（支持 2D / 3D）
+ * 实现参考 Stefan Gustavson 的经典算法
+ */
+export class Simplex {
+  constructor(seed = 1) {
+    this.perm = new Uint8Array(512)
+    this.grad3 = [
+      new Vector3(1, 1, 0),
+      new Vector3(-1, 1, 0),
+      new Vector3(1, -1, 0),
+      new Vector3(-1, -1, 0),
+      new Vector3(1, 0, 1),
+      new Vector3(-1, 0, 1),
+      new Vector3(1, 0, -1),
+      new Vector3(-1, 0, -1),
+      new Vector3(0, 1, 1),
+      new Vector3(0, -1, 1),
+      new Vector3(0, 1, -1),
+      new Vector3(0, -1, -1),
+    ]
+
+    // 初始化排列表
+    let s = seed
+    if (s === 0)
+      s = 1
+    const perm = []
+    for (let i = 0; i < 256; i++) {
+      s = (s * 1664525 + 1013904223) % 0x100000000
+      perm[i] = (p[i] + s) & 255
+    }
+    for (let i = 0; i < 512; i++) {
+      this.perm[i] = perm[i & 255]
+    }
+  }
+
+  _dot(g, x, y, z = 0) {
+    return g.x * x + g.y * y + g.z * z
+  }
+
+  get2(input) {
+    const { x, y } = input
+    const F2 = 0.5 * (Math.sqrt(3) - 1)
+    const G2 = (3 - Math.sqrt(3)) / 6
+
+    const s = (x + y) * F2
+    const i = Math.floor(x + s)
+    const j = Math.floor(y + s)
+    const t = (i + j) * G2
+    const X0 = i - t
+    const Y0 = j - t
+    const x0 = x - X0
+    const y0 = y - Y0
+
+    let i1
+    let j1
+    if (x0 > y0) {
+      i1 = 1
+      j1 = 0
+    }
+    else {
+      i1 = 0
+      j1 = 1
+    }
+
+    const x1 = x0 - i1 + G2
+    const y1 = y0 - j1 + G2
+    const x2 = x0 - 1 + 2 * G2
+    const y2 = y0 - 1 + 2 * G2
+
+    const ii = i & 255
+    const jj = j & 255
+
+    const gi0 = this.perm[ii + this.perm[jj]] % 12
+    const gi1 = this.perm[ii + i1 + this.perm[jj + j1]] % 12
+    const gi2 = this.perm[ii + 1 + this.perm[jj + 1]] % 12
+
+    let n0 = 0
+    let n1 = 0
+    let n2 = 0
+
+    let t0 = 0.5 - x0 * x0 - y0 * y0
+    if (t0 >= 0) {
+      t0 *= t0
+      n0 = t0 * t0 * this._dot(this.grad3[gi0], x0, y0)
+    }
+
+    let t1 = 0.5 - x1 * x1 - y1 * y1
+    if (t1 >= 0) {
+      t1 *= t1
+      n1 = t1 * t1 * this._dot(this.grad3[gi1], x1, y1)
+    }
+
+    let t2 = 0.5 - x2 * x2 - y2 * y2
+    if (t2 >= 0) {
+      t2 *= t2
+      n2 = t2 * t2 * this._dot(this.grad3[gi2], x2, y2)
+    }
+
+    // 返回范围约 [-1, 1]
+    return 70 * (n0 + n1 + n2)
+  }
+
+  get3(input) {
+    const { x, y, z } = input
+    const F3 = 1 / 3
+    const G3 = 1 / 6
+
+    const s = (x + y + z) * F3
+    const i = Math.floor(x + s)
+    const j = Math.floor(y + s)
+    const k = Math.floor(z + s)
+    const t = (i + j + k) * G3
+    const X0 = i - t
+    const Y0 = j - t
+    const Z0 = k - t
+    const x0 = x - X0
+    const y0 = y - Y0
+    const z0 = z - Z0
+
+    let i1
+    let j1
+    let k1
+    let i2
+    let j2
+    let k2
+
+    if (x0 >= y0) {
+      if (y0 >= z0) {
+        i1 = 1
+        j1 = 0
+        k1 = 0
+        i2 = 1
+        j2 = 1
+        k2 = 0
+      }
+      else if (x0 >= z0) {
+        i1 = 1
+        j1 = 0
+        k1 = 0
+        i2 = 1
+        j2 = 0
+        k2 = 1
+      }
+      else {
+        i1 = 0
+        j1 = 0
+        k1 = 1
+        i2 = 1
+        j2 = 0
+        k2 = 1
+      }
+    }
+    else {
+      if (y0 < z0) {
+        i1 = 0
+        j1 = 0
+        k1 = 1
+        i2 = 0
+        j2 = 1
+        k2 = 1
+      }
+      else if (x0 < z0) {
+        i1 = 0
+        j1 = 1
+        k1 = 0
+        i2 = 0
+        j2 = 1
+        k2 = 1
+      }
+      else {
+        i1 = 0
+        j1 = 1
+        k1 = 0
+        i2 = 1
+        j2 = 1
+        k2 = 0
+      }
+    }
+
+    const x1 = x0 - i1 + G3
+    const y1 = y0 - j1 + G3
+    const z1 = z0 - k1 + G3
+    const x2 = x0 - i2 + 2 * G3
+    const y2 = y0 - j2 + 2 * G3
+    const z2 = z0 - k2 + 2 * G3
+    const x3 = x0 - 1 + 3 * G3
+    const y3 = y0 - 1 + 3 * G3
+    const z3 = z0 - 1 + 3 * G3
+
+    const ii = i & 255
+    const jj = j & 255
+    const kk = k & 255
+
+    const gi0 = this.perm[ii + this.perm[jj + this.perm[kk]]] % 12
+    const gi1 = this.perm[ii + i1 + this.perm[jj + j1 + this.perm[kk + k1]]] % 12
+    const gi2 = this.perm[ii + i2 + this.perm[jj + j2 + this.perm[kk + k2]]] % 12
+    const gi3 = this.perm[ii + 1 + this.perm[jj + 1 + this.perm[kk + 1]]] % 12
+
+    let n0 = 0
+    let n1 = 0
+    let n2 = 0
+    let n3 = 0
+
+    let t0 = 0.6 - x0 * x0 - y0 * y0 - z0 * z0
+    if (t0 >= 0) {
+      t0 *= t0
+      n0 = t0 * t0 * this._dot(this.grad3[gi0], x0, y0, z0)
+    }
+
+    let t1 = 0.6 - x1 * x1 - y1 * y1 - z1 * z1
+    if (t1 >= 0) {
+      t1 *= t1
+      n1 = t1 * t1 * this._dot(this.grad3[gi1], x1, y1, z1)
+    }
+
+    let t2 = 0.6 - x2 * x2 - y2 * y2 - z2 * z2
+    if (t2 >= 0) {
+      t2 *= t2
+      n2 = t2 * t2 * this._dot(this.grad3[gi2], x2, y2, z2)
+    }
+
+    let t3 = 0.6 - x3 * x3 - y3 * y3 - z3 * z3
+    if (t3 >= 0) {
+      t3 *= t3
+      n3 = t3 * t3 * this._dot(this.grad3[gi3], x3, y3, z3)
+    }
+
+    // 返回范围约 [-1, 1]
+    return 32 * (n0 + n1 + n2 + n3)
+  }
+}
+
+/**
+ * 分形布朗运动（FBM）噪声生成器
+ * 通过叠加多个不同频率和振幅的噪声（Perlin 或 Simplex）来创建更自然的地形
+ */
 export class FBM {
   /**
    * 创建 FBM 噪声实例
@@ -501,8 +738,8 @@ export class FBM {
    * @param {number} options.redistribution - 重分布指数，用于调整整体分布（默认 1）
    */
   constructor(options = {}) {
-    const { seed, scale, persistance, lacunarity, octaves, redistribution } = options
-    this._noise = new Perlin(seed)
+    const { seed, scale, persistance, lacunarity, octaves, redistribution, noiseType } = options
+    this._noise = (noiseType === 'simplex') ? new Simplex(seed) : new Perlin(seed)
     this._scale = scale || 1
     this._persistance = persistance || 0.5
     this._lacunarity = lacunarity || 2

@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
-import { blocks, createMaterials, sharedGeometry } from './blocks-config.js'
+import { blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
 // 将 id -> 配置映射缓存，避免每次遍历 Object.values
@@ -13,6 +13,7 @@ const BLOCK_BY_ID = Object.values(blocks).reduce((map, item) => {
   map[item.id] = item
   return map
 }, {})
+const RESOURCE_IDS = new Set(resources.map(r => r.id))
 
 export default class TerrainRenderer {
   constructor(container) {
@@ -28,6 +29,7 @@ export default class TerrainRenderer {
     this.params = {
       scale: 1, // 整体缩放
       heightScale: 1, // 高度缩放，仅作用于 y 轴
+      showOresOnly: false, // 仅显示矿产
     }
 
     this.group = new THREE.Group()
@@ -75,6 +77,9 @@ export default class TerrainRenderer {
     // 收集可见方块的位置
     this.container.forEachFilled((block, x, y, z) => {
       if (this.container.isBlockObscured(x, y, z))
+        return
+
+      if (this.params.showOresOnly && !RESOURCE_IDS.has(block.id))
         return
 
       const list = positionsByBlock.get(block.id) || []
@@ -151,6 +156,12 @@ export default class TerrainRenderer {
       step: 0.1,
     }).on('change', () => {
       // 重新刷写矩阵
+      this._rebuildFromContainer()
+    })
+
+    renderFolder.addBinding(this.params, 'showOresOnly', {
+      label: '仅显示矿产',
+    }).on('change', () => {
       this._rebuildFromContainer()
     })
 
