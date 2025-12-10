@@ -5,9 +5,9 @@
  * - 生成完成后通过 mitt 事件总线广播 terrain:data-ready
  */
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js'
-import Experience from '../experience.js'
-import { RNG } from '../tools/rng.js'
-import emitter from '../utils/event-bus.js'
+import Experience from '../../experience.js'
+import { RNG } from '../../tools/rng.js'
+import emitter from '../../utils/event-bus.js'
 import { blocks, resources } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
@@ -244,6 +244,36 @@ export default class TerrainGenerator {
       max: 1,
       step: 0.01,
     }).on('change', () => this.generate())
+
+    // 矿物噪声缩放调节：仅暴露 X/Z，便于控制矿脉走向
+    const oresFolder = this.debugFolder.addFolder({
+      title: '矿物缩放',
+      expanded: false,
+    })
+
+    resources.forEach((res) => {
+      // 兜底确保 scale 存在，避免外部删除导致面板失效
+      res.scale = res.scale || { x: 20, y: 20, z: 20 }
+
+      const oreFolder = oresFolder.addFolder({
+        title: `矿物-${res.name}`,
+        expanded: false,
+      })
+
+      oreFolder.addBinding(res.scale, 'x', {
+        label: 'X 噪声缩放',
+        min: 5,
+        max: 120,
+        step: 1,
+      }).on('change', () => this.generate())
+
+      oreFolder.addBinding(res.scale, 'z', {
+        label: 'Z 噪声缩放',
+        min: 5,
+        max: 120,
+        step: 1,
+      }).on('change', () => this.generate())
+    })
 
     // 重新生成按钮
     this.debugFolder.addButton({

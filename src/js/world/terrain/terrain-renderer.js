@@ -3,8 +3,8 @@
  * 读取 TerrainContainer 中的数据，按方块 id 分组实例化，支持遮挡剔除
  */
 import * as THREE from 'three'
-import Experience from '../experience.js'
-import emitter from '../utils/event-bus.js'
+import Experience from '../../experience.js'
+import emitter from '../../utils/event-bus.js'
 import { blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
@@ -99,6 +99,8 @@ export default class TerrainRenderer {
 
       const mesh = new THREE.InstancedMesh(sharedGeometry, materials, positions.length)
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+
+      mesh.castShadow = true
       mesh.receiveShadow = true
 
       positions.forEach((pos, index) => {

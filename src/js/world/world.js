@@ -3,8 +3,8 @@ import Experience from '../experience.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
-import TerrainGenerator from './terrain-generator.js'
-import TerrainRenderer from './terrain-renderer.js'
+import TerrainGenerator from './terrain/terrain-generator.js'
+import TerrainRenderer from './terrain/terrain-renderer.js'
 
 export default class World {
   constructor() {
@@ -18,12 +18,9 @@ export default class World {
     if (this.floor.grid)
       this.floor.grid.visible = false
 
-    // 添加基础光源（确保地形能被照亮）
-    this._setupBasicLights()
-
     // 初始化地形生成器（不依赖资源加载）
     this.terrainGenerator = new TerrainGenerator({
-      size: { width: 64, height: 32 },
+      size: { width: 128, height: 32 },
       noiseScale: 0.08,
       heightRatio: 0.75,
     })
@@ -41,26 +38,6 @@ export default class World {
       this.player = new Player()
       this.environment = new Environment()
     })
-  }
-
-  /**
-   * 设置基础光源
-   */
-  _setupBasicLights() {
-    // 环境光 - 提供基础照明
-    this.ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.6)
-    this.scene.add(this.ambientLight)
-
-    // 方向光 - 为地形提供主要照明
-    this.directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1.0)
-    this.directionalLight.position.set(50, 100, 50)
-    this.directionalLight.castShadow = true
-    this.directionalLight.shadow.camera.left = -100
-    this.directionalLight.shadow.camera.right = 100
-    this.directionalLight.shadow.camera.top = 100
-    this.directionalLight.shadow.camera.bottom = -100
-    this.directionalLight.shadow.camera.far = 200
-    this.scene.add(this.directionalLight)
   }
 
   update() {
