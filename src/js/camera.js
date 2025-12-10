@@ -14,6 +14,9 @@ export default class Camera {
     this.debug = this.experience.debug
     this.debugActive = this.experience.debug.active
     this.time = this.experience.time
+    // 相机可视化助手
+    this.cameraHelper = null
+    this.cameraHelperVisible = false
 
     // 视角模式枚举
     this.cameraModes = {
@@ -91,6 +94,7 @@ export default class Camera {
 
     // 初始化相机与控制器
     this.setInstances()
+    this._createCameraHelper()
     this.setControls()
     this.switchMode(orthographic ? this.cameraModes.ORTHO_TOP : this.cameraModes.BIRD_PERSPECTIVE)
     this.setDebug()
@@ -228,6 +232,9 @@ export default class Camera {
       this._modeBinding.refresh()
     }
 
+    // 切换相机后重建可视化助手
+    this._createCameraHelper()
+
     this._notifyRenderer()
   }
 
@@ -348,6 +355,18 @@ export default class Camera {
   attachRenderer(renderer) {
     this.rendererRef = renderer
     this._notifyRenderer()
+  }
+
+  _createCameraHelper() {
+    // 释放旧助手
+    if (this.cameraHelper) {
+      this.scene.remove(this.cameraHelper)
+      this.cameraHelper.geometry?.dispose?.()
+      this.cameraHelper.material?.dispose?.()
+    }
+    this.cameraHelper = new THREE.CameraHelper(this.instance)
+    this.cameraHelper.visible = this.cameraHelperVisible
+    this.scene.add(this.cameraHelper)
   }
 
   _notifyRenderer() {
@@ -577,6 +596,16 @@ export default class Camera {
         this.orbitControls.enabled = ev.value
         this.trackballControls.enabled = false
       })
+
+      // 相机视锥助手
+      cameraFolder.addBinding(this, 'cameraHelperVisible', {
+        label: '显示相机助手',
+      }).on('change', (ev) => {
+        if (this.cameraHelper) {
+          this.cameraHelper.visible = ev.value
+          this.cameraHelper.update()
+        }
+      })
     }
   }
 
@@ -663,6 +692,8 @@ export default class Camera {
       this.instance.aspect = this.sizes.width / this.sizes.height
       this.instance.updateProjectionMatrix()
     }
+    if (this.cameraHelper)
+      this.cameraHelper.update()
     this.trackballControls.handleResize()
   }
 
