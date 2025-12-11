@@ -6,7 +6,7 @@ import Experience from './experience.js'
 import emitter from './utils/event-bus.js'
 
 export default class Camera {
-  constructor(orthographic = false) {
+  constructor() {
     this.experience = new Experience()
     this.sizes = this.experience.sizes
     this.scene = this.experience.scene
@@ -18,15 +18,13 @@ export default class Camera {
     this.cameraHelper = null
     this.cameraHelperVisible = false
 
-    // 视角模式枚举
+    // 视角模式枚举（仅保留第三人称与鸟瞰）
     this.cameraModes = {
       THIRD_PERSON: 'third-person',
       BIRD_PERSPECTIVE: 'bird-perspective',
-      ORTHO_TOP: 'ortho-top',
     }
     this.currentMode = null
     this.previousMode = null
-    this.orthographic = orthographic
 
     this.position = new THREE.Vector3(0, 0, 0)
     this.target = new THREE.Vector3(0, 0, 0)
@@ -85,18 +83,17 @@ export default class Camera {
     this._playerSpeed = 0 // 缓存玩家速度
     this._terrainInfo = this._getTerrainInfo()
     this._topViewConfig = {
-      margin: 1.15, // 鸟瞰/正交时的视野留白
       birdDistanceRatio: 1.6, // 鸟瞰距离 = 半径 * ratio
       birdHeightRatio: 1.2, // 鸟瞰高度 = 半径 * ratio
-      orthoHeightRatio: 2.2, // 正交高度 = 半径 * ratio
     }
-    this._modeLabel = { current: '鸟瞰透视' }
+    this._modeLabel = { current: '第三人称' }
 
     // 初始化相机与控制器
     this.setInstances()
     this._createCameraHelper()
     this.setControls()
-    this.switchMode(orthographic ? this.cameraModes.ORTHO_TOP : this.cameraModes.BIRD_PERSPECTIVE)
+    // 默认进入第三人称，保证跟随逻辑与镜头震动生效
+    this.switchMode(this.cameraModes.THIRD_PERSON)
     this.setDebug()
 
     emitter.on('input:toggle_camera_side', () => {
@@ -133,23 +130,9 @@ export default class Camera {
     this.perspectiveCamera.position.copy(this.position)
     this.perspectiveCamera.lookAt(this.target)
 
-    // 正交相机（用于顶视）
-    this.frustumSize = 1
-    this.orthographicCamera = new THREE.OrthographicCamera(
-      -this.frustumSize * this.sizes.aspect,
-      this.frustumSize * this.sizes.aspect,
-      this.frustumSize,
-      -this.frustumSize,
-      -50,
-      1000,
-    )
-    this.orthographicCamera.position.set(0, 10, 0)
-    this.orthographicCamera.lookAt(new THREE.Vector3(0, 0, 0))
-
     // 默认使用透视相机
     this.instance = this.perspectiveCamera
     this.scene.add(this.perspectiveCamera)
-    this.scene.add(this.orthographicCamera)
   }
 
   setControls() {
@@ -197,16 +180,11 @@ export default class Camera {
     this.previousMode = this.currentMode
     this.currentMode = mode
 
-    // 根据模式选择相机实例
-    if (mode === this.cameraModes.ORTHO_TOP) {
-      this.instance = this.orthographicCamera
-    }
-    else {
-      this.instance = this.perspectiveCamera
-      // 确保 FOV 使用基础值
-      this.instance.fov = this.trackingConfig.fov.baseFov
-      this.instance.updateProjectionMatrix()
-    }
+    // 根据模式选择相机实例（仅透视相机）
+    this.instance = this.perspectiveCamera
+    // 确保 FOV 使用基础值
+    this.instance.fov = this.trackingConfig.fov.baseFov
+    this.instance.updateProjectionMatrix()
 
     // 重新挂载控制器到当前相机
     this.setControls()
@@ -219,11 +197,6 @@ export default class Camera {
     else if (mode === this.cameraModes.BIRD_PERSPECTIVE) {
       // 鸟瞰透视：启用 Orbit，允许旋转/缩放
       this._configureBirdViewOrbit()
-      this._applyTopViewPlacement()
-    }
-    else if (mode === this.cameraModes.ORTHO_TOP) {
-      // 正交顶视：启用 Orbit，仅允许缩放
-      this._configureOrthoViewOrbit()
       this._applyTopViewPlacement()
     }
 
@@ -259,63 +232,19 @@ export default class Camera {
   }
 
   /**
-   * 正交模式的 Orbit 配置（只允许缩放）
-   */
-  _configureOrthoViewOrbit() {
-    this.orbitControls.enabled = true
-    this.orbitControls.enableRotate = false
-    this.orbitControls.enablePan = false
-    this.orbitControls.enableZoom = true
-    // 限制缩放范围，避免过近导致裁剪
-    this.orbitControls.minZoom = 0.2
-    this.orbitControls.maxZoom = 8
-    this.trackballControls.enabled = false
-  }
-
-  /**
-   * 根据地形信息设置鸟瞰/正交视角的位置与投影
+   * 根据地形信息设置鸟瞰透视的位置
    */
   _applyTopViewPlacement() {
     const info = this._terrainInfo
     const center = info?.center || new THREE.Vector3(0, 0, 0)
     const radius = info?.radius || 80
 
-    if (this.currentMode === this.cameraModes.BIRD_PERSPECTIVE) {
-      const distance = radius * this._topViewConfig.birdDistanceRatio
-      const height = radius * this._topViewConfig.birdHeightRatio
-      const offset = new THREE.Vector3(distance, height, distance)
-      this.instance.position.copy(center).add(offset)
-      this.instance.lookAt(center)
-      this.orbitControls.target.copy(center)
-    }
-    else if (this.currentMode === this.cameraModes.ORTHO_TOP) {
-      const height = radius * this._topViewConfig.orthoHeightRatio
-      this.instance.position.set(center.x, center.y + height, center.z)
-      // 保持正交俯视
-      this.instance.up.set(0, 1, 0)
-      this.instance.lookAt(center)
-      this.orbitControls.target.copy(center)
-      this.updateOrthographicFrustum(info)
-    }
-  }
-
-  /**
-   * 更新正交相机的视锥，覆盖整张地形
-   */
-  updateOrthographicFrustum(info = this._terrainInfo) {
-    const width = info?.width || 128
-    const depth = info?.depth || 128
-    const half = Math.max(width, depth) * 0.5 * this._topViewConfig.margin
-    const aspect = this.sizes.width / this.sizes.height
-
-    this.frustumSize = half * 2
-    this.orthographicCamera.left = -half * aspect
-    this.orthographicCamera.right = half * aspect
-    this.orthographicCamera.top = half
-    this.orthographicCamera.bottom = -half
-    this.orthographicCamera.near = -50
-    this.orthographicCamera.far = half * 10 + (info?.height || 20)
-    this.orthographicCamera.updateProjectionMatrix()
+    const distance = radius * this._topViewConfig.birdDistanceRatio
+    const height = radius * this._topViewConfig.birdHeightRatio
+    const offset = new THREE.Vector3(distance, height, distance)
+    this.instance.position.copy(center).add(offset)
+    this.instance.lookAt(center)
+    this.orbitControls.target.copy(center)
   }
 
   /**
@@ -378,8 +307,6 @@ export default class Camera {
   _translateMode(mode) {
     if (mode === this.cameraModes.THIRD_PERSON)
       return '第三人称'
-    if (mode === this.cameraModes.ORTHO_TOP)
-      return '正交顶视'
     return '鸟瞰透视'
   }
 
@@ -411,12 +338,6 @@ export default class Camera {
         title: '鸟瞰透视',
       }).on('click', () => {
         this.switchMode(this.cameraModes.BIRD_PERSPECTIVE)
-      })
-
-      modeFolder.addButton({
-        title: '正交顶视',
-      }).on('click', () => {
-        this.switchMode(this.cameraModes.ORTHO_TOP)
       })
 
       // ===== 基础跟随设置 =====
@@ -685,13 +606,8 @@ export default class Camera {
   }
 
   resize() {
-    if (this.currentMode === this.cameraModes.ORTHO_TOP) {
-      this.updateOrthographicFrustum()
-    }
-    else {
-      this.instance.aspect = this.sizes.width / this.sizes.height
-      this.instance.updateProjectionMatrix()
-    }
+    this.instance.aspect = this.sizes.width / this.sizes.height
+    this.instance.updateProjectionMatrix()
     if (this.cameraHelper)
       this.cameraHelper.update()
     this.trackballControls.handleResize()
@@ -718,12 +634,6 @@ export default class Camera {
       return
     }
 
-    // 正交顶视：仅处理缩放
-    if (this.currentMode === this.cameraModes.ORTHO_TOP) {
-      this.orbitControls.update()
-      return
-    }
-
     // 如果第三人称下主动开启 Orbit（调试时），优先使用 Orbit
     if (this.orbitControls.enabled) {
       this.orbitControls.update()
@@ -745,8 +655,15 @@ export default class Camera {
       if (player.movement?.rigidBody) {
         const vel = player.movement.rigidBody.linvel()
         speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z)
-        isMoving = speed > 0.1
       }
+      else if (player.movement?.worldVelocity) {
+        // 自研物理分支：直接使用 worldVelocity 的水平分量作为速度
+        speed = Math.sqrt(
+          player.movement.worldVelocity.x * player.movement.worldVelocity.x
+          + player.movement.worldVelocity.z * player.movement.worldVelocity.z,
+        )
+      }
+      isMoving = speed > 0.1
       this._playerSpeed = speed
 
       // ===== 從錨點獲取世界位置（自動包含朝向旋轉） =====
