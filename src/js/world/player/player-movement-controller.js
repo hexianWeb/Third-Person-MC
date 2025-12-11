@@ -3,8 +3,15 @@ import * as THREE from 'three'
 import { MOVEMENT_CONSTANTS, MOVEMENT_DIRECTION_WEIGHTS } from '../../config/player-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event-bus.js'
+import { blocks } from '../terrain/blocks-config.js'
 import { LocomotionProfiles } from './animation-config.js'
+import PlayerCollisionSystem from './player-collision.js'
 
+/**
+ * 玩家移动控制器
+ * - 支持 Rapier 物理与自研物理两套分支
+ * - 通过胶囊体与地形方块碰撞来实现位移、跳跃与跌落处理
+ */
 export class PlayerMovementController {
   constructor(config) {
     this.experience = new Experience()
@@ -15,6 +22,19 @@ export class PlayerMovementController {
     this.rigidBody = null
     this.collider = null
     this.isGrounded = false
+
+    // 自研碰撞参数（默认启用）
+    this.useRapier = false
+    this.gravity = -9.81
+    this.position = new THREE.Vector3(0, 0, 0) // 角色脚底点
+    this.worldVelocity = new THREE.Vector3()
+    this.capsule = {
+      radius: 0.3,
+      halfHeight: 0.55, // cylinder 半高
+      offset: new THREE.Vector3(0, 0.85, 0), // 胶囊中心相对脚底位置
+    }
+    this.collision = new PlayerCollisionSystem()
+    this.terrainContainer = this.experience.terrainContainer
 
     // 角色朝向角度（弧度）- 通過旋轉 group 實現
     this.facingAngle = config.facingAngle ?? Math.PI
@@ -35,7 +55,9 @@ export class PlayerMovementController {
     this.targetAnchor.name = 'TargetAnchor'
     this.group.add(this.targetAnchor)
 
-    this.initPhysics()
+    if (this.useRapier) {
+      this.initPhysics()
+    }
   }
 
   /**
@@ -63,6 +85,9 @@ export class PlayerMovementController {
     this.targetAnchor.position.copy(offset)
   }
 
+  /**
+   * 初始化物理：物理就绪即创建刚体，否则监听 ready 事件
+   */
   initPhysics() {
     if (this.physics.ready) {
       this.createPhysicsBody()
@@ -74,6 +99,9 @@ export class PlayerMovementController {
     }
   }
 
+  /**
+   * 创建 Rapier 刚体与碰撞体
+   */
   createPhysicsBody() {
     const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(0, 0, 0)
@@ -90,16 +118,287 @@ export class PlayerMovementController {
     this.collider = this.physics.world.createCollider(colliderDesc, this.rigidBody)
   }
 
+  /**
+   * 每帧更新入口
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,shift:boolean,v:boolean}} inputState 输入状态
+   * @param {boolean} isCombatActive 是否处于战斗减速
+   */
   update(inputState, isCombatActive) {
-    if (!this.rigidBody)
+    if (this.useRapier) {
+      if (!this.rigidBody)
+        return
+      this.checkGroundStatus()
+      this._handleMovementRapier(inputState, isCombatActive)
+      this._syncMeshRapier()
       return
+    }
 
-    this.checkGroundStatus()
-    this.handleMovement(inputState, isCombatActive)
-    this.syncMesh()
+    this._updateCustomPhysics(inputState, isCombatActive)
   }
 
-  handleMovement(inputState, isCombatActive) {
+  /**
+   * 角色跳跃：依赖当前分支调用不同实现
+   */
+  jump() {
+    if (this.useRapier) {
+      if (this.isGrounded && this.rigidBody) {
+        this.rigidBody.applyImpulse({ x: 0, y: this.config.jumpForce, z: 0 }, true)
+        this.isGrounded = false
+      }
+      return
+    }
+
+    if (this.isGrounded) {
+      this.worldVelocity.y = this.config.jumpForce
+      this.isGrounded = false
+    }
+  }
+
+  /**
+   * Rapier 分支：地面检测
+   * - 从胶囊底部稍上方向下发射射线
+   * - 忽略自身碰撞体
+   */
+  checkGroundStatus() {
+    const translation = this.rigidBody.translation()
+    // 射線起點設置在膠囊體底部附近
+    // 膠囊體配置：setTranslation(0, 0.85, 0)，半高 0.55，半徑 0.3
+    // 胶囊体底部（半球中心）= 0.85 - 0.55 = 0.3，最低点 = 0.3 - 0.3 = 0
+    // 射线从稍高于底部的位置发出（translation.y + 0.1）
+    const rayOrigin = { x: translation.x, y: translation.y + MOVEMENT_CONSTANTS.GROUND_CHECK_RAY_OFFSET, z: translation.z }
+    const rayDir = { x: 0, y: -1, z: 0 }
+    const ray = new RAPIER.Ray(rayOrigin, rayDir)
+
+    // 使用过濾器排除自身碰撞体，防止射线检测到自己
+    // RAPIER castRay 参数: ray, maxToi, solid, filterFlags, filterGroups, filterExcludeCollider, filterExcludeRigidBody, filterPredicate
+    const hit = this.physics.world.castRay(
+      ray,
+      MOVEMENT_CONSTANTS.GROUND_CHECK_DISTANCE, // 最大检测距离
+      true, // solid
+      null, // filterFlags
+      null, // filterGroups
+      this.collider, // filterExcludeCollider - 排除自身碰撞体
+      null, // filterExcludeRigidBody
+      null, // filterPredicate
+    )
+
+    // 只有当确实检测到地面且角色正在下落或已稳定时才判定为着地
+    if (hit && hit.timeOfImpact < MOVEMENT_CONSTANTS.GROUND_CHECK_TOLERANCE) {
+      const velY = this.rigidBody.linvel().y
+      // 只有在下落（y速度 <= 0.5）或已稳定时才认为着地
+      // 这可以防止跳跃上升阶段被误判为着地
+      if (velY <= MOVEMENT_CONSTANTS.GROUND_CHECK_MAX_FALL_SPEED) {
+        this.isGrounded = true
+      }
+    }
+    else {
+      this.isGrounded = false
+    }
+  }
+
+  /**
+   * 同步场景节点位置（Rapier 分支）
+   */
+  _syncMeshRapier() {
+    const position = this.rigidBody.translation()
+    this.group.position.set(position.x, position.y, position.z)
+  }
+
+  /**
+   * ====================== 自研物理分支 ======================
+   */
+  /**
+   * 自研物理主循环
+   * - 处理输入 -> 水平速度
+   * - 应用重力 -> 预测位置 -> 碰撞修正
+   * - 同步位置与状态
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,shift:boolean,v:boolean}} inputState 输入状态
+   * @param {boolean} isCombatActive 是否战斗减速
+   */
+  _updateCustomPhysics(inputState, isCombatActive) {
+    const dt = this.experience.time.delta * 0.001
+
+    this.collision.prepareFrame()
+
+    // 计算输入方向（世界坐标）
+    const { worldX, worldZ } = this._computeWorldDirection(inputState)
+
+    // 水平速度
+    if (isCombatActive) {
+      this.worldVelocity.multiplyScalar(MOVEMENT_CONSTANTS.COMBAT_DECELERATION)
+    }
+    else {
+      let currentSpeed = this.config.speed.walk
+      if (inputState.shift)
+        currentSpeed = this.config.speed.run
+      else if (inputState.v)
+        currentSpeed = this.config.speed.crouch
+
+      this.worldVelocity.x = worldX * currentSpeed
+      this.worldVelocity.z = worldZ * currentSpeed
+    }
+
+    // 重力
+    this.worldVelocity.y += this.gravity * dt
+
+    // 预测位置
+    const nextPosition = new THREE.Vector3().copy(this.position).addScaledVector(this.worldVelocity, dt)
+
+    // 构建胶囊状态
+    const playerState = this._buildPlayerState(nextPosition)
+
+    const container = this.experience.terrainContainer || this.terrainContainer
+    const candidates = this.collision.broadPhase(playerState, container)
+    const collisions = this.collision.narrowPhase(candidates, playerState)
+    this.collision.resolveCollisions(collisions, playerState)
+    this._snapToGround(playerState, container)
+
+    // 同步结果
+    this.isGrounded = playerState.isGrounded
+    this.position.copy(playerState.basePosition)
+    this.worldVelocity.copy(playerState.worldVelocity)
+
+    // 超界重生
+    this._checkRespawn()
+
+    this._syncMeshCustom()
+  }
+
+  /**
+   * 将输入方向从角色本地空间转换到世界空间
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean}} inputState 输入状态
+   * @returns {{worldX:number, worldZ:number}} 世界坐标系方向
+   */
+  _computeWorldDirection(inputState) {
+    let localX = 0
+    let localZ = 0
+
+    if (inputState.forward)
+      localZ -= MOVEMENT_DIRECTION_WEIGHTS.FORWARD
+    if (inputState.backward)
+      localZ += MOVEMENT_DIRECTION_WEIGHTS.BACKWARD
+    if (inputState.left)
+      localX -= MOVEMENT_DIRECTION_WEIGHTS.LEFT
+    if (inputState.right)
+      localX += MOVEMENT_DIRECTION_WEIGHTS.RIGHT
+
+    const length = Math.sqrt(localX * localX + localZ * localZ)
+    if (length > 0) {
+      localX /= length
+      localZ /= length
+    }
+
+    const cos = Math.cos(this.facingAngle)
+    const sin = Math.sin(this.facingAngle)
+    const worldX = localX * cos + localZ * sin
+    const worldZ = -localX * sin + localZ * cos
+
+    return { worldX, worldZ }
+  }
+
+  /**
+   * 构建当前胶囊体状态
+   * @param {THREE.Vector3} basePosition 脚底世界坐标
+   * @returns {{ basePosition:THREE.Vector3, center:THREE.Vector3, halfHeight:number, radius:number, worldVelocity:THREE.Vector3, isGrounded:boolean }} 当前帧胶囊体状态（供碰撞系统就地修改）
+   */
+  _buildPlayerState(basePosition) {
+    const center = new THREE.Vector3().copy(basePosition).add(this.capsule.offset)
+    return {
+      basePosition,
+      center,
+      halfHeight: this.capsule.halfHeight,
+      radius: this.capsule.radius,
+      worldVelocity: this.worldVelocity,
+      isGrounded: false,
+    }
+  }
+
+  /**
+   * 同步 Three.js group 位置（自研分支）
+   */
+  _syncMeshCustom() {
+    this.group.position.copy(this.position)
+  }
+
+  /**
+   * 跌出世界后的重生处理
+   */
+  _checkRespawn() {
+    const threshold = this.config.respawn?.thresholdY ?? -10
+    if (this.position.y > threshold)
+      return
+
+    const target = this.config.respawn?.position || { x: 10, y: 10, z: 10 }
+    this.position.set(target.x, target.y, target.z)
+    this.worldVelocity.set(0, 0, 0)
+    this.isGrounded = false
+  }
+
+  /**
+   * 贴地纠偏：当胶囊底部距离地面很近但未检测到碰撞时，吸附到地面防止误判空中
+   * @param {*} playerState 当前帧状态（可变）
+   * @param {*} container 地形容器
+   */
+  _snapToGround(playerState, container) {
+    // 仅在下落或静止且未接地时尝试吸附，避免起跳被吞
+    if (playerState.isGrounded || !container?.getSize || playerState.worldVelocity.y > 0.05) {
+      return
+    }
+
+    const { width, height } = container.getSize()
+    const baseY = playerState.basePosition.y
+    const snapEps = 0.08
+    const sampleRadius = this.capsule.radius * 0.7
+    const samples = [
+      [0, 0],
+      [sampleRadius, 0],
+      [-sampleRadius, 0],
+      [0, sampleRadius],
+      [0, -sampleRadius],
+    ]
+
+    let bestTop = -Infinity
+
+    for (const [ox, oz] of samples) {
+      const gx = Math.floor(playerState.basePosition.x + ox)
+      const gz = Math.floor(playerState.basePosition.z + oz)
+      if (gx < 0 || gz < 0 || gx >= width || gz >= width)
+        continue
+
+      // 从当前位置向下找到最近的非空方块
+      for (let y = Math.min(height - 1, Math.floor(baseY) + 1); y >= 0; y--) {
+        const block = container.getBlock(gx, y, gz)
+        if (block.id === blocks.empty.id)
+          continue
+
+        const top = y + 0.5
+        if (top <= baseY && top > bestTop)
+          bestTop = top
+        break
+      }
+    }
+
+    if (bestTop === -Infinity)
+      return
+
+    const gap = baseY - bestTop
+    if (gap >= 0 && gap <= snapEps) {
+      playerState.basePosition.y = bestTop
+      playerState.center.y = bestTop + this.capsule.offset.y
+      playerState.worldVelocity.y = 0
+      playerState.isGrounded = true
+    }
+  }
+
+  /**
+   * ====================== Rapier 分支（保留兼容） ======================
+   */
+  /**
+   * Rapier 分支移动处理
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,shift:boolean,v:boolean}} inputState 输入状态
+   * @param {boolean} isCombatActive 是否战斗减速
+   */
+  _handleMovementRapier(inputState, isCombatActive) {
     if (isCombatActive) {
       // Decelerate during combat
       const vel = this.rigidBody.linvel()
@@ -152,56 +451,12 @@ export class PlayerMovementController {
     }, true)
   }
 
-  jump() {
-    if (this.isGrounded && this.rigidBody) {
-      this.rigidBody.applyImpulse({ x: 0, y: this.config.jumpForce, z: 0 }, true)
-      this.isGrounded = false
-    }
-  }
-
-  checkGroundStatus() {
-    const translation = this.rigidBody.translation()
-    // 射線起點設置在膠囊體底部附近
-    // 膠囊體配置：setTranslation(0, 0.85, 0)，半高 0.55，半徑 0.3
-    // 胶囊体底部（半球中心）= 0.85 - 0.55 = 0.3，最低点 = 0.3 - 0.3 = 0
-    // 射线从稍高于底部的位置发出（translation.y + 0.1）
-    const rayOrigin = { x: translation.x, y: translation.y + MOVEMENT_CONSTANTS.GROUND_CHECK_RAY_OFFSET, z: translation.z }
-    const rayDir = { x: 0, y: -1, z: 0 }
-    const ray = new RAPIER.Ray(rayOrigin, rayDir)
-
-    // 使用过濾器排除自身碰撞体，防止射线检测到自己
-    // RAPIER castRay 参数: ray, maxToi, solid, filterFlags, filterGroups, filterExcludeCollider, filterExcludeRigidBody, filterPredicate
-    const hit = this.physics.world.castRay(
-      ray,
-      MOVEMENT_CONSTANTS.GROUND_CHECK_DISTANCE, // 最大检测距离
-      true, // solid
-      null, // filterFlags
-      null, // filterGroups
-      this.collider, // filterExcludeCollider - 排除自身碰撞体
-      null, // filterExcludeRigidBody
-      null, // filterPredicate
-    )
-
-    // 只有当确实检测到地面且角色正在下落或已稳定时才判定为着地
-    if (hit && hit.timeOfImpact < MOVEMENT_CONSTANTS.GROUND_CHECK_TOLERANCE) {
-      const velY = this.rigidBody.linvel().y
-      // 只有在下落（y速度 <= 0.5）或已稳定时才认为着地
-      // 这可以防止跳跃上升阶段被误判为着地
-      if (velY <= MOVEMENT_CONSTANTS.GROUND_CHECK_MAX_FALL_SPEED) {
-        this.isGrounded = true
-      }
-    }
-    else {
-      this.isGrounded = false
-    }
-  }
-
-  syncMesh() {
-    const position = this.rigidBody.translation()
-    this.group.position.set(position.x, position.y, position.z)
-  }
-
   // Helper to get current profile for animation
+  /**
+   * 获取动画速度档位
+   * @param {{shift:boolean,v:boolean}} inputState 输入状态
+   * @returns {LocomotionProfiles} 当前档位
+   */
   getSpeedProfile(inputState) {
     if (inputState.shift)
       return LocomotionProfiles.RUN
@@ -210,6 +465,11 @@ export class PlayerMovementController {
     return LocomotionProfiles.WALK
   }
 
+  /**
+   * 是否有任何移动输入
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean}} inputState 输入状态
+   * @returns {boolean} 是否移动
+   */
   isMoving(inputState) {
     return inputState.forward || inputState.backward || inputState.left || inputState.right
   }

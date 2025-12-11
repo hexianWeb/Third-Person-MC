@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { PLAYER_CONFIG } from '../config/player-config.js'
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
 import {
@@ -21,22 +22,8 @@ export default class Player {
     this.renderer = this.experience.renderer // 用于控制速度线效果
 
     // Config
-    this.config = {
-      speed: {
-        crouch: 0.8,
-        walk: 1.5,
-        run: 3.2,
-      },
-      jumpForce: 1.45,
-      facingAngle: Math.PI, // 初始朝向角度（弧度），Math.PI = 朝向 -Z 軸
-      mouseSensitivity: 0.002, // 鼠标灵敏度
-      // 速度线配置
-      speedLines: {
-        fadeInSpeed: 5.0, // 淡入速度
-        fadeOutSpeed: 3.0, // 淡出速度
-        targetOpacity: 0.8, // 冲刺时的目标透明度
-      },
-    }
+    // 深拷贝配置，避免调试修改污染默认值
+    this.config = JSON.parse(JSON.stringify(PLAYER_CONFIG))
 
     // 速度线当前透明度
     this._speedLineOpacity = 0
@@ -309,6 +296,44 @@ export default class Player {
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'jump', { label: 'Jump', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'fall', { label: 'Fall', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'standup', { label: 'Standup', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+
+    // ===== 碰撞调试 =====
+    if (this.movement?.collision) {
+      const collisionFolder = this.debugFolder.addFolder({
+        title: '碰撞调试',
+        expanded: false,
+      })
+
+      collisionFolder.addBinding(this.movement.collision.params, 'showCandidates', {
+        label: '候选高亮',
+      })
+      collisionFolder.addBinding(this.movement.collision.params, 'showContacts', {
+        label: '接触点',
+      })
+      collisionFolder.addBinding(this.movement.collision.stats, 'candidateCount', {
+        label: '候选数量',
+        readonly: true,
+      })
+      collisionFolder.addBinding(this.movement.collision.stats, 'collisionCount', {
+        label: '碰撞数量',
+        readonly: true,
+      })
+    }
+
+    // ===== 重生设置 =====
+    const respawnFolder = this.debugFolder.addFolder({
+      title: '重生设置',
+      expanded: false,
+    })
+    respawnFolder.addBinding(this.config.respawn, 'thresholdY', {
+      label: '阈值Y',
+      min: -100,
+      max: 10,
+      step: 1,
+    })
+    respawnFolder.addBinding(this.config.respawn.position, 'x', { label: '重生X', min: -200, max: 200, step: 1 })
+    respawnFolder.addBinding(this.config.respawn.position, 'y', { label: '重生Y', min: -200, max: 200, step: 1 })
+    respawnFolder.addBinding(this.config.respawn.position, 'z', { label: '重生Z', min: -200, max: 200, step: 1 })
   }
 
   destroy() {
