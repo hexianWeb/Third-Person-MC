@@ -27,7 +27,7 @@ export default class TerrainGenerator {
       sizeHeight: size.height,
       terrain: {
         scale: options.terrain?.scale ?? 35, // 噪声缩放（越大越平滑）
-        magnitude: options.terrain?.magnitude ?? 0.35, // 振幅
+        magnitude: options.terrain?.magnitude ?? 0.5, // 振幅
         offset: options.terrain?.offset ?? 0.5, // 基准偏移
       },
     }

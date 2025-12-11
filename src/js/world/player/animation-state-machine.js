@@ -122,7 +122,7 @@ export class PlayerAnimationStateMachine extends AnimationStateMachine {
         // 進入空中狀態時，預設播放 falling 動畫
         // 如果是跳躍觸發的，triggerJump() 會立即覆蓋播放 jump 動畫
         if (prevState !== AnimationStates.AIRBORNE) {
-          this.anim.playAction('falling', 0.2)
+          this.anim.playAction('falling', 0.05)
         }
       },
       update: (dt, params) => {
@@ -138,7 +138,7 @@ export class PlayerAnimationStateMachine extends AnimationStateMachine {
           const clipName = currentAction.getClip().name
           // 如果是 jump 動畫且已經播放完畢（時間到達末尾）
           if (clipName === 'jump' && !currentAction.isRunning()) {
-            this.anim.playAction('falling', 0.15)
+            this.anim.playAction('falling', 0.05)
           }
         }
       },

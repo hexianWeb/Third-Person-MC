@@ -4,6 +4,7 @@
  * 渲染阶段统一使用共享几何体：new THREE.BoxGeometry(1, 1, 1)
  */
 import * as THREE from 'three'
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
 
 // 方块 ID 常量，便于在代码中保持一致引用
 export const BLOCK_IDS = {
@@ -107,7 +108,24 @@ export function createMaterials(blockType, textureItems) {
     return tex
   }
 
-  const makeLambert = tex => new THREE.MeshLambertMaterial({ map: tex })
+  // 使用 custom shader 包装的标准材质，便于后续扩展
+  const makeCustomMaterial = (tex) => {
+    // 这里选择 MeshStandardMaterial 作为基底以支持 metalness/roughness
+    return new CustomShaderMaterial({
+      baseMaterial: THREE.MeshPhongMaterial,
+      map: tex,
+      flatShading: true,
+      // 目前不自定义顶点/片段逻辑，留空挂钩便于后续扩展
+      vertexShader: /* glsl */`
+        void csm_vertex_main() {
+        }
+      `,
+      fragmentShader: /* glsl */`
+        void csm_fragment_main() {
+        }
+      `,
+    })
+  }
 
   // 草方块：六面不同材质
   if (blockType.id === blocks.grass.id) {
@@ -116,18 +134,18 @@ export function createMaterials(blockType, textureItems) {
     const bottom = ensureTexture(blockType.textureKeys.bottom)
 
     return [
-      makeLambert(side), // right
-      makeLambert(side), // left
-      makeLambert(top), // top
-      makeLambert(bottom), // bottom
-      makeLambert(side), // front
-      makeLambert(side), // back
+      makeCustomMaterial(side), // right
+      makeCustomMaterial(side), // left
+      makeCustomMaterial(top), // top
+      makeCustomMaterial(bottom), // bottom
+      makeCustomMaterial(side), // front
+      makeCustomMaterial(side), // back
     ]
   }
 
   // 其余方块：单一材质
   const mainTexture = ensureTexture(blockType.textureKeys.all)
-  return makeLambert(mainTexture)
+  return makeCustomMaterial(mainTexture)
 }
 
 /**

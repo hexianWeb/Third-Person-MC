@@ -134,11 +134,11 @@ export const timeScaleConfig = {
   categories: {
     [AnimationCategories.LOCOMOTION]: 1.0,
     [AnimationCategories.ACTION]: 1.8,
-    [AnimationCategories.COMBAT]: 1.0,
+    [AnimationCategories.COMBAT]: 1.3,
   },
   subGroups: {
     // Locomotion
-    walk: 1.17,
+    walk: 1.2,
     sneak: 0.9,
     run: 1.2,
     idle: 1.8,

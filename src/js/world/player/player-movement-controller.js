@@ -35,6 +35,7 @@ export class PlayerMovementController {
     }
     this.collision = new PlayerCollisionSystem()
     this.terrainContainer = this.experience.terrainContainer
+    this._hasInitializedRespawn = false
 
     // 角色朝向角度（弧度）- 通過旋轉 group 實現
     this.facingAngle = config.facingAngle ?? Math.PI
@@ -54,6 +55,9 @@ export class PlayerMovementController {
     this.targetAnchor = new THREE.Object3D()
     this.targetAnchor.name = 'TargetAnchor'
     this.group.add(this.targetAnchor)
+
+    // 初始化重生点监听：地形数据准备后更新到地形中心顶面
+    this._setupRespawnPoint()
 
     if (this.useRapier) {
       this.initPhysics()
@@ -205,6 +209,15 @@ export class PlayerMovementController {
   }
 
   /**
+   * 获取胶囊体中心的世界坐标
+   * @param {THREE.Vector3} target 输出向量
+   * @returns {THREE.Vector3} 胶囊体中心的世界坐标
+   */
+  getCapsuleCenterWorld(target = new THREE.Vector3()) {
+    return this.group.localToWorld(target.copy(this.capsule.offset))
+  }
+
+  /**
    * ====================== 自研物理分支 ======================
    */
   /**
@@ -229,13 +242,19 @@ export class PlayerMovementController {
     }
     else {
       let currentSpeed = this.config.speed.walk
-      if (inputState.shift)
+      let profile = 'walk'
+      if (inputState.shift) {
         currentSpeed = this.config.speed.run
-      else if (inputState.v)
+        profile = 'run'
+      }
+      else if (inputState.v) {
         currentSpeed = this.config.speed.crouch
+        profile = 'crouch'
+      }
 
-      this.worldVelocity.x = worldX * currentSpeed
-      this.worldVelocity.z = worldZ * currentSpeed
+      const dirScale = this._computeDirectionScale(profile, inputState)
+      this.worldVelocity.x = worldX * currentSpeed * dirScale
+      this.worldVelocity.z = worldZ * currentSpeed * dirScale
     }
 
     // 重力
@@ -297,6 +316,28 @@ export class PlayerMovementController {
   }
 
   /**
+   * 依据当前档位与输入方向计算额外方向倍率
+   * - 后退单独衰减
+   * - 任意左右输入再叠乘侧向衰减
+   * @param {'walk'|'run'|'crouch'} profile
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean}} inputState
+   * @returns {number} 方向倍率
+   */
+  _computeDirectionScale(profile, inputState) {
+    const multipliers = this.config.directionMultiplier?.[profile]
+    if (!multipliers)
+      return 1
+
+    let scale = 1
+    if (inputState.backward)
+      scale *= multipliers.backward ?? 1
+    if (inputState.left || inputState.right)
+      scale *= multipliers.lateral ?? 1
+
+    return scale
+  }
+
+  /**
    * 构建当前胶囊体状态
    * @param {THREE.Vector3} basePosition 脚底世界坐标
    * @returns {{ basePosition:THREE.Vector3, center:THREE.Vector3, halfHeight:number, radius:number, worldVelocity:THREE.Vector3, isGrounded:boolean }} 当前帧胶囊体状态（供碰撞系统就地修改）
@@ -318,6 +359,73 @@ export class PlayerMovementController {
    */
   _syncMeshCustom() {
     this.group.position.copy(this.position)
+  }
+
+  /**
+   * 初始化重生点：优先使用已存在的地形容器，地形生成完成后再更新
+   */
+  _setupRespawnPoint() {
+    // 尝试使用现有容器
+    this._updateRespawnPoint(this.terrainContainer)
+
+    // 等待地形生成完毕更新重生点
+    emitter.on('terrain:data-ready', ({ container }) => {
+      this._updateRespawnPoint(container)
+    })
+  }
+
+  /**
+   * 将重生点设置为地形中心列最高方块顶面
+   * @param {*} container TerrainContainer
+   */
+  _updateRespawnPoint(container) {
+    if (!container?.getSize)
+      return
+
+    const { width, height } = container.getSize()
+    if (!width || !height)
+      return
+
+    const centerX = Math.floor(width / 2)
+    const centerZ = Math.floor(width / 2)
+    const topY = this._findTopY(container, centerX, centerZ, height)
+    if (topY === null)
+      return
+
+    // 顶面为方块中心 +0.5，再抬高一点防止穿模
+    const surfaceY = topY + 0.5
+    const respawnPos = {
+      x: centerX + 0.5,
+      y: surfaceY + 0.05,
+      z: centerZ + 0.5,
+    }
+
+    this.config.respawn.position = respawnPos
+
+    // 首次初始化时同步角色位置，避免出生在地形下方
+    if (!this._hasInitializedRespawn) {
+      this.position.set(respawnPos.x, respawnPos.y, respawnPos.z)
+      this.worldVelocity.set(0, 0, 0)
+      this._syncMeshCustom()
+      this._hasInitializedRespawn = true
+    }
+  }
+
+  /**
+   * 获取指定列的最高非空方块高度
+   * @param {*} container TerrainContainer
+   * @param {number} x
+   * @param {number} z
+   * @param {number} height
+   * @returns {number|null} 最高非空方块的 y 索引，找不到返回 null
+   */
+  _findTopY(container, x, z, height) {
+    for (let y = height - 1; y >= 0; y--) {
+      const block = container.getBlock(x, y, z)
+      if (block.id !== blocks.empty.id)
+        return y
+    }
+    return null
   }
 
   /**
@@ -437,17 +545,24 @@ export class PlayerMovementController {
 
     // Determine Speed
     let currentSpeed = this.config.speed.walk
-    if (inputState.shift)
+    let profile = 'walk'
+    if (inputState.shift) {
       currentSpeed = this.config.speed.run
-    else if (inputState.v)
+      profile = 'run'
+    }
+    else if (inputState.v) {
       currentSpeed = this.config.speed.crouch
+      profile = 'crouch'
+    }
+
+    const dirScale = this._computeDirectionScale(profile, inputState)
 
     // Apply Velocity
     const currentVel = this.rigidBody.linvel()
     this.rigidBody.setLinvel({
-      x: worldX * currentSpeed,
+      x: worldX * currentSpeed * dirScale,
       y: currentVel.y,
-      z: worldZ * currentSpeed,
+      z: worldZ * currentSpeed * dirScale,
     }, true)
   }
 

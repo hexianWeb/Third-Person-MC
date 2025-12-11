@@ -20,9 +20,24 @@ export const MOVEMENT_CONSTANTS = {
 // 玩家默认配置（数值集中管理，便于调优）
 export const PLAYER_CONFIG = {
   speed: {
-    crouch: 1.6,
-    walk: 3.0,
-    run: 6.4,
+    crouch: 1.3,
+    walk: 2.3,
+    run: 4.56,
+  },
+  // 方向速率倍率：区分档位以便精细调参
+  directionMultiplier: {
+    crouch: {
+      lateral: 1.0, // 蹲行左右倍率
+      backward: 1.0, // 蹲行后退倍率
+    },
+    walk: {
+      lateral: 0.8, // 行走左右倍率
+      backward: 0.75, // 行走后退倍率
+    },
+    run: {
+      lateral: 0.9, // 奔跑左右倍率
+      backward: 0.8, // 奔跑后退倍率
+    },
   },
   jumpForce: 4.9,
   facingAngle: Math.PI,

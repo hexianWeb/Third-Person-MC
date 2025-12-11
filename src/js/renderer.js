@@ -27,14 +27,14 @@ export default class Renderer {
       // Bloom 辉光参数
       bloom: {
         enabled: true,
-        strength: 0.3, // 辉光强度
-        radius: 0.28, // 辉光扩散半径
+        strength: 0.1, // 辉光强度
+        radius: 0.18, // 辉光扩散半径
         threshold: 0.85, // 亮度阈值（高于此值才会产生辉光）
       },
       // Afterimage 残影/运动模糊参数
       afterimage: {
         enabled: true,
-        damp: 0.55, // 残影衰减系数 (0-1)，越大残影越明显
+        damp: 0.52, // 残影衰减系数 (0-1)，越大残影越明显
       },
       // SMAA 抗锯齿参数
       smaa: {

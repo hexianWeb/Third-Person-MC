@@ -14,7 +14,7 @@ export default class Environment {
       sunPos: { x: 70, y: 70, z: 70 },
       sunTarget: { x: 0, y: 0, z: 0 },
       sunColor: '#ffffff',
-      sunIntensity: 2.2,
+      sunIntensity: 3.0,
       shadowRange: 65,
       shadowNear: 16,
       shadowFar: 128,

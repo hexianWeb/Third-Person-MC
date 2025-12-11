@@ -46,8 +46,8 @@ export default class Camera {
       // 动态 FOV 配置
       fov: {
         enabled: true,
-        baseFov: 42, // 基础 FOV
-        maxFov: 72, // 最大 FOV（高速时）
+        baseFov: 55, // 基础 FOV
+        maxFov: 85, // 最大 FOV（高速时）
         speedThreshold: 3.0, // 达到最大 FOV 的速度阈值
         smoothSpeed: 0.05, // FOV 变化平滑度
       },
@@ -55,11 +55,11 @@ export default class Camera {
       bobbing: {
         enabled: true,
         // 垂直震动 (Y轴)
-        verticalFrequency: 6.0, // 频率 (Hz)
-        verticalAmplitude: 0.02, // 幅度 (米)
+        verticalFrequency: 4.0, // 频率 (Hz)
+        verticalAmplitude: 0.025, // 幅度 (米)
         // 水平震动 (X轴)
         horizontalFrequency: 4.0, // 频率 (Hz)
-        horizontalAmplitude: 0.01, // 幅度 (米)
+        horizontalAmplitude: 0.015, // 幅度 (米)
         // Roll 倾斜震动 (模拟左右脚步)
         rollFrequency: 4.0, // 频率 (Hz)
         rollAmplitude: 0.005, // 幅度 (弧度)

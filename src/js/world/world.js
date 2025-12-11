@@ -20,7 +20,7 @@ export default class World {
 
     // 初始化地形生成器（不依赖资源加载）
     this.terrainGenerator = new TerrainGenerator({
-      size: { width: 128, height: 4 },
+      size: { width: 128, height: 10 },
       noiseScale: 0.08,
       heightRatio: 0.75,
     })
