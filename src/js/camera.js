@@ -4,6 +4,7 @@ import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls
 
 import Experience from './experience.js'
 import emitter from './utils/event-bus.js'
+import { blocks } from './world/terrain/blocks-config.js'
 
 export default class Camera {
   constructor() {
@@ -87,6 +88,26 @@ export default class Camera {
       birdHeightRatio: 1.2, // 鸟瞰高度 = 半径 * ratio
     }
     this._modeLabel = { current: '第三人称' }
+    // 地形自适应配置
+    this.terrainAdapt = {
+      enabled: true,
+      clearance: 1.5, // 期望离地净空
+      smoothSpeed: 0.25, // 纵向平滑
+      maxRaise: 6.0, // 单帧相对基础位置最大抬升
+    }
+    // 遮挡避让配置
+    this.occlusionConfig = {
+      enabled: true,
+      minDistance: 1.2, // 相机距目标最小半径
+      liftOnHit: 0.4, // 命中时的基础抬升
+      liftClearance: 1.0, // 额外净空（可叠加 terrainAdapt.clearance）
+      forwardFallback: false, // 抬升仍被挡时是否前移兜底
+      safeDistance: 0.6, // 兜底前移时与命中面的安全间距
+      maxRayDistance: 80,
+    }
+    // 内部缓存
+    this._adaptiveY = null
+    this._raycaster = new THREE.Raycaster()
 
     // 初始化相机与控制器
     this.setInstances()
@@ -310,6 +331,7 @@ export default class Camera {
     return '鸟瞰透视'
   }
 
+  // #region
   setDebug() {
     if (this.debugActive) {
       const cameraFolder = this.debug.ui.addFolder({
@@ -384,6 +406,37 @@ export default class Camera {
         min: 0.01,
         max: 0.5,
         step: 0.01,
+      })
+
+      // ===== 地形自适应高度 =====
+      const terrainFolder = cameraFolder.addFolder({
+        title: '地形自适应',
+        expanded: true,
+      })
+
+      terrainFolder.addBinding(this.terrainAdapt, 'enabled', {
+        label: '启用自适应',
+      })
+
+      terrainFolder.addBinding(this.terrainAdapt, 'clearance', {
+        label: '离地净空',
+        min: 0.2,
+        max: 5,
+        step: 0.1,
+      })
+
+      terrainFolder.addBinding(this.terrainAdapt, 'smoothSpeed', {
+        label: '纵向平滑',
+        min: 0.05,
+        max: 0.6,
+        step: 0.01,
+      })
+
+      terrainFolder.addBinding(this.terrainAdapt, 'maxRaise', {
+        label: '单帧最大抬升',
+        min: 0.5,
+        max: 10,
+        step: 0.1,
       })
 
       // ===== Tracking Shot - 动态 FOV =====
@@ -507,6 +560,62 @@ export default class Camera {
         step: 0.001,
       })
 
+      // ===== 遮挡避让 =====
+      const occlusionFolder = cameraFolder.addFolder({
+        title: '遮挡避让',
+        expanded: true,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'enabled', {
+        label: '启用避让',
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'safeDistance', {
+        label: '安全间距',
+        min: 0,
+        max: 2,
+        step: 0.05,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'minDistance', {
+        label: '最小半径',
+        min: 0.5,
+        max: 5,
+        step: 0.1,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'liftOnHit', {
+        label: '命中抬升',
+        min: 0,
+        max: 2,
+        step: 0.05,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'liftClearance', {
+        label: '额外净空',
+        min: 0,
+        max: 3,
+        step: 0.05,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'maxRayDistance', {
+        label: '射线最大距离',
+        min: 10,
+        max: 200,
+        step: 1,
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'forwardFallback', {
+        label: '抬升后前移兜底',
+      })
+
+      occlusionFolder.addBinding(this.occlusionConfig, 'safeDistance', {
+        label: '兜底安全间距',
+        min: 0,
+        max: 2,
+        step: 0.05,
+      })
+
       // 切换控制器
       const controlsToggle = {
         useOrbitControls: false,
@@ -596,6 +705,8 @@ export default class Camera {
     }
   }
 
+  // #endregion
+
   updateCamera() {
     this.instance.position.copy(this.position)
     this.instance.lookAt(this.target)
@@ -676,9 +787,10 @@ export default class Camera {
       player.movement.targetAnchor.getWorldPosition(desiredTargetPos)
 
       // ===== 位置惯性 (Position Lag) =====
-      // 平滑插值相机基础位置
+      // 先做地形自适应，再平滑插值相机基础位置
+      const terrainAdjustedPos = this._applyTerrainAdaptation(desiredCameraPos)
       this._basePosition.lerp(
-        desiredCameraPos,
+        terrainAdjustedPos,
         this.followConfig.smoothSpeed,
       )
 
@@ -696,8 +808,12 @@ export default class Camera {
       this.updateBobbing(speed, isMoving)
 
       // ===== 应用最终位置 =====
-      // 基础位置 + 震动偏移
-      this.instance.position.copy(this._basePosition).add(this._bobbingOffset)
+      // 遮挡避让后叠加震动偏移
+      const capsuleCenter = player.movement.getCapsuleCenterWorld
+        ? player.movement.getCapsuleCenterWorld(new THREE.Vector3())
+        : this._smoothedLookAtTarget
+      const avoidedPos = this._applyOcclusionAvoidance(this._basePosition, capsuleCenter)
+      this.instance.position.copy(avoidedPos).add(this._bobbingOffset)
 
       // 更新相机朝向
       this.instance.lookAt(this._smoothedLookAtTarget)
@@ -714,5 +830,130 @@ export default class Camera {
 
     // 更新TrackballControls（即使禁用也要更新以保持同步）
     this.trackballControls.update()
+  }
+
+  /**
+   * 地形自适应：根据地面高度抬升相机，保持净空
+   * @param {THREE.Vector3} desiredCameraPos - 錨點計算出的理想相機位置
+   */
+  _applyTerrainAdaptation(desiredCameraPos) {
+    if (!this.terrainAdapt.enabled) {
+      this._adaptiveY = desiredCameraPos.y
+      return desiredCameraPos
+    }
+
+    const ground = this._sampleGroundHeight(desiredCameraPos.x, desiredCameraPos.z)
+
+    if (ground === null) {
+      this._adaptiveY = desiredCameraPos.y
+      return desiredCameraPos
+    }
+
+    if (this._adaptiveY === null)
+      this._adaptiveY = desiredCameraPos.y
+
+    // 期望的最低高度：地面 + 净空
+    const minY = ground + this.terrainAdapt.clearance
+    // 不降低原有高度，只在需要时抬升，并限制单帧最大抬升
+    const targetY = Math.min(
+      Math.max(desiredCameraPos.y, minY),
+      desiredCameraPos.y + this.terrainAdapt.maxRaise,
+    )
+
+    this._adaptiveY += (targetY - this._adaptiveY) * this.terrainAdapt.smoothSpeed
+
+    const adjusted = desiredCameraPos.clone()
+    adjusted.y = this._adaptiveY
+    return adjusted
+  }
+
+  /**
+   * 射线遮挡避让：以胶囊体中心为起点，命中地形时优先抬升相机
+   * @param {THREE.Vector3} cameraPos - 当前基础相机位置
+   * @param {THREE.Vector3} originPos - 射线起点（玩家胶囊体中心）
+   */
+  _applyOcclusionAvoidance(cameraPos, originPos) {
+    if (!this.occlusionConfig.enabled)
+      return cameraPos
+
+    const origin = originPos || this._smoothedLookAtTarget
+    const direction = new THREE.Vector3().subVectors(cameraPos, origin)
+    const distance = direction.length()
+    if (distance < this.occlusionConfig.minDistance)
+      return cameraPos
+
+    direction.normalize()
+    const maxDistance = Math.min(distance, this.occlusionConfig.maxRayDistance)
+
+    const terrainRenderer = this.experience.world?.terrainRenderer
+    const meshes = terrainRenderer?.group?.children ?? []
+    if (!meshes.length)
+      return cameraPos
+
+    this._raycaster.set(origin, direction)
+    this._raycaster.far = maxDistance
+    const hits = this._raycaster.intersectObjects(meshes, true)
+    if (!hits.length)
+      return cameraPos
+
+    const hit = hits[0]
+    const baseLift = (this.terrainAdapt?.clearance ?? 0) + this.occlusionConfig.liftOnHit + this.occlusionConfig.liftClearance
+
+    // 首选抬升：保持水平位置，提升到命中面之上
+    const lifted = cameraPos.clone()
+    lifted.y = Math.max(cameraPos.y, hit.point.y + baseLift)
+
+    // 可选兜底：抬升后仍被挡时，向前略微靠近
+    if (this.occlusionConfig.forwardFallback) {
+      const dir2 = new THREE.Vector3().subVectors(lifted, origin)
+      const dist2 = dir2.length()
+      if (dist2 >= this.occlusionConfig.minDistance) {
+        dir2.normalize()
+        this._raycaster.set(origin, dir2)
+        this._raycaster.far = Math.min(dist2, this.occlusionConfig.maxRayDistance)
+        const hits2 = this._raycaster.intersectObjects(meshes, true)
+        if (hits2.length) {
+          const hit2 = hits2[0]
+          const fallbackDist = Math.max(
+            this.occlusionConfig.minDistance,
+            hit2.distance - this.occlusionConfig.safeDistance,
+          )
+          const clamped = Math.min(dist2, fallbackDist)
+          lifted.copy(origin).add(dir2.multiplyScalar(clamped))
+          lifted.y = Math.max(lifted.y, hit2.point.y + baseLift)
+        }
+      }
+    }
+
+    return lifted
+  }
+
+  /**
+   * 采样地面高度：从容器数据中查找最高非空方块
+   */
+  _sampleGroundHeight(x, z) {
+    const container = this.experience.terrainContainer
+    if (!container?.getBlock || !container.getSize)
+      return null
+
+    const terrainRenderer = this.experience.world?.terrainRenderer
+    const scale = terrainRenderer?.params?.scale ?? 1
+    const heightScale = terrainRenderer?.params?.heightScale ?? 1
+
+    // 将世界坐标映射到容器索引
+    const ix = Math.floor(x / scale)
+    const iz = Math.floor(z / scale)
+    const { width, height } = container.getSize()
+    if (ix < 0 || ix >= width || iz < 0 || iz >= width)
+      return null
+
+    for (let y = height - 1; y >= 0; y--) {
+      const block = container.getBlock(ix, y, iz)
+      if (block?.id && block.id !== blocks.empty.id) {
+        // 方块顶部世界高度 = (y + 1) * heightScale * scale
+        return (y + 1) * heightScale * scale
+      }
+    }
+    return null
   }
 }
