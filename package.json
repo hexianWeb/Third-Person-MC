@@ -25,7 +25,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "^0.19.3",
     "@vitejs/plugin-legacy": "^5.4.1",
     "gsap": "^3.12.5",
     "mitt": "^3.0.1",

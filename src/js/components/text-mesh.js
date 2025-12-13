@@ -12,7 +12,6 @@ export default class TextMesh {
     this.scene = this.experience.scene
     this.iMouse = this.experience.iMouse
     this.resources = this.experience.resources
-    this.world = this.experience.physics.world
     this.camera = this.experience.camera.instance
 
     // Default options
@@ -268,8 +267,6 @@ export default class TextMesh {
       for (const group of this.textGroups) {
         for (const letter of group.children) {
           const { body } = letter
-          console.log(body)
-
           if (letter !== object)
             continue
 
@@ -347,16 +344,16 @@ export default class TextMesh {
   }
 
   updateTextGroups() {
-    for (const [index, group] of this.textGroups.entries()) {
-      this.updateGroup(group, index)
+    for (const group of this.textGroups) {
+      this.updateGroup(group)
     }
   }
 
-  updateGroup(group, groupIndex) {
+  updateGroup(group) {
     let shouldReset = false
     let shouldAddGround = false
 
-    for (const [letterIndex, letter] of group.children.entries()) {
+    for (const letter of group.children) {
       this.updateLetter(letter)
 
       if (letter.body.position.y <= -50) {
@@ -387,7 +384,6 @@ export default class TextMesh {
 
   addGroundToGroup(group) {
     if (!group.isGroundDisplayed) {
-      console.log('Adding ground to group')
       this.world.addBody(group.ground)
       group.isGroundDisplayed = true
     }

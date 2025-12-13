@@ -11,7 +11,6 @@ export default class GlassWall {
     this.scene = this.experience.scene
     this.iMouse = this.experience.iMouse
     this.resources = this.experience.resources
-    this.world = this.experience.physics.world
     this.camera = this.experience.camera.instance
     this.sizes = this.experience.sizes
     this.renderer = this.experience.renderer.instance
@@ -129,8 +128,6 @@ export default class GlassWall {
 
   update() {
     this.updateLightPositionSmooth() // 添加这行
-
-    console.log(this.iMouse.normalizedMouse)
 
     if (this.glassMaterial) {
       this.glassWallGroup.visible = false

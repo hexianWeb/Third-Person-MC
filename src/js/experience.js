@@ -11,7 +11,6 @@ import Resources from './utils/resources.js'
 import Sizes from './utils/sizes.js'
 import Stats from './utils/stats.js'
 import Time from './utils/time.js'
-import PhysicsWorld from './world/physics-world.js'
 import World from './world/world.js'
 
 let instance
@@ -39,7 +38,6 @@ export default class Experience {
     this.camera = new Camera()
     this.renderer = new Renderer()
     this.resources = new Resources(sources)
-    this.physics = new PhysicsWorld()
     this.iMouse = new IMouse()
     this.input = new InputManager()
     this.pointerLock = new PointerLockManager() // 鼠标锁定管理器
@@ -66,6 +64,5 @@ export default class Experience {
     this.renderer.update() // 切换为手动更新
     this.stats.update()
     this.iMouse.update()
-    this.physics.update()
   }
 }

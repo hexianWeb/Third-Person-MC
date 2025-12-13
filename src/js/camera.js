@@ -763,11 +763,7 @@ export default class Camera {
       // 计算玩家速度（用于 Tracking Shot 效果）
       let speed = 0
       let isMoving = false
-      if (player.movement?.rigidBody) {
-        const vel = player.movement.rigidBody.linvel()
-        speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z)
-      }
-      else if (player.movement?.worldVelocity) {
+      if (player.movement?.worldVelocity) {
         // 自研物理分支：直接使用 worldVelocity 的水平分量作为速度
         speed = Math.sqrt(
           player.movement.worldVelocity.x * player.movement.worldVelocity.x
