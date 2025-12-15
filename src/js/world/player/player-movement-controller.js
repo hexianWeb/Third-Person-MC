@@ -40,17 +40,6 @@ export class PlayerMovementController {
     this.group.rotation.y = this.facingAngle // 初始化 group 旋轉
     this.scene.add(this.group)
 
-    // 攝像頭錨點（用於讓攝像頭跟隨，位置相對於 group 本地空間）
-    this.cameraAnchor = new THREE.Object3D()
-    this.cameraAnchor.name = 'CameraAnchor'
-    // 初始 offset 將在 Camera 初始化時設置
-    this.group.add(this.cameraAnchor)
-
-    // 目標點錨點（用於攝像頭 lookAt）
-    this.targetAnchor = new THREE.Object3D()
-    this.targetAnchor.name = 'TargetAnchor'
-    this.group.add(this.targetAnchor)
-
     // 初始化重生点监听：地形数据准备后更新到地形中心顶面
     this._setupRespawnPoint()
   }
@@ -62,22 +51,6 @@ export class PlayerMovementController {
   setFacing(angle) {
     this.facingAngle = angle
     this.group.rotation.y = angle
-  }
-
-  /**
-   * 設置攝像頭錨點的本地偏移位置
-   * @param {THREE.Vector3} offset - 攝像頭相對於角色的偏移
-   */
-  setCameraOffset(offset) {
-    this.cameraAnchor.position.copy(offset)
-  }
-
-  /**
-   * 設置目標點錨點的本地偏移位置
-   * @param {THREE.Vector3} offset - 目標點相對於角色的偏移
-   */
-  setTargetOffset(offset) {
-    this.targetAnchor.position.copy(offset)
   }
 
   /**

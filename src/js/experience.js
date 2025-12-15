@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import Camera from './camera.js'
+import Camera from './camera/camera.js'
 import Renderer from './renderer.js'
 import sources from './sources.js'
 import Debug from './utils/debug.js'

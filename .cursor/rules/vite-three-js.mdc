@@ -134,7 +134,7 @@ XXXFolder.addBinding(PARAMS, 'background', {
 *  **
 
 *   **相机 (`Camera`)**:
-    *   定义在 `src/js/camera.js`。
+    *   定义在 `src/js/camera/camera.js`。
     *   `Experience` 持有 `Camera` 类的实例 (`this.experience.camera`)。
     *   实际使用的 `THREE.Camera` 对象通过 `this.experience.camera.instance` 获取。
     *   `new Experience(canvas)` 时，内部会调用 `new Camera(true)` 创建一个 **正交相机**。如果需要透视相机，需要修改 `experience.js` 中 `Camera` 的实例化。

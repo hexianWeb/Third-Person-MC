@@ -3,6 +3,7 @@ import Experience from '../experience.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
+import CameraRig from '../camera/camera-rig.js'
 import TerrainGenerator from './terrain/terrain-generator.js'
 import TerrainRenderer from './terrain/terrain-renderer.js'
 
@@ -36,6 +37,12 @@ export default class World {
 
       // Setup
       this.player = new Player()
+      
+      // Setup Camera Rig
+      this.cameraRig = new CameraRig()
+      this.cameraRig.attachPlayer(this.player)
+      this.experience.camera.attachRig(this.cameraRig)
+
       this.environment = new Environment()
     })
   }

@@ -24,6 +24,7 @@ export default class Player {
     // Config
     // 深拷贝配置，避免调试修改污染默认值
     this.config = JSON.parse(JSON.stringify(PLAYER_CONFIG))
+    this.targetFacingAngle = this.config.facingAngle // 目标朝向，用于平滑插值
 
     // 速度线当前透明度
     this._speedLineOpacity = 0
@@ -84,6 +85,40 @@ export default class Player {
   }
 
   /**
+   * 获取角色位置(脚底点)
+   * @returns {THREE.Vector3}
+   */
+  getPosition() {
+    return this.movement.position.clone()
+  }
+
+  /**
+   * 获取角色朝向角度
+   * @returns {number}
+   */
+  getFacingAngle() {
+    return this.config.facingAngle
+  }
+
+  /**
+   * 获取角色速度
+   * @returns {THREE.Vector3}
+   */
+  getVelocity() {
+    return this.movement.worldVelocity.clone()
+  }
+
+  /**
+   * 是否正在移动 (基于物理速度)
+   * @returns {boolean}
+   */
+  isMoving() {
+    const v = this.movement.worldVelocity
+    // 速度大于 0.1 视为移动 (参考原 Camera 逻辑)
+    return (v.x * v.x + v.z * v.z) > 0.01
+  }
+
+  /**
    * 設置角色朝向角度
    * @param {number} angle - 朝向角度（弧度），0 = +Z，Math.PI = -Z
    */
@@ -133,8 +168,8 @@ export default class Player {
 
     // ==================== 鼠标旋转（Pointer Lock 模式） ====================
     emitter.on('input:mouse_move', ({ movementX }) => {
-      const newAngle = this.config.facingAngle - movementX * this.config.mouseSensitivity
-      this.setFacing(newAngle)
+      // 更新目标朝向，而非直接设置
+      this.targetFacingAngle -= movementX * this.config.mouseSensitivity
     })
   }
 
@@ -146,6 +181,16 @@ export default class Player {
 
     // Update Movement
     this.movement.update(resolvedInput, isCombat)
+
+    // ===== 平滑转向 =====
+    if (Math.abs(this.config.facingAngle - this.targetFacingAngle) > 0.0001) {
+      // 角度 lerp 平滑
+      let angle = this.config.facingAngle
+      // 简单的 lerp
+      angle += (this.targetFacingAngle - angle) * this.config.turnSmoothing
+
+      this.setFacing(angle)
+    }
 
     // Prepare state for animation
     const playerState = {
@@ -212,6 +257,13 @@ export default class Player {
       min: 0.0001,
       max: 0.01,
       step: 0.0001,
+    })
+
+    this.debugFolder.addBinding(this.config, 'turnSmoothing', {
+      label: '转向平滑度',
+      min: 0.01,
+      max: 1.0,
+      step: 0.01,
     })
 
     // ===== 速度控制 =====
