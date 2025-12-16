@@ -486,17 +486,32 @@ export default class Camera {
    * 采样地面高度：从容器数据中查找最高非空方块
    */
   _sampleGroundHeight(x, z) {
+    // Step2：无限地形（chunk streaming）下，terrainContainer 只是一份兜底（中心 chunk）
+    // 相机地形避障需要跨 chunk 采样，因此优先使用 ChunkManager（experience.terrainDataManager）
+    const provider = this.experience.terrainDataManager
+
+    // scale/heightScale 仍与渲染保持一致（与旧逻辑兼容）
+    // 注意：当前项目里 scale/heightScale 主要用于视觉调试，物理/碰撞仍按 1 单位方块计算
+    const scale = provider?.renderParams?.scale ?? 1
+    const heightScale = provider?.renderParams?.heightScale ?? 1
+
+    // 将世界坐标映射到“方块索引空间”（与旧实现一致：除以 scale）
+    const ix = Math.floor(x / scale)
+    const iz = Math.floor(z / scale)
+
+    if (provider?.getTopSolidYWorld) {
+      const topY = provider.getTopSolidYWorld(ix, iz)
+      if (topY === null)
+        return null
+      // 方块顶部世界高度 = (y + 1) * heightScale * scale
+      return (topY + 1) * heightScale * scale
+    }
+
+    // ===== 兜底：旧单张地形容器采样（仅覆盖中心 chunk 范围）=====
     const container = this.experience.terrainContainer
     if (!container?.getBlock || !container.getSize)
       return null
 
-    const terrainRenderer = this.experience.world?.terrainRenderer
-    const scale = terrainRenderer?.params?.scale ?? 1
-    const heightScale = terrainRenderer?.params?.heightScale ?? 1
-
-    // 将世界坐标映射到容器索引
-    const ix = Math.floor(x / scale)
-    const iz = Math.floor(z / scale)
     const { width, height } = container.getSize()
     if (ix < 0 || ix >= width || iz < 0 || iz >= width)
       return null
@@ -504,7 +519,6 @@ export default class Camera {
     for (let y = height - 1; y >= 0; y--) {
       const block = container.getBlock(ix, y, iz)
       if (block?.id && block.id !== blocks.empty.id) {
-        // 方块顶部世界高度 = (y + 1) * heightScale * scale
         return (y + 1) * heightScale * scale
       }
     }

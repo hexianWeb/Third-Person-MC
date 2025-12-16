@@ -36,6 +36,10 @@ export default class TerrainChunk {
     this.chunkZ = chunkZ
     this.userData = { x: chunkX, z: chunkZ }
 
+    // ===== 状态机 =====
+    // init -> dataReady -> meshReady -> disposed
+    this.state = 'init'
+
     // chunk 的世界原点（左下角对齐世界坐标）
     this.originX = chunkX * chunkWidth
     this.originZ = chunkZ * chunkWidth
@@ -55,7 +59,8 @@ export default class TerrainChunk {
       sharedTerrainParams,
       originX: this.originX,
       originZ: this.originZ,
-      autoGenerate: true,
+      // Step2：延迟生成，交由 ChunkManager 的 idle 队列调度
+      autoGenerate: false,
       broadcast: false,
       debugEnabled: false,
     })
@@ -69,12 +74,49 @@ export default class TerrainChunk {
       listenDataReady: false,
     })
     this.renderer.group.position.set(this.originX, 0, this.originZ)
+
+    // 初始缩放同步一次（避免 scale 改动后新 chunk 不一致）
+    this.renderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)
   }
 
   /**
-   * 释放当前 chunk 的渲染资源（Step1 暂不做动态卸载，但保留接口）
+   * 生成数据（可被重复调用，但会幂等保护）
+   */
+  generateData() {
+    if (this.state === 'disposed')
+      return false
+    if (this.state !== 'init')
+      return false
+
+    this.generator.generate()
+    this.state = 'dataReady'
+    return true
+  }
+
+  /**
+   * 构建 mesh（依赖数据 ready）
+   */
+  buildMesh() {
+    if (this.state === 'disposed')
+      return false
+    if (this.state !== 'dataReady')
+      return false
+
+    this.renderer._rebuildFromContainer()
+    this.state = 'meshReady'
+    return true
+  }
+
+  /**
+   * 释放当前 chunk 的渲染资源（用于动态卸载）
+   * 注意：必须幂等，避免重复 dispose 报错
    */
   dispose() {
+    if (this.state === 'disposed')
+      return
+
+    this.state = 'disposed'
+
     if (this.renderer) {
       this.renderer.dispose()
       this.renderer = null

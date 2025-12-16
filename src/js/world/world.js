@@ -27,9 +27,9 @@ export default class World {
       terrain: {
         // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
         scale: 35,
-        magnitude: 0.17,
+        magnitude: 0,
         // offset 为“高度偏移（方块层数）”
-        offset: 16,
+        offset: 1,
       },
     })
 
@@ -62,6 +62,13 @@ export default class World {
   }
 
   update() {
+    // Step2：先做 chunk streaming，确保玩家碰撞查询能尽量命中已加载 chunk
+    if (this.chunkManager && this.player) {
+      const pos = this.player.getPosition()
+      this.chunkManager.updateStreaming({ x: pos.x, z: pos.z })
+      this.chunkManager.pumpIdleQueue()
+    }
+
     if (this.player)
       this.player.update()
     if (this.floor)

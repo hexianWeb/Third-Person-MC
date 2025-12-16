@@ -3,6 +3,7 @@
  * Step1：仅实现固定 3×3 初始化与 getBlockWorld（用于玩家碰撞/贴地）
  */
 import Experience from '../../experience.js'
+import IdleQueue from '../../utils/idle-queue.js'
 import { blocks, resources } from './blocks-config.js'
 import TerrainChunk from './terrain-chunk.js'
 
@@ -13,7 +14,10 @@ export default class ChunkManager {
 
     this.chunkWidth = options.chunkWidth ?? 64
     this.chunkHeight = options.chunkHeight ?? 32
+    // viewDistance：加载半径（d）
     this.viewDistance = options.viewDistance ?? 1
+    // 卸载滞后：卸载半径 = viewDistance + unloadPadding（默认 1，减少边界抖动）
+    this.unloadPadding = options.unloadPadding ?? 1
     this.seed = options.seed ?? 1337
 
     // 所有 chunk 共用的地形生成参数（统一由一个 panel 控制）
@@ -34,10 +38,19 @@ export default class ChunkManager {
 
     this._statsParams = {
       totalInstances: 0,
+      chunkCount: 0,
+      queueSize: 0,
     }
 
     /** @type {Map<string, TerrainChunk>} */
     this.chunks = new Map()
+
+    // requestIdleCallback 队列：用于 chunk 生成/建网格
+    this.idleQueue = new IdleQueue()
+
+    // streaming 内部缓存：避免重复计算
+    this._lastPlayerChunkX = null
+    this._lastPlayerChunkZ = null
 
     if (this.debug.active) {
       this.debugInit()
@@ -52,15 +65,9 @@ export default class ChunkManager {
    * Step1：初始化 3×3（viewDistance=1）chunk 网格
    */
   initInitialGrid() {
-    const d = this.viewDistance
-    for (let cz = -d; cz <= d; cz++) {
-      for (let cx = -d; cx <= d; cx++) {
-        this._ensureChunk(cx, cz)
-      }
-    }
-
-    // 初始化后刷新一次统计
-    this._updateStats()
+    // Step2：初始化时先确保玩家附近一圈 chunk 存在并排队生成
+    // 这里以 (0,0) 为中心（玩家初始通常在 chunk(0,0)）
+    this.updateStreaming({ x: this.chunkWidth * 0.5, z: this.chunkWidth * 0.5 }, true)
   }
 
   /**
@@ -139,6 +146,123 @@ export default class ChunkManager {
   }
 
   /**
+   * Step2：动态 streaming 更新（每帧调用）
+   * @param {{x:number,z:number}} playerPos 玩家脚底世界坐标（只取 x/z）
+   * @param {boolean} force 是否强制刷新（初次/参数变更时）
+   */
+  updateStreaming(playerPos, force = false) {
+    if (!playerPos)
+      return
+
+    const pcx = Math.floor(playerPos.x / this.chunkWidth)
+    const pcz = Math.floor(playerPos.z / this.chunkWidth)
+
+    if (!force && pcx === this._lastPlayerChunkX && pcz === this._lastPlayerChunkZ) {
+      // 位置未跨 chunk：只需继续 pump 队列
+      this._updateStats()
+      return
+    }
+
+    this._lastPlayerChunkX = pcx
+    this._lastPlayerChunkZ = pcz
+
+    const dLoad = this.viewDistance
+    const dUnload = this.viewDistance + this.unloadPadding
+
+    // ===== 计算加载目标集合 =====
+    const targetLoad = new Set()
+    for (let cz = pcz - dLoad; cz <= pcz + dLoad; cz++) {
+      for (let cx = pcx - dLoad; cx <= pcx + dLoad; cx++) {
+        targetLoad.add(this._key(cx, cz))
+      }
+    }
+
+    // ===== Add：创建缺失 chunk，并按距离优先排队生成 =====
+    const toAdd = []
+    targetLoad.forEach((key) => {
+      if (!this.chunks.has(key)) {
+        const [sx, sz] = key.split(',').map(Number)
+        toAdd.push({ chunkX: sx, chunkZ: sz })
+      }
+    })
+
+    // 中心优先：max(|dx|,|dz|) 越小越先
+    toAdd.sort((a, b) => {
+      const da = Math.max(Math.abs(a.chunkX - pcx), Math.abs(a.chunkZ - pcz))
+      const db = Math.max(Math.abs(b.chunkX - pcx), Math.abs(b.chunkZ - pcz))
+      return da - db
+    })
+
+    for (const item of toAdd) {
+      const chunk = this._ensureChunk(item.chunkX, item.chunkZ)
+      this._enqueueChunkBuild(chunk, pcx, pcz)
+    }
+
+    // ===== Remove：卸载滞后（只移除 dUnload 外的 chunk）=====
+    for (const [key, chunk] of this.chunks.entries()) {
+      const cx = chunk.chunkX
+      const cz = chunk.chunkZ
+      if (Math.abs(cx - pcx) > dUnload || Math.abs(cz - pcz) > dUnload) {
+        // 取消队列任务（避免卸载后仍被执行）
+        this.idleQueue.cancelByPrefix(`${key}:`)
+        chunk.dispose()
+        this.chunks.delete(key)
+      }
+    }
+
+    // ===== 碰撞保底：玩家脚下 chunk 强制同步生成（避免出生/边界空洞）=====
+    // 注意：仅对玩家当前 chunk 同步，外围仍异步
+    const currentKey = this._key(pcx, pcz)
+    const currentChunk = this.chunks.get(currentKey)
+    if (currentChunk?.state === 'init') {
+      currentChunk.generator.params.seed = this.seed
+      currentChunk.generateData()
+      currentChunk.buildMesh()
+      currentChunk.renderer.group.scale.setScalar(this.renderParams.scale)
+    }
+
+    this._updateStats()
+  }
+
+  /**
+   * 每帧调用一次：驱动 requestIdleCallback 执行任务
+   */
+  pumpIdleQueue() {
+    this._updateStats()
+    this.idleQueue.pump()
+  }
+
+  _enqueueChunkBuild(chunk, pcx, pcz) {
+    if (!chunk)
+      return
+    const key = this._key(chunk.chunkX, chunk.chunkZ)
+    const dist = Math.max(Math.abs(chunk.chunkX - pcx), Math.abs(chunk.chunkZ - pcz))
+
+    // 先生成数据，再建网格（用 key 前缀确保可取消）
+    this.idleQueue.enqueue(`${key}:data`, () => {
+      // 若已卸载则跳过
+      if (!this.chunks.has(key) || chunk.state === 'disposed')
+        return
+
+      chunk.generator.params.seed = this.seed
+      const ok = chunk.generateData()
+      if (!ok)
+        return
+
+      // 数据完成后排队建网格（同 dist 优先级）
+      this.idleQueue.enqueue(`${key}:mesh`, () => {
+        if (!this.chunks.has(key) || chunk.state === 'disposed')
+          return
+        const built = chunk.buildMesh()
+        if (built) {
+          chunk.renderer.group.scale.setScalar(this.renderParams.scale)
+        }
+        this._updateStats()
+      }, dist)
+    }, dist)
+  }
+
+  /**
    * 统一控制面板（所有 chunk 共用）
    */
   debugInit() {
@@ -186,6 +310,15 @@ export default class ChunkManager {
     })
     this._statsBinding = statsFolder.addBinding(this._statsParams, 'totalInstances', {
       label: '实例总数',
+      readonly: true,
+    })
+
+    statsFolder.addBinding(this._statsParams, 'chunkCount', {
+      label: 'Chunk 数量',
+      readonly: true,
+    })
+    statsFolder.addBinding(this._statsParams, 'queueSize', {
+      label: '队列长度',
       readonly: true,
     })
 
@@ -258,6 +391,31 @@ export default class ChunkManager {
       this.seed = Math.floor(Math.random() * 1e9)
       this._regenerateAllChunks()
     })
+
+    // ===== Streaming 参数 =====
+    const streamingFolder = this.debugFolder.addFolder({
+      title: 'Streaming 参数',
+      expanded: false,
+    })
+    streamingFolder.addBinding(this, 'viewDistance', {
+      label: '加载半径(d)',
+      min: 0,
+      max: 6,
+      step: 1,
+    }).on('change', () => {
+      // 强制刷新：让 streaming 重新计算集合
+      this._lastPlayerChunkX = null
+      this._lastPlayerChunkZ = null
+    })
+    streamingFolder.addBinding(this, 'unloadPadding', {
+      label: '卸载滞后(+)',
+      min: 0,
+      max: 3,
+      step: 1,
+    }).on('change', () => {
+      this._lastPlayerChunkX = null
+      this._lastPlayerChunkZ = null
+    })
   }
 
   /**
@@ -282,6 +440,8 @@ export default class ChunkManager {
       total += count
     })
     this._statsParams.totalInstances = total
+    this._statsParams.chunkCount = this.chunks.size
+    this._statsParams.queueSize = this.idleQueue?.size?.() ?? 0
     if (this._statsBinding?.refresh)
       this._statsBinding.refresh()
   }
@@ -300,10 +460,17 @@ export default class ChunkManager {
       chunk.generator.params.seed = this.seed
 
       // 重新生成数据（不会广播 terrain:data-ready）
-      chunk.generator.generate()
+      // 若 chunk 还未生成，先走延迟状态机
+      if (chunk.state === 'init')
+        chunk.generateData()
+      else
+        chunk.generator.generate()
 
       // 重建 mesh
-      chunk.renderer._rebuildFromContainer()
+      if (chunk.state === 'dataReady')
+        chunk.buildMesh()
+      else
+        chunk.renderer._rebuildFromContainer()
       chunk.renderer.group.scale.setScalar(this.renderParams.scale)
     })
 
