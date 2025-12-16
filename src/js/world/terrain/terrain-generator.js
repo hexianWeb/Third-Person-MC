@@ -20,12 +20,27 @@ export default class TerrainGenerator {
     const size = options.size || { width: 32, height: 32 }
     this.container = options.container || new TerrainContainer(size)
 
+    // 世界偏移（用于 chunk 无缝拼接）
+    // 约定：originX/originZ 为当前 chunk 的“左下角世界坐标”
+    this.origin = {
+      x: options.originX ?? 0,
+      z: options.originZ ?? 0,
+    }
+
+    // 是否广播 terrain:data-ready（多 chunk 场景必须关掉，避免互相覆盖）
+    this.broadcast = options.broadcast ?? true
+
+    // 是否启用调试面板（chunk 场景必须关掉，避免面板爆炸）
+    this._debugEnabled = options.debugEnabled ?? true
+    this._debugTitle = options.debugTitle || '地形生成器'
+
     // 参数配置（可调节）
     this.params = {
       seed: options.seed ?? Date.now(),
       sizeWidth: size.width,
       sizeHeight: size.height,
-      terrain: {
+      // 支持共享 terrain params：多个 chunk 共用同一份参数对象
+      terrain: options.sharedTerrainParams || {
         scale: options.terrain?.scale ?? 35, // 噪声缩放（越大越平滑）
         magnitude: options.terrain?.magnitude ?? 0.5, // 振幅
         offset: options.terrain?.offset ?? 0.5, // 基准偏移
@@ -40,7 +55,7 @@ export default class TerrainGenerator {
       this.generate()
     }
 
-    if (this.debug.active) {
+    if (this.debug.active && this._debugEnabled) {
       this.debugInit()
     }
   }
@@ -94,8 +109,13 @@ export default class TerrainGenerator {
       const row = []
       for (let x = 0; x < width; x++) {
         // Simplex 噪声 [-1,1]
-        const n = simplex.noise(x / scale, z / scale)
-        const scaled = offset + magnitude * n
+        // 使用世界坐标采样，确保相邻 chunk 边界连贯
+        const wx = this.origin.x + x
+        const wz = this.origin.z + z
+        const n = simplex.noise(wx / scale, wz / scale)
+        // offset 改为“高度偏移（方块层数）”，通过 offset/height 转为 0..1 的基准，再叠加噪声扰动
+        // 这样更直观：offset=16 表示地形基准在第 16 层附近
+        const scaled = (offset / height) + magnitude * n
         let columnHeight = Math.floor(height * scaled)
         columnHeight = Math.max(0, Math.min(columnHeight, height - 1))
 
@@ -154,9 +174,9 @@ export default class TerrainGenerator {
               continue
 
             const noiseVal = simplex.noise3d(
-              x / scale.x,
+              (this.origin.x + x) / scale.x,
               y / scale.y,
-              z / scale.z,
+              (this.origin.z + z) / scale.z,
             )
 
             if (noiseVal >= threshold) {
@@ -181,6 +201,11 @@ export default class TerrainGenerator {
    * 生成渲染层需要的数据并广播事件
    */
   generateMeshes(oreStats) {
+    // 多 chunk 场景不允许广播全局事件，否则会互相覆盖 terrainContainer/renderer
+    if (!this.broadcast) {
+      return
+    }
+
     // 挂载到 Experience 供其他组件读取
     this.experience.terrainContainer = this.container
     this.experience.terrainHeightMap = this.heightMap
@@ -200,7 +225,7 @@ export default class TerrainGenerator {
    */
   debugInit() {
     this.debugFolder = this.debug.ui.addFolder({
-      title: '地形生成器',
+      title: this._debugTitle,
       expanded: false,
     })
 
@@ -240,9 +265,10 @@ export default class TerrainGenerator {
 
     terrainFolder.addBinding(this.params.terrain, 'offset', {
       label: '地形偏移',
+      // offset 为“高度偏移（方块层数）”
       min: 0,
-      max: 1,
-      step: 0.01,
+      max: this.params.sizeHeight,
+      step: 1,
     }).on('change', () => this.generate())
 
     // 矿物噪声缩放调节：仅暴露 X/Z，便于控制矿脉走向

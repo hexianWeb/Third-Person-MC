@@ -10,12 +10,18 @@ let instance = null
 export default class TerrainContainer {
   /**
    * @param {{ width: number, height: number }} size 地图尺寸（x/z 方向 width，高度 height）
+   * @param {{ useSingleton?: boolean }} options 是否使用单例（默认 true；chunk 私有容器需传 false）
    */
-  constructor(size = { width: 32, height: 16 }) {
-    if (instance)
-      return instance
+  constructor(size = { width: 32, height: 16 }, options = {}) {
+    const useSingleton = options.useSingleton ?? true
 
-    instance = this
+    // 默认保持原行为：TerrainContainer 为单例
+    // 无限地形（chunk）场景下，需要传 useSingleton:false 来创建多个容器实例
+    if (useSingleton) {
+      if (instance)
+        return instance
+      instance = this
+    }
 
     this.size = {
       width: size.width,

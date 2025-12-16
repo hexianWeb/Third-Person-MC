@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { MOVEMENT_CONSTANTS, MOVEMENT_DIRECTION_WEIGHTS } from '../../config/player-config.js'
 import Experience from '../../experience.js'
-import emitter from '../../utils/event-bus.js'
 import { blocks } from '../terrain/blocks-config.js'
 import { LocomotionProfiles } from './animation-config.js'
 import PlayerCollisionSystem from './player-collision.js'
@@ -29,7 +28,8 @@ export class PlayerMovementController {
       offset: new THREE.Vector3(0, 0.85, 0), // 胶囊中心相对脚底位置
     }
     this.collision = new PlayerCollisionSystem()
-    this.terrainContainer = this.experience.terrainContainer
+    // 无限地形查询入口：ChunkManager（World 中会挂到 experience.terrainDataManager）
+    this.terrainProvider = this.experience.terrainDataManager
     this._hasInitializedRespawn = false
 
     // 角色朝向角度（弧度）- 通過旋轉 group 實現
@@ -130,11 +130,12 @@ export class PlayerMovementController {
     // 构建胶囊状态
     const playerState = this._buildPlayerState(nextPosition)
 
-    const container = this.experience.terrainContainer || this.terrainContainer
-    const candidates = this.collision.broadPhase(playerState, container)
+    // 地形查询提供者：优先使用 experience 挂载的 ChunkManager
+    const provider = this.experience.terrainDataManager || this.terrainProvider
+    const candidates = this.collision.broadPhase(playerState, provider)
     const collisions = this.collision.narrowPhase(candidates, playerState)
     this.collision.resolveCollisions(collisions, playerState)
-    this._snapToGround(playerState, container)
+    this._snapToGround(playerState, provider)
 
     // 同步结果
     this.isGrounded = playerState.isGrounded
@@ -229,40 +230,29 @@ export class PlayerMovementController {
    * 初始化重生点：优先使用已存在的地形容器，地形生成完成后再更新
    */
   _setupRespawnPoint() {
-    // 尝试使用现有容器
-    this._updateRespawnPoint(this.terrainContainer)
-
-    // 等待地形生成完毕更新重生点
-    emitter.on('terrain:data-ready', ({ container }) => {
-      this._updateRespawnPoint(container)
-    })
+    // Step1：chunk 场景在创建 Player 之前已初始化完成
+    // 这里直接从 ChunkManager 计算重生点（chunk(0,0) 中心列的最高方块顶面）
+    this._updateRespawnPoint()
   }
 
   /**
-   * 将重生点设置为地形中心列最高方块顶面
-   * @param {*} container TerrainContainer
+   * 将重生点设置为 chunk(0,0) 的中心列最高方块顶面
    */
-  _updateRespawnPoint(container) {
-    if (!container?.getSize)
+  _updateRespawnPoint() {
+    const provider = this.experience.terrainDataManager || this.terrainProvider
+    if (!provider?.getTopSolidYWorld) {
       return
+    }
 
-    const { width, height } = container.getSize()
-    if (!width || !height)
-      return
-
-    const centerX = Math.floor(width / 2)
-    const centerZ = Math.floor(width / 2)
-    const topY = this._findTopY(container, centerX, centerZ, height)
+    const centerX = Math.floor((provider.chunkWidth ?? 64) / 2)
+    const centerZ = Math.floor((provider.chunkWidth ?? 64) / 2)
+    const topY = provider.getTopSolidYWorld(centerX, centerZ)
     if (topY === null)
       return
 
     // 顶面为方块中心 +0.5，再抬高一点防止穿模
     const surfaceY = topY + 0.5
-    const respawnPos = {
-      x: centerX,
-      y: surfaceY + 0.05,
-      z: centerZ,
-    }
+    const respawnPos = { x: centerX, y: surfaceY + 0.05, z: centerZ }
 
     this.config.respawn.position = respawnPos
 
@@ -273,23 +263,6 @@ export class PlayerMovementController {
       this._syncMeshCustom()
       this._hasInitializedRespawn = true
     }
-  }
-
-  /**
-   * 获取指定列的最高非空方块高度
-   * @param {*} container TerrainContainer
-   * @param {number} x
-   * @param {number} z
-   * @param {number} height
-   * @returns {number|null} 最高非空方块的 y 索引，找不到返回 null
-   */
-  _findTopY(container, x, z, height) {
-    for (let y = height - 1; y >= 0; y--) {
-      const block = container.getBlock(x, y, z)
-      if (block.id !== blocks.empty.id)
-        return y
-    }
-    return null
   }
 
   /**
@@ -313,11 +286,11 @@ export class PlayerMovementController {
    */
   _snapToGround(playerState, container) {
     // 仅在下落或静止且未接地时尝试吸附，避免起跳被吞
-    if (playerState.isGrounded || !container?.getSize || playerState.worldVelocity.y > 0.05) {
+    if (playerState.isGrounded || !container?.getBlockWorld || playerState.worldVelocity.y > 0.05) {
       return
     }
 
-    const { width, height } = container.getSize()
+    const height = container.chunkHeight ?? 32
     const baseY = playerState.basePosition.y
     const snapEps = 0.08
     const sampleRadius = this.capsule.radius * 0.7
@@ -334,12 +307,10 @@ export class PlayerMovementController {
     for (const [ox, oz] of samples) {
       const gx = Math.floor(playerState.basePosition.x + ox)
       const gz = Math.floor(playerState.basePosition.z + oz)
-      if (gx < 0 || gz < 0 || gx >= width || gz >= width)
-        continue
 
       // 从当前位置向下找到最近的非空方块
       for (let y = Math.min(height - 1, Math.floor(baseY) + 1); y >= 0; y--) {
-        const block = container.getBlock(gx, y, gz)
+        const block = container.getBlockWorld(gx, y, gz)
         if (block.id === blocks.empty.id)
           continue
 

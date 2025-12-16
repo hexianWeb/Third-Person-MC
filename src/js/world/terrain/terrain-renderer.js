@@ -16,7 +16,11 @@ const BLOCK_BY_ID = Object.values(blocks).reduce((map, item) => {
 const RESOURCE_IDS = new Set(resources.map(r => r.id))
 
 export default class TerrainRenderer {
-  constructor(container) {
+  /**
+   * @param {*} container TerrainContainer
+   * @param {{ sharedParams?: any, debugEnabled?: boolean, debugTitle?: string, listenDataReady?: boolean }} options
+   */
+  constructor(container, options = {}) {
     this.experience = new Experience()
     this.scene = this.experience.scene
     this.resources = this.experience.resources
@@ -25,12 +29,15 @@ export default class TerrainRenderer {
     // 绑定容器（默认单例）
     this.container = container || new TerrainContainer()
 
-    // 渲染参数
-    this.params = {
+    // 渲染参数（支持外部共享：让多个 renderer 共用同一份 params）
+    this.params = options.sharedParams || {
       scale: 1, // 整体缩放
       heightScale: 1, // 高度缩放，仅作用于 y 轴
       showOresOnly: false, // 仅显示矿产
     }
+    this._debugEnabled = options.debugEnabled ?? true
+    this._debugTitle = options.debugTitle || '地形渲染器'
+    this._listenDataReady = options.listenDataReady ?? true
 
     this.group = new THREE.Group()
     this.scene.add(this.group)
@@ -44,12 +51,14 @@ export default class TerrainRenderer {
 
     // 事件绑定
     this._handleDataReady = this._handleDataReady.bind(this)
-    emitter.on('terrain:data-ready', this._handleDataReady)
+    if (this._listenDataReady) {
+      emitter.on('terrain:data-ready', this._handleDataReady)
+    }
 
     // 若容器已有数据，立即绘制
     this._rebuildFromContainer()
 
-    if (this.debug.active) {
+    if (this.debug.active && this._debugEnabled) {
       this.debugInit()
     }
   }
@@ -133,7 +142,7 @@ export default class TerrainRenderer {
    */
   debugInit() {
     this.debugFolder = this.debug.ui.addFolder({
-      title: '地形渲染器',
+      title: this._debugTitle,
       expanded: true,
     })
 
@@ -206,7 +215,9 @@ export default class TerrainRenderer {
    * 释放资源
    */
   dispose() {
-    emitter.off('terrain:data-ready', this._handleDataReady)
+    if (this._listenDataReady) {
+      emitter.off('terrain:data-ready', this._handleDataReady)
+    }
     this._disposeChildren()
     this.scene.remove(this.group)
   }

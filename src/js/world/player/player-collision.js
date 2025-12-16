@@ -55,13 +55,13 @@ export default class PlayerCollisionSystem {
   /**
    * broad phase：通过胶囊体的 AABB 找到可能相交的方块
    * @param {{ center:THREE.Vector3, halfHeight:number, radius:number }} playerCapsule
-   * @param {*} container TerrainContainer
+   * @param {{ getBlockWorld:(x:number,y:number,z:number)=>{id:number,instanceId:any} }} provider 地形查询提供者（ChunkManager）
    * @returns {{x:number,y:number,z:number}[]} 返回可能相交的方块列表
    */
-  broadPhase(playerCapsule, container) {
+  broadPhase(playerCapsule, provider) {
     const candidates = []
 
-    if (!container) {
+    if (!provider?.getBlockWorld) {
       return candidates
     }
 
@@ -78,7 +78,7 @@ export default class PlayerCollisionSystem {
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         for (let z = minZ; z <= maxZ; z++) {
-          const block = container.getBlock(x, y, z)
+          const block = provider.getBlockWorld(x, y, z)
           if (block?.id && block.id !== blocks.empty.id) {
             candidates.push({ x, y, z })
             if (this.debug.active && this.params.showCandidates) {

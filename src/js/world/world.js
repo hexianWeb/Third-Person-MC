@@ -1,11 +1,10 @@
 import * as THREE from 'three'
+import CameraRig from '../camera/camera-rig.js'
 import Experience from '../experience.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
-import CameraRig from '../camera/camera-rig.js'
-import TerrainGenerator from './terrain/terrain-generator.js'
-import TerrainRenderer from './terrain/terrain-renderer.js'
+import ChunkManager from './terrain/chunk-manager.js'
 
 export default class World {
   constructor() {
@@ -19,25 +18,40 @@ export default class World {
     if (this.floor.grid)
       this.floor.grid.visible = false
 
-    // 初始化地形生成器（不依赖资源加载）
-    this.terrainGenerator = new TerrainGenerator({
-      size: { width: 128, height: 10 },
-      noiseScale: 0.08,
-      heightRatio: 0.75,
+    // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====
+    this.chunkManager = new ChunkManager({
+      chunkWidth: 64,
+      chunkHeight: 32,
+      viewDistance: 1, // 3×3
+      seed: 1337,
+      terrain: {
+        // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
+        scale: 35,
+        magnitude: 0.17,
+        // offset 为“高度偏移（方块层数）”
+        offset: 16,
+      },
     })
-    // 暴露给 Experience，方便其他组件读取
-    this.experience.terrainContainer = this.terrainGenerator.container
-    this.experience.terrainHeightMap = this.terrainGenerator.heightMap
+
+    // 暴露给 Experience，供玩家碰撞/贴地等使用
+    this.experience.terrainDataManager = this.chunkManager
 
     // Environment
     this.resources.on('ready', () => {
-      // 初始化地形渲染器（按方块类型分组实例化）
-      // 必须在资源加载完成后创建，否则纹理为空
-      this.terrainRenderer = new TerrainRenderer(this.terrainGenerator.container)
+      // ===== 创建并渲染初始 3×3 chunks =====
+      this.chunkManager.initInitialGrid()
+
+      // 兼容旧逻辑：给相机/其他组件一个容器兜底（仅中心 chunk）
+      // 注意：无限地形的正确查询应使用 experience.terrainDataManager
+      const centerChunk = this.chunkManager.getChunk(0, 0)
+      if (centerChunk) {
+        this.experience.terrainContainer = centerChunk.container
+        this.experience.terrainHeightMap = centerChunk.generator.heightMap
+      }
 
       // Setup
       this.player = new Player()
-      
+
       // Setup Camera Rig
       this.cameraRig = new CameraRig()
       this.cameraRig.attachPlayer(this.player)
