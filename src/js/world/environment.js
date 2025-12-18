@@ -17,9 +17,12 @@ export default class Environment {
       sunIntensity: 3.0,
       shadowRange: 65,
       shadowNear: 16,
-      shadowFar: 128,
+      shadowFar: 256,
       ambientColor: '#ffffff',
       ambientIntensity: 0.3,
+      fogColor: '#989490',
+      fogDensity: 0.01,
+      background: 'Image',
     }
 
     // Axes Helper
@@ -30,7 +33,23 @@ export default class Environment {
     // Setup
     this.setSunLight()
     this.setEnvironmentMap()
+    this.setFog()
     this.debuggerInit()
+  }
+
+  setFog() {
+    this.fog = new THREE.FogExp2(
+      this.params.fogColor,
+      this.params.fogDensity,
+    )
+    this.scene.fog = this.fog
+  }
+
+  updateFog() {
+    if (this.fog) {
+      this.fog.color.set(this.params.fogColor)
+      this.fog.density = this.params.fogDensity
+    }
   }
 
   setSunLight() {
@@ -41,7 +60,7 @@ export default class Environment {
     this.sunLight.castShadow = true
     this.sunLight.shadow.camera.near = this.params.shadowNear
     this.sunLight.shadow.camera.far = this.params.shadowFar
-    this.sunLight.shadow.mapSize.set(1024, 1024)
+    this.sunLight.shadow.mapSize.set(2048, 2048)
     this.sunLight.shadow.normalBias = 0.05
     this.sunLight.shadow.bias = -0.0005
     // 将位置/目标拆分为 XZ 平面与 Y 高度，便于独立调控
@@ -85,25 +104,44 @@ export default class Environment {
     this.environmentMap.texture.mapping = THREE.EquirectangularReflectionMapping
     // this.environmentMap.texture.colorSpace = THREE.SRGBColorSpace // RGBELoader usually handles this, or it might be Linear. Let's check standard implementation.
 
+    // 背景贴图
+    this.backgroundTexture = this.resources.items.backgroundTexture
+    if (this.backgroundTexture) {
+      this.backgroundTexture.colorSpace = THREE.SRGBColorSpace
+      this.backgroundTexture.mapping = THREE.EquirectangularReflectionMapping
+    }
+
     this.scene.environment = this.environmentMap.texture
-    this.scene.background = this.environmentMap.texture
+    this.updateBackground()
+  }
+
+  updateBackground() {
+    if (this.params.background === 'HDR') {
+      this.scene.background = this.environmentMap.texture
+    }
+    else if (this.params.background === 'Image' && this.backgroundTexture) {
+      this.scene.background = this.backgroundTexture
+    }
   }
 
   updateSunLightPosition() {
-    // 三维向量直接控制
-    this.sunLightPosition.set(
-      this.params.sunPos.x,
-      this.params.sunPos.y,
-      this.params.sunPos.z,
-    )
-    this.sunLight.position.copy(this.sunLightPosition)
-    this.sunLightTarget.set(
-      this.params.sunTarget.x,
-      this.params.sunTarget.y,
-      this.params.sunTarget.z,
-    )
-    this.sunLight.target.position.copy(this.sunLightTarget)
-    this.helper.update()
+    // 仅仅是触发更新，实际逻辑在 update() 中执行，依赖 player 位置
+    // 如果没有 player，可以在这里保留静态更新逻辑作为 fallback
+    if (!this.experience.world.player) {
+      this.sunLightPosition.set(
+        this.params.sunPos.x,
+        this.params.sunPos.y,
+        this.params.sunPos.z,
+      )
+      this.sunLight.position.copy(this.sunLightPosition)
+      this.sunLightTarget.set(
+        this.params.sunTarget.x,
+        this.params.sunTarget.y,
+        this.params.sunTarget.z,
+      )
+      this.sunLight.target.position.copy(this.sunLightTarget)
+      this.helper.update()
+    }
   }
 
   updateSunLightColor() {
@@ -140,12 +178,46 @@ export default class Environment {
     this.helper.update()
   }
 
+  update() {
+    const player = this.experience.world.player
+    if (player) {
+      const playerPos = player.getPosition()
+
+      // 更新 sunLight 位置：玩家位置 + 偏移量
+      this.sunLight.position.set(
+        playerPos.x + this.params.sunPos.x,
+        playerPos.y + this.params.sunPos.y,
+        playerPos.z + this.params.sunPos.z,
+      )
+
+      // 更新 sunLight 目标位置：玩家位置 + 目标偏移量
+      this.sunLight.target.position.set(
+        playerPos.x + this.params.sunTarget.x,
+        playerPos.y + this.params.sunTarget.y,
+        playerPos.z + this.params.sunTarget.z,
+      )
+
+      // 实时更新 helper，方便调试观察跟随效果
+      if (this.helper.visible) {
+        this.helper.update()
+      }
+    }
+  }
+
   debuggerInit() {
     if (this.debugActive) {
       const environmentFolder = this.debug.addFolder({
         title: 'Environment',
         expanded: false,
       })
+
+      environmentFolder.addBinding(this.params, 'background', {
+        label: 'Background',
+        options: {
+          HDR: 'HDR',
+          Image: 'Image',
+        },
+      }).on('change', this.updateBackground.bind(this))
 
       environmentFolder.addBinding(this.scene, 'environmentIntensity', {
         min: 0,
@@ -161,7 +233,7 @@ export default class Environment {
 
       // 使用 3D 点控件统一调节向量
       sunLightFolder.addBinding(this.params, 'sunPos', {
-        label: 'sunPos 位置',
+        label: 'sunPos 偏移',
         view: 'point3d',
         x: { step: 5 },
         y: { min: 0, max: 100, step: 5 },
@@ -169,7 +241,7 @@ export default class Environment {
       }).on('change', this.updateSunLightPosition.bind(this))
 
       sunLightFolder.addBinding(this.params, 'sunTarget', {
-        label: 'sunTarget 目标',
+        label: 'sunTarget 偏移',
         view: 'point3d',
         x: { step: 5 },
         y: { min: 0, max: 100, step: 5 },
@@ -240,6 +312,24 @@ export default class Environment {
         max: 5,
         step: 0.01,
       }).on('change', this.updateAmbientLight.bind(this))
+
+      // Fog Folder
+      const fogFolder = environmentFolder.addFolder({
+        title: 'Fog',
+        expanded: false,
+      })
+
+      fogFolder.addBinding(this.params, 'fogColor', {
+        label: 'Fog Color',
+        view: 'color',
+      }).on('change', this.updateFog.bind(this))
+
+      fogFolder.addBinding(this.params, 'fogDensity', {
+        label: 'Fog Density',
+        min: 0,
+        max: 0.1,
+        step: 0.0001,
+      }).on('change', this.updateFog.bind(this))
 
       if (this.axesHelper) {
         this.debug.addBinding(this.axesHelper, 'visible', {

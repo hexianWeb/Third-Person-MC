@@ -262,6 +262,7 @@ export default class ChunkManager {
     }, dist)
   }
 
+  // #region 调试面板
   /**
    * 统一控制面板（所有 chunk 共用）
    */
@@ -417,6 +418,8 @@ export default class ChunkManager {
       this._lastPlayerChunkZ = null
     })
   }
+
+  // #endregion
 
   /**
    * 重建所有 chunk（用于全局参数变更）

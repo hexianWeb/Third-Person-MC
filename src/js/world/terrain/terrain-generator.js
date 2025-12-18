@@ -220,8 +220,9 @@ export default class TerrainGenerator {
     })
   }
 
+  // #region 调试面板
   /**
-   * 调试面板
+   * 调试面板 ( 单个 chunk 专用 )
    */
   debugInit() {
     this.debugFolder = this.debug.ui.addFolder({
@@ -309,4 +310,5 @@ export default class TerrainGenerator {
       this.generate()
     })
   }
+  // #endregion
 }

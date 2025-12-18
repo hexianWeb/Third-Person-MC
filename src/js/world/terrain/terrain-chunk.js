@@ -1,6 +1,6 @@
 /**
  * TerrainChunk：无限地形中的单个 chunk
- * - 每个 chunk 拥有独立的 TerrainContainer（非单例）
+ * - 每个 chunk 拥有独立的 TerrainContainer
  * - 使用 TerrainGenerator 的世界偏移(originX/originZ)生成连贯地形数据
  * - 使用 TerrainRenderer 生成 InstancedMesh，并把 renderer.group 偏移到 chunk 原点
  */
@@ -44,7 +44,7 @@ export default class TerrainChunk {
     this.originX = chunkX * chunkWidth
     this.originZ = chunkZ * chunkWidth
 
-    // ===== chunk 数据容器（必须非单例）=====
+    // ===== chunk 数据容器=====
     this.container = new TerrainContainer(
       { width: chunkWidth, height: chunkHeight },
       { useSingleton: false },

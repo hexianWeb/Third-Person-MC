@@ -23,6 +23,11 @@ export default [
     path: 'textures/environmentMap/HDRI_110.hdr',
   },
   {
+    name: 'backgroundTexture',
+    type: 'texture',
+    path: 'textures/background/background.png',
+  },
+  {
     name: 'playerModel',
     type: 'gltfModel',
     path: 'models/character/character.glb',

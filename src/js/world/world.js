@@ -23,13 +23,13 @@ export default class World {
       chunkWidth: 64,
       chunkHeight: 32,
       viewDistance: 1, // 3×3
-      seed: 1337,
+      seed: 1265,
       terrain: {
         // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
         scale: 35,
-        magnitude: 0,
+        magnitude: 0.20,
         // offset 为“高度偏移（方块层数）”
-        offset: 1,
+        offset: 3,
       },
     })
 
@@ -73,5 +73,7 @@ export default class World {
       this.player.update()
     if (this.floor)
       this.floor.update()
+    if (this.environment)
+      this.environment.update()
   }
 }
