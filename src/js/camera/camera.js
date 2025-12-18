@@ -291,7 +291,7 @@ export default class Camera {
     if (this.debugActive) {
       this.debugFolder = this.debug.ui.addFolder({
         title: 'Camera',
-        expanded: true,
+        expanded: false,
       })
 
       // ===== 视角切换 =====

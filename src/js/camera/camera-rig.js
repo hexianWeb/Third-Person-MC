@@ -1,6 +1,7 @@
 import gsap from 'gsap'
 import * as THREE from 'three'
 import Experience from '../experience.js'
+import emitter from '../utils/event-bus.js'
 import { CAMERA_RIG_CONFIG } from './camera-rig-config.js'
 
 export default class CameraRig {
@@ -37,6 +38,10 @@ export default class CameraRig {
     this._bobbingRoll = 0
     this._currentFov = this.config.trackingShot.fov.baseFov
 
+    // Mouse Target Y Offset State
+    this.mouseYOffset = 0
+    this.mouseYVelocity = 0
+
     // Target
     this.target = null
 
@@ -47,6 +52,28 @@ export default class CameraRig {
     // Debug Helpers
     this.helpersVisible = false
     this.helpers = {}
+
+    // Event Listeners
+    this._setupEventListeners()
+  }
+
+  _setupEventListeners() {
+    emitter.on('input:mouse_move', ({ movementY }) => {
+      const config = this.config.follow.mouseTargetY
+      if (!config.enabled)
+        return
+
+      // 累加速度，实现“软”手感
+      const sign = config.invertY ? -1 : 1
+      this.mouseYVelocity += movementY * config.sensitivity * sign
+    })
+
+    emitter.on('pointer:unlocked', () => {
+      if (this.config.follow.mouseTargetY.unlockReset) {
+        // 解锁时是否立即清空或等待回弹？这里选择保持当前值让其自然回弹
+        // 如果需要立即重置，可以设置 this.mouseYVelocity = 0; this.mouseYOffset = 0;
+      }
+    })
   }
 
   attachPlayer(player) {
@@ -95,17 +122,26 @@ export default class CameraRig {
     if (!this.target)
       return null
 
-    // 1. Sync Anchors from Config
-    this.cameraAnchor.position.copy(this.config.follow.offset)
-    this.targetAnchor.position.copy(this.config.follow.targetOffset)
-
-    // 2. Get Player State
+    // 1. Get Player State
     const playerPos = this.target.getPosition()
     const facingAngle = this.target.getFacingAngle()
     const velocity = this.target.getVelocity()
     const isMoving = this.target.isMoving()
 
-    // 3. Smooth Follow (Position)
+    // 2. Calculate Speed (Horizontal)
+    const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
+
+    // 3. Update Mouse Y Offset Spring (Based on Player Speed)
+    this._updateMouseYOffset(speed)
+
+    // 4. Sync Anchors from Config
+    this.cameraAnchor.position.copy(this.config.follow.offset)
+    this.targetAnchor.position.copy(this.config.follow.targetOffset)
+
+    // Apply temporary Y offset
+    this.targetAnchor.position.y += this.mouseYOffset
+
+    // 5. Smooth Follow (Position)
     this._smoothedPosition.lerp(playerPos, this.config.follow.smoothSpeed)
     this.group.position.copy(this._smoothedPosition)
     this.group.rotation.y = facingAngle
@@ -113,20 +149,17 @@ export default class CameraRig {
     // Update matrices to ensuregetWorldPosition is correct
     this.group.updateMatrixWorld(true)
 
-    // 4. Calculate Speed (Horizontal)
-    const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
-
-    // 5. Tracking Shot
+    // 6. Tracking Shot
     this._updateDynamicFov(speed)
     this._updateBobbing(speed, isMoving)
 
-    // 6. Get World Positions
+    // 7. Get World Positions
     const cameraPos = new THREE.Vector3()
     const targetPos = new THREE.Vector3()
     this.cameraAnchor.getWorldPosition(cameraPos)
     this.targetAnchor.getWorldPosition(targetPos)
 
-    // 7. Smooth LookAt
+    // 8. Smooth LookAt
     this._smoothedLookAtTarget.lerp(targetPos, this.config.follow.lookAtSmoothSpeed)
 
     return {
@@ -135,6 +168,37 @@ export default class CameraRig {
       fov: this._currentFov,
       bobbingOffset: this._bobbingOffset.clone(),
       bobbingRoll: this._bobbingRoll,
+    }
+  }
+
+  _updateMouseYOffset(speed) {
+    const config = this.config.follow.mouseTargetY
+    const dt = this.time.delta / 1000 // 转换为秒
+
+    // 1. 速度阻尼衰减
+    this.mouseYVelocity *= Math.exp(-config.damping * dt)
+
+    // 2. 位置根据速度更新 (注意这里乘以 dt 是因为 mouseYVelocity 是单位时间位移)
+    this.mouseYOffset += this.mouseYVelocity * dt
+
+    // 3. 回中力 (Spring Return)
+    // 只有在玩家移动时才回中，回中速度与玩家速度成正比
+    if (speed > 0.01) {
+      const dynamicReturnSpeed = config.returnSpeed * speed * 0.5
+      this.mouseYOffset += (-this.mouseYOffset) * dynamicReturnSpeed * dt
+    }
+
+    // 4. 限制范围
+    this.mouseYOffset = THREE.MathUtils.clamp(
+      this.mouseYOffset,
+      -config.maxOffset,
+      config.maxOffset,
+    )
+
+    // 归零保护
+    if (Math.abs(this.mouseYOffset) < 0.0001 && Math.abs(this.mouseYVelocity) < 0.0001) {
+      this.mouseYOffset = 0
+      this.mouseYVelocity = 0
     }
   }
 
@@ -283,6 +347,52 @@ export default class CameraRig {
       min: 0.01,
       max: 0.5,
       step: 0.01,
+    })
+
+    // ===== 目标点鼠标 Y 偏移 (B手感) =====
+    const mouseTargetFolder = debugFolder.addFolder({
+      title: '目标点-鼠标Y偏移',
+      expanded: false,
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'enabled', {
+      label: '启用',
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'invertY', {
+      label: '反转 Y',
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'sensitivity', {
+      label: '灵敏度',
+      min: 0.001,
+      max: 0.05,
+      step: 0.001,
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'maxOffset', {
+      label: '最大偏移 (米)',
+      min: 0.5,
+      max: 10,
+      step: 0.5,
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'returnSpeed', {
+      label: '回中速度',
+      min: 1,
+      max: 20,
+      step: 0.5,
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'damping', {
+      label: '阻尼',
+      min: 1,
+      max: 20,
+      step: 0.5,
+    })
+
+    mouseTargetFolder.addBinding(this.config.follow.mouseTargetY, 'unlockReset', {
+      label: '解锁重置',
     })
 
     // ===== Tracking Shot - 动态 FOV =====

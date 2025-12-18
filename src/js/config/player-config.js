@@ -44,8 +44,8 @@ export const PLAYER_CONFIG = {
   mouseSensitivity: 0.002,
   turnSmoothing: 0.05,
   respawn: {
-    thresholdY: -10,
-    position: { x: 10, y: 10, z: 10 },
+    thresholdY: -2,
+    position: { x: 0, y: 0, z: 0 },
   },
   speedLines: {
     fadeInSpeed: 5.0,

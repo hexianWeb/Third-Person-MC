@@ -11,6 +11,16 @@ export const CAMERA_RIG_CONFIG = {
     smoothSpeed: 0.1,
     // 视角平滑速度 (LookAt Smoothing)
     lookAtSmoothSpeed: 0.45,
+    // PointerLock 模式下的目标点 Y 偏移 (B手感)
+    mouseTargetY: {
+      enabled: true,
+      invertY: true,
+      sensitivity: 0.030,
+      maxOffset: 2.5, // 最大偏移量 (米)
+      returnSpeed: 1.5, // 回中速度
+      damping: 3.5, // 速度阻尼
+      unlockReset: true, // 鼠标解锁时重置
+    },
   },
 
   // ===== Tracking Shot 配置 =====
