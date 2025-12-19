@@ -1,6 +1,9 @@
 import * as THREE from 'three'
 import CameraRig from '../camera/camera-rig.js'
 import Experience from '../experience.js'
+import BlockRaycaster from '../interaction/block-raycaster.js'
+import BlockSelectionHelper from '../interaction/block-selection-helper.js'
+import emitter from '../utils/event-bus.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
@@ -58,6 +61,26 @@ export default class World {
       this.experience.camera.attachRig(this.cameraRig)
 
       this.environment = new Environment()
+
+      // ===== 射线拾取 + 选中辅助 =====
+      // 注意：此模块仅用于“指向提示/后续交互”，不会直接改动地形数据
+      this.blockRaycaster = new BlockRaycaster({
+        chunkManager: this.chunkManager,
+        maxDistance: 10,
+        useMouse: false, // 默认屏幕中心（PointerLock/FPS 交互）
+      })
+      this.blockSelectionHelper = new BlockSelectionHelper({
+        enabled: true,
+      })
+
+      // ===== 交互事件绑定：删除方块 =====
+      emitter.on('input:mouse_down', (event) => {
+        // 0 为左键（通常用于破坏/删除）
+        if (event.button === 0 && this.blockRaycaster?.current) {
+          const { worldBlock } = this.blockRaycaster.current
+          this.chunkManager.removeBlockWorld(worldBlock.x, worldBlock.y, worldBlock.z)
+        }
+      })
     })
   }
 
@@ -75,5 +98,9 @@ export default class World {
       this.floor.update()
     if (this.environment)
       this.environment.update()
+
+    // 每帧射线检测：用于 hover 提示与后续交互
+    if (this.blockRaycaster)
+      this.blockRaycaster.update()
   }
 }

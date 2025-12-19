@@ -141,7 +141,7 @@ export default class Player {
 
     // ==================== 攻击输入 ====================
 
-    // 直拳（鼠标左键 / Z键）- 左右交替
+    // 直拳（Z键）- 左右交替
     emitter.on('input:punch_straight', () => {
       const anim = this._useLeftStraight
         ? AnimationClips.STRAIGHT_PUNCH // 左直拳
@@ -150,7 +150,7 @@ export default class Player {
       this.animation.triggerAttack(anim)
     })
 
-    // 勾拳（鼠标右键 / X键）- 左右交替
+    // 勾拳（X键）- 左右交替
     emitter.on('input:punch_hook', () => {
       const anim = this._useLeftHook
         ? AnimationClips.HOOK_PUNCH // 左勾拳

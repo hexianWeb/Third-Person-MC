@@ -46,7 +46,7 @@ export default class InputManager {
     window.addEventListener('mousedown', this._onMouseDown)
     window.addEventListener('mouseup', this._onMouseUp)
 
-    // 阻止右键菜单（游戏中右键用于攻击）
+    // 阻止右键菜单（避免影响 PointerLock / 场景交互）
     window.addEventListener('contextmenu', this._onContextMenu)
   }
 
@@ -132,25 +132,22 @@ export default class InputManager {
 
   /**
    * 鼠标按下事件
-   * - 左键 (button 0): 直拳
-   * - 右键 (button 2): 勾拳
+   * - 左/右键不再触发“出拳”
+   * - 仅记录按键状态，并通过 mitt 广播基础鼠标事件，供后续射线交互模块使用
    */
   onMouseDown(event) {
     switch (event.button) {
-      case 0: // 左键 - 直拳
-        if (!this.mouse.left) {
-          this.mouse.left = true
-          emitter.emit('input:punch_straight')
-        }
+      case 0: // 左键
+        this.mouse.left = true
+        emitter.emit('input:mouse_down', { button: 0 })
         break
-      case 2: // 右键 - 勾拳
-        if (!this.mouse.right) {
-          this.mouse.right = true
-          emitter.emit('input:punch_hook')
-        }
+      case 2: // 右键
+        this.mouse.right = true
+        emitter.emit('input:mouse_down', { button: 2 })
         break
       case 1: // 中键（预留）
         this.mouse.middle = true
+        emitter.emit('input:mouse_down', { button: 1 })
         break
     }
   }
@@ -162,12 +159,15 @@ export default class InputManager {
     switch (event.button) {
       case 0: // 左键
         this.mouse.left = false
+        emitter.emit('input:mouse_up', { button: 0 })
         break
       case 2: // 右键
         this.mouse.right = false
+        emitter.emit('input:mouse_up', { button: 2 })
         break
       case 1: // 中键
         this.mouse.middle = false
+        emitter.emit('input:mouse_up', { button: 1 })
         break
     }
   }
