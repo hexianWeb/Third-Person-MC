@@ -74,6 +74,11 @@ export default class TerrainChunk {
       listenDataReady: false,
     })
     this.renderer.group.position.set(this.originX, 0, this.originZ)
+    // 给射线拾取/交互提供 chunk 元信息（避免依赖 parent 链条猜测）
+    this.renderer.group.userData.chunkX = this.chunkX
+    this.renderer.group.userData.chunkZ = this.chunkZ
+    this.renderer.group.userData.originX = this.originX
+    this.renderer.group.userData.originZ = this.originZ
 
     // 初始缩放同步一次（避免 scale 改动后新 chunk 不一致）
     this.renderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)

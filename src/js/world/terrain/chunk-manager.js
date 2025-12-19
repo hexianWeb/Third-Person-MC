@@ -106,6 +106,69 @@ export default class ChunkManager {
   }
 
   /**
+   * 世界坐标删除方块
+   * @param {number} x
+   * @param {number} y
+   * @param {number} z
+   */
+  removeBlockWorld(x, y, z) {
+    const chunkX = Math.floor(x / this.chunkWidth)
+    const chunkZ = Math.floor(z / this.chunkWidth)
+    const chunk = this.getChunk(chunkX, chunkZ)
+
+    if (!chunk)
+      return false
+
+    const localX = Math.floor(x - chunkX * this.chunkWidth)
+    const localZ = Math.floor(z - chunkZ * this.chunkWidth)
+
+    // 1. 获取方块信息（包含 instanceId）
+    const block = chunk.container.getBlock(localX, y, localZ)
+    if (!block || block.id === blocks.empty.id)
+      return false
+
+    const blockId = block.id
+    const instanceId = block.instanceId
+
+    // 2. 更新数据层
+    chunk.container.setBlockId(localX, y, localZ, blocks.empty.id)
+
+    // 3. 更新渲染层
+    const renderer = chunk.renderer
+    if (renderer) {
+      const mesh = renderer._blockMeshes.get(blockId)
+      if (mesh) {
+        renderer.removeInstance(mesh, instanceId)
+      }
+
+      // 4. 揭示邻居方块（原本被遮挡，现在可能变得可见）
+      const neighbors = [
+        { x: localX + 1, y, z: localZ },
+        { x: localX - 1, y, z: localZ },
+        { x: localX, y: y + 1, z: localZ },
+        { x: localX, y: y - 1, z: localZ },
+        { x: localX, y, z: localZ + 1 },
+        { x: localX, y, z: localZ - 1 },
+      ]
+
+      for (const n of neighbors) {
+        // 只有在 chunk 范围内的邻居才处理（跨 chunk 揭示暂不考虑，逻辑会变复杂）
+        if (n.x >= 0 && n.x < this.chunkWidth && n.z >= 0 && n.z < this.chunkWidth && n.y >= 0 && n.y < this.chunkHeight) {
+          const neighborBlock = chunk.container.getBlock(n.x, n.y, n.z)
+          // 如果邻居非空、没有实例，且现在不再被遮挡
+          if (neighborBlock.id !== blocks.empty.id && neighborBlock.instanceId === null) {
+            if (!chunk.container.isBlockObscured(n.x, n.y, n.z)) {
+              renderer.addBlockInstance(n.x, n.y, n.z)
+            }
+          }
+        }
+      }
+    }
+
+    return true
+  }
+
+  /**
    * 获取某列 (worldX, worldZ) 的最高非空方块 y（找不到返回 null）
    * - 用于玩家重生点/贴地等
    */

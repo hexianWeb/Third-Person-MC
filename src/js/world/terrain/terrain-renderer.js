@@ -43,6 +43,7 @@ export default class TerrainRenderer {
     this.scene.add(this.group)
 
     this._tempObject = new THREE.Object3D()
+    this._tempMatrix = new THREE.Matrix4()
     this._blockMeshes = new Map()
     this._statsParams = {
       totalInstances: 0,
@@ -112,6 +113,13 @@ export default class TerrainRenderer {
       mesh.castShadow = true
       mesh.receiveShadow = true
 
+      // 射线拾取辅助信息：记录当前 InstancedMesh 对应的方块类型
+      // 注意：instanceId 仍需通过 matrix 反解局部 (x,y,z)
+      mesh.userData.blockId = blockId
+      mesh.userData.blockName = blockType.name
+      // 逆向映射：instanceId -> local grid position {x, y, z}
+      mesh.userData.instanceToGrid = []
+
       positions.forEach((pos, index) => {
         this._tempObject.position.set(
           pos.x,
@@ -120,6 +128,10 @@ export default class TerrainRenderer {
         )
         this._tempObject.updateMatrix()
         mesh.setMatrixAt(index, this._tempObject.matrix)
+
+        // 记录映射关系，方便 swap-and-pop 时更新 container
+        mesh.userData.instanceToGrid[index] = { x: pos.x, y: pos.y, z: pos.z }
+        this.container.setBlockInstanceId(pos.x, pos.y, pos.z, index)
       })
 
       mesh.instanceMatrix.needsUpdate = true
@@ -135,6 +147,98 @@ export default class TerrainRenderer {
     this.group.scale.setScalar(this.params.scale)
 
     this._updateStatsPanel()
+  }
+
+  /**
+   * 移除单个实例 (Swap-and-pop 优化)
+   * @param {THREE.InstancedMesh} mesh
+   * @param {number} instanceId
+   */
+  removeInstance(mesh, instanceId) {
+    if (!mesh || instanceId === undefined || instanceId === null)
+      return
+    if (instanceId >= mesh.count)
+      return
+
+    const lastIndex = mesh.count - 1
+
+    // 如果移除的是最后一个，直接减 count 即可
+    // 如果不是最后一个，则将最后一个交换到当前位置
+    if (instanceId < lastIndex) {
+      // 1. 获取最后一个实例的矩阵
+      mesh.getMatrixAt(lastIndex, this._tempMatrix)
+      // 2. 将其设置到当前被删除的位置
+      mesh.setMatrixAt(instanceId, this._tempMatrix)
+
+      // 3. 更新逆向映射和容器中的 instanceId
+      const lastGridPos = mesh.userData.instanceToGrid[lastIndex]
+      mesh.userData.instanceToGrid[instanceId] = lastGridPos
+      this.container.setBlockInstanceId(lastGridPos.x, lastGridPos.y, lastGridPos.z, instanceId)
+    }
+
+    // 清理最后一个索引的数据（可选，主要为了内存整洁）
+    mesh.userData.instanceToGrid[lastIndex] = null
+
+    // 减少渲染总数
+    mesh.count--
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+    // 更新统计
+    this._statsParams.totalInstances--
+    this._updateStatsPanel()
+  }
+
+  /**
+   * 为 (x,y,z) 处的方块创建一个新的实例（揭示被遮挡的方块）
+   * @param {number} x
+   * @param {number} y
+   * @param {number} z
+   */
+  addBlockInstance(x, y, z) {
+    if (!this.container)
+      return
+
+    const block = this.container.getBlock(x, y, z)
+    // 只有非空且还没有 instanceId 的方块才需要添加实例
+    if (!block || block.id === blocks.empty.id || block.instanceId !== null) {
+      return
+    }
+
+    const mesh = this._blockMeshes.get(block.id)
+    if (!mesh) {
+      // 如果该类型的 InstancedMesh 根本不存在，说明之前这个 chunk 里没这种方块
+      // 最稳妥的方法是直接 rebuild
+      this._rebuildFromContainer()
+      return
+    }
+
+    // 检查 InstancedMesh 是否还有容量
+    if (mesh.count < mesh.instanceMatrix.count) {
+      const instanceId = mesh.count
+      mesh.count++
+
+      this._tempObject.position.set(
+        x,
+        y * this.params.heightScale,
+        z,
+      )
+      this._tempObject.updateMatrix()
+      mesh.setMatrixAt(instanceId, this._tempObject.matrix)
+
+      // 更新映射关系
+      mesh.userData.instanceToGrid[instanceId] = { x, y, z }
+      this.container.setBlockInstanceId(x, y, z, instanceId)
+
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.computeBoundingSphere()
+
+      this._statsParams.totalInstances++
+      this._updateStatsPanel()
+    }
+    else {
+      // 容量不足，触发全量重建以扩容
+      this._rebuildFromContainer()
+    }
   }
 
   /**
