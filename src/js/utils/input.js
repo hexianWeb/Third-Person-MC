@@ -18,6 +18,7 @@ export default class InputManager {
       z: false,
       x: false,
       c: false,
+      q: false,
     }
 
     // 鼠标按键状态
@@ -122,6 +123,12 @@ export default class InputManager {
         // 格挡：需要持续状态
         emitter.emit('input:block', isPressed)
         break
+      case 'q':
+        if (isPressed && !this.keys.q) {
+          emitter.emit('input:toggle_block_edit_mode')
+        }
+        this.keys.q = isPressed
+        break
     }
 
     // 发送连续状态更新
@@ -132,7 +139,6 @@ export default class InputManager {
 
   /**
    * 鼠标按下事件
-   * - 左/右键不再触发“出拳”
    * - 仅记录按键状态，并通过 mitt 广播基础鼠标事件，供后续射线交互模块使用
    */
   onMouseDown(event) {

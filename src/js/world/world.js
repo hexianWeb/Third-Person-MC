@@ -7,6 +7,7 @@ import emitter from '../utils/event-bus.js'
 import Environment from './environment.js'
 import Floor from './floor.js'
 import Player from './player.js'
+import { blocks } from './terrain/blocks-config.js'
 import ChunkManager from './terrain/chunk-manager.js'
 
 export default class World {
@@ -73,12 +74,40 @@ export default class World {
         enabled: true,
       })
 
-      // ===== 交互事件绑定：删除方块 =====
+      // 默认编辑模式
+      this.blockEditMode = 'remove'
+
+      // 监听模式切换
+      emitter.on('input:toggle_block_edit_mode', () => {
+        this.blockEditMode = this.blockEditMode === 'remove' ? 'add' : 'remove'
+        // console.log('Edit Mode:', this.blockEditMode)
+        emitter.emit('game:block_edit_mode_changed', { mode: this.blockEditMode })
+      })
+
+      // ===== 交互事件绑定：删除/新增方块 =====
       emitter.on('input:mouse_down', (event) => {
-        // 0 为左键（通常用于破坏/删除）
+        // 0 为左键
         if (event.button === 0 && this.blockRaycaster?.current) {
-          const { worldBlock } = this.blockRaycaster.current
-          this.chunkManager.removeBlockWorld(worldBlock.x, worldBlock.y, worldBlock.z)
+          const { worldBlock, face } = this.blockRaycaster.current
+
+          if (this.blockEditMode === 'remove') {
+            this.chunkManager.removeBlockWorld(worldBlock.x, worldBlock.y, worldBlock.z)
+          }
+          else if (this.blockEditMode === 'add') {
+            // 根据法线计算相邻格子
+            if (face && face.normal) {
+              const nx = Math.round(face.normal.x)
+              const ny = Math.round(face.normal.y)
+              const nz = Math.round(face.normal.z)
+
+              const targetX = worldBlock.x + nx
+              const targetY = worldBlock.y + ny
+              const targetZ = worldBlock.z + nz
+
+              // 默认放置草方块
+              this.chunkManager.addBlockWorld(targetX, targetY, targetZ, blocks.stone.id)
+            }
+          }
         }
       })
     })

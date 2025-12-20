@@ -18,14 +18,21 @@ export default class BlockSelectionHelper {
       enabled: options.enabled ?? true,
       visibleThroughWalls: options.visibleThroughWalls ?? false,
       color: options.color ?? '#bfbfac',
-      opacity: options.opacity ?? 0.1,
+      opacity: options.opacity ?? 0.3,
+    }
+
+    // 模式状态：remove | add
+    this.mode = 'remove'
+    this._colors = {
+      remove: new THREE.Color('#ff3333'), // 红色
+      add: new THREE.Color('#33ff33'), // 绿色
     }
 
     // 使用几何体：略大于 1 以防止 z-fighting
     this.geometry = new THREE.BoxGeometry(1.01, 1.01, 1.01)
 
     this.material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(this.params.color),
+      color: this._colors.remove, // 默认红色
       transparent: true,
       opacity: this.params.opacity,
       depthTest: !this.params.visibleThroughWalls,
@@ -48,6 +55,14 @@ export default class BlockSelectionHelper {
       this.clear()
     })
 
+    // 监听编辑模式切换
+    emitter.on('game:block_edit_mode_changed', ({ mode }) => {
+      this.mode = mode
+      const color = this._colors[mode] || this._colors.remove
+      this.material.color.copy(color)
+      // 如果需要，可在此更新当前高亮位置（如果当前正选中方块）
+    })
+
     if (this.debug.active) {
       this.debugInit()
     }
@@ -64,8 +79,25 @@ export default class BlockSelectionHelper {
     }
 
     const s = info.renderScale ?? 1
-    this.object.position.copy(info.worldPosition)
     this.object.scale.setScalar(s)
+
+    // add 模式：基于 face.normal 预览相邻格子
+    if (this.mode === 'add' && info.face?.normal) {
+      const normal = info.face.normal
+      // 注意高度可能有缩放
+      const hScale = info.heightScale ?? 1
+
+      this.object.position.set(
+        info.worldPosition.x + normal.x * s,
+        info.worldPosition.y + normal.y * s * hScale,
+        info.worldPosition.z + normal.z * s,
+      )
+    }
+    // remove 模式（或无 face）：高亮命中方块本身
+    else {
+      this.object.position.copy(info.worldPosition)
+    }
+
     this.object.visible = true
   }
 

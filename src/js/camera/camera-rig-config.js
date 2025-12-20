@@ -16,7 +16,7 @@ export const CAMERA_RIG_CONFIG = {
       enabled: true,
       invertY: true,
       sensitivity: 0.030,
-      maxOffset: 2.5, // 最大偏移量 (米)
+      maxOffset: 4.5, // 最大偏移量 (米)
       returnSpeed: 1.5, // 回中速度
       damping: 3.5, // 速度阻尼
       unlockReset: true, // 鼠标解锁时重置

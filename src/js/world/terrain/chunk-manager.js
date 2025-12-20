@@ -169,6 +169,44 @@ export default class ChunkManager {
   }
 
   /**
+   * 世界坐标添加方块
+   * @param {number} x
+   * @param {number} y
+   * @param {number} z
+   * @param {number} blockId
+   */
+  addBlockWorld(x, y, z, blockId) {
+    const chunkX = Math.floor(x / this.chunkWidth)
+    const chunkZ = Math.floor(z / this.chunkWidth)
+    const chunk = this.getChunk(chunkX, chunkZ)
+
+    if (!chunk)
+      return false
+
+    const localX = Math.floor(x - chunkX * this.chunkWidth)
+    const localZ = Math.floor(z - chunkZ * this.chunkWidth)
+
+    // 1. 检查目标位是否为空（防止重叠）
+    const existing = chunk.container.getBlock(localX, y, localZ)
+    if (existing.id !== blocks.empty.id)
+      return false
+
+    // 2. 更新数据层
+    chunk.container.setBlockId(localX, y, localZ, blockId)
+
+    // 3. 更新渲染层
+    const renderer = chunk.renderer
+    if (renderer) {
+      // 3a. 如果自身不被遮挡，添加实例
+      if (!chunk.container.isBlockObscured(localX, y, localZ)) {
+        renderer.addBlockInstance(localX, y, localZ)
+      }
+    }
+
+    return true
+  }
+
+  /**
    * 获取某列 (worldX, worldZ) 的最高非空方块 y（找不到返回 null）
    * - 用于玩家重生点/贴地等
    */
