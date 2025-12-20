@@ -49,6 +49,19 @@ export default class CameraRig {
     this._cachedMagnitude = Math.abs(this.config.follow.offset.x)
     this._currentSide = Math.sign(this.config.follow.offset.x) || 1
 
+    // 洞内状态管理
+    this.isInCave = false // 当前是否在洞内（头顶有方块）
+    this._normalOffset = new THREE.Vector3(2, 1.5, 3.0) // 常规状态偏移
+    this._caveOffset = new THREE.Vector3(0.0, 1.5, 1.0) // 洞内状态偏移
+    this._targetOffset = new THREE.Vector3() // 目标偏移（用于平滑过渡）
+    this._targetOffset.copy(this._normalOffset) // 初始化为常规偏移
+
+    // 目标点偏移 (Look-at Target)
+    this._normalTargetOffset = new THREE.Vector3(0, 1.5, -5.5) // 常规目标偏移
+    this._caveTargetOffset = new THREE.Vector3(0, 1.5, -1.5) // 洞内目标偏移
+    this._currentTargetOffset = new THREE.Vector3() // 目标点偏移（用于平滑过渡）
+    this._currentTargetOffset.copy(this._normalTargetOffset)
+
     // Debug Helpers
     this.helpersVisible = false
     this.helpers = {}
@@ -118,6 +131,82 @@ export default class CameraRig {
     })
   }
 
+  /**
+   * 检测玩家上方是否有方块（洞内检测）
+   * 检测玩家头顶 3x3 范围内是否有方块
+   * @param {THREE.Vector3} playerPos 玩家脚底位置
+   * @returns {boolean} 如果头顶有方块返回 true
+   */
+  _checkBlockAbovePlayer(playerPos) {
+    const terrainManager = this.experience.terrainDataManager
+    if (!terrainManager || !terrainManager.getBlockWorld) {
+      return false
+    }
+
+    // 玩家高度约为 2 个方块（胶囊体高度），检测玩家头顶上方 2-3 格的位置
+    const checkHeights = [2, 3] // 检测玩家上方 2 格和 3 格位置
+    const playerBlockX = Math.floor(playerPos.x)
+    const playerBlockZ = Math.floor(playerPos.z)
+    const playerBlockY = Math.floor(playerPos.y)
+
+    // 检测 3x3 范围（以玩家为中心，XZ 方向各 ±1）
+    const checkRange = [-1, 0, 1]
+    
+    for (const heightOffset of checkHeights) {
+      const checkY = playerBlockY + heightOffset
+      
+      for (const dx of checkRange) {
+        for (const dz of checkRange) {
+          const checkX = playerBlockX + dx
+          const checkZ = playerBlockZ + dz
+          const block = terrainManager.getBlockWorld(checkX, checkY, checkZ)
+          
+          // 如果检测到非空方块，说明头顶有方块
+          if (block && block.id !== 0) { // 0 为 empty 方块
+            return true
+          }
+        }
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * 更新相机偏移（根据洞内状态平滑切换）
+   */
+  _updateCameraOffset() {
+    // 1. 根据当前状态设置目标偏移
+    const targetCamOffset = this.isInCave ? this._caveOffset : this._normalOffset
+    const targetLookOffset = this.isInCave ? this._caveTargetOffset : this._normalTargetOffset
+    
+    // 2. 平滑插值
+    const lerpSpeed = 0.05 // 平滑过渡速度
+    this._targetOffset.lerp(targetCamOffset, lerpSpeed)
+    this._currentTargetOffset.lerp(targetLookOffset, lerpSpeed)
+
+    // 3. 更新配置中的相机偏移（保持 X 轴的左右切换功能）
+    const currentSide = Math.sign(this.config.follow.offset.x) || 1
+    this.config.follow.offset.x = this._targetOffset.x * currentSide
+    this.config.follow.offset.y = this._targetOffset.y
+    this.config.follow.offset.z = this._targetOffset.z
+
+    // 4. 更新配置中的目标点偏移
+    this.config.follow.targetOffset.x = this._currentTargetOffset.x
+    this.config.follow.targetOffset.y = this._currentTargetOffset.y
+    this.config.follow.targetOffset.z = this._currentTargetOffset.z
+
+    // 5. 更新玩家透明度 (如果在洞内则变为半透明)
+    if (this.target && typeof this.target.setOpacity === 'function') {
+      const targetOpacity = this.isInCave ? 0.1 : 1.0
+      // 这里可以使用简单的 lerp 或者直接设置，取决于 Player 内部实现
+      // 为了平滑感，我们在这里简单处理
+      if (this._currentOpacity === undefined) this._currentOpacity = 1.0
+      this._currentOpacity += (targetOpacity - this._currentOpacity) * 0.1
+      this.target.setOpacity(this._currentOpacity)
+    }
+  }
+
   update() {
     if (!this.target)
       return null
@@ -133,6 +222,10 @@ export default class CameraRig {
 
     // 3. Update Mouse Y Offset Spring (Based on Player Speed)
     this._updateMouseYOffset(speed)
+
+    // 3.5. 检测洞内状态并更新相机偏移
+    this.isInCave = this._checkBlockAbovePlayer(playerPos)
+    this._updateCameraOffset()
 
     // 4. Sync Anchors from Config
     this.cameraAnchor.position.copy(this.config.follow.offset)
@@ -514,6 +607,73 @@ export default class CameraRig {
       min: 0,
       max: 0.02,
       step: 0.001,
+    })
+
+    // ===== 洞内状态检测 =====
+    const caveFolder = debugFolder.addFolder({
+      title: '洞内状态（动态相机偏移）',
+      expanded: true,
+    })
+
+    caveFolder.addBinding(this, 'isInCave', {
+      label: '当前是否在洞内',
+      readonly: true,
+    })
+
+    caveFolder.addBinding(this._normalOffset, 'x', {
+      label: '常规偏移 X',
+      min: 0,
+      max: 10,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._normalOffset, 'y', {
+      label: '常规偏移 Y',
+      min: 0,
+      max: 10,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._normalOffset, 'z', {
+      label: '常规偏移 Z',
+      min: 0,
+      max: 10,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._caveOffset, 'x', {
+      label: '洞内偏移 X',
+      min: 0,
+      max: 5,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._caveOffset, 'y', {
+      label: '洞内偏移 Y',
+      min: 0,
+      max: 5,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._caveOffset, 'z', {
+      label: '洞内偏移 Z',
+      min: 0,
+      max: 5,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._normalTargetOffset, 'z', {
+      label: '常规目标 Z 偏移',
+      min: -15,
+      max: 0,
+      step: 0.1,
+    })
+
+    caveFolder.addBinding(this._caveTargetOffset, 'z', {
+      label: '洞内目标 Z 偏移',
+      min: -5,
+      max: 0,
+      step: 0.1,
     })
   }
 }

@@ -76,12 +76,33 @@ export default class Player {
     this.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true
-        child.material.side = THREE.DoubleSide
+        child.material.side = THREE.FrontSide
+        child.material.transparent = true
       }
     })
-
+    
+    this.model.children[0].children[0].traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.renderOrder = 1
+      }
+    })  
+    this.model.children[0].children[1].traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.renderOrder = 2
+      }
+    })
     // Add model to movement controller's group
     this.movement.group.add(this.model)
+  }
+
+
+  setOpacity(value) {
+    const isTransparent = value < 1.0 
+    this.model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material.opacity = value
+      }
+    })
   }
 
   /**

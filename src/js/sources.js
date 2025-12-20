@@ -30,7 +30,7 @@ export default [
   {
     name: 'playerModel',
     type: 'gltfModel',
-    path: 'models/character/character.glb',
+    path: 'models/character/character04.glb',
   },
   {
     name: 'grass_block_top_texture',

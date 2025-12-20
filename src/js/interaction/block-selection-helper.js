@@ -35,7 +35,7 @@ export default class BlockSelectionHelper {
     this.object = new THREE.Mesh(this.geometry, this.material)
     this.object.visible = false
     this.object.frustumCulled = false
-    this.object.renderOrder = 999
+    this.object.renderOrder = 0
     this.scene.add(this.object)
 
     // 监听射线模块输出

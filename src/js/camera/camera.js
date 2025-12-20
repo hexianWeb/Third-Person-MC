@@ -452,7 +452,7 @@ export default class Camera {
    * @param {THREE.Vector3} desiredCameraPos - 錨點計算出的理想相機位置
    */
   _applyTerrainAdaptation(desiredCameraPos) {
-    if (!this.terrainAdapt.enabled) {
+    if (!this.terrainAdapt.enabled || this.rig.isInCave) {
       this._adaptiveY = desiredCameraPos.y
       return desiredCameraPos
     }
