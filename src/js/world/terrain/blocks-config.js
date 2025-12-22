@@ -14,6 +14,9 @@ export const BLOCK_IDS = {
   STONE: 3,
   COAL_ORE: 4,
   IRON_ORE: 5,
+  // 树（体素）
+  TREE_TRUNK: 6,
+  TREE_LEAVES: 7,
 }
 
 /**
@@ -79,6 +82,27 @@ export const blocks = {
     scale: { x: 40, y: 40, z: 40 },
     scarcity: 0.9,
   },
+  // ===== 树（体素方块）=====
+  treeTrunk: {
+    id: BLOCK_IDS.TREE_TRUNK,
+    name: 'tree_trunk',
+    visible: true,
+    // 树干：六面贴图（侧面/顶面）
+    textureKeys: {
+      top: 'treeTrunk_TopTexture',
+      bottom: 'treeTrunk_TopTexture',
+      side: 'treeTrunk_SideTexture',
+    },
+  },
+  treeLeaves: {
+    id: BLOCK_IDS.TREE_LEAVES,
+    name: 'tree_leaves',
+    visible: true,
+    // 树叶：按你的需求使用不透明方块（不做 alphaTest/transparent）
+    textureKeys: {
+      all: 'treeLeaves_Texture',
+    },
+  },
 }
 
 // 需要通过 3D 噪声生成的矿产列表
@@ -92,7 +116,7 @@ export const resources = [
  * 根据方块类型和资源纹理，生成材质（草方块返回 6 面材质数组）
  * @param {object} blockType 方块配置
  * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
- * @returns {THREE.Material|THREE.Material[]|null}
+ * @returns {THREE.Material|THREE.Material[]|null} 生成的材质（或材质数组），缺失纹理时返回 null
  */
 export function createMaterials(blockType, textureItems) {
   if (blockType.id === blocks.empty.id)
@@ -127,11 +151,13 @@ export function createMaterials(blockType, textureItems) {
     })
   }
 
-  // 草方块：六面不同材质
-  if (blockType.id === blocks.grass.id) {
+  // 六面贴图方块：草/树干（右、左、上、下、前、后）
+  if (blockType.textureKeys?.side && blockType.textureKeys?.top && blockType.textureKeys?.bottom) {
     const side = ensureTexture(blockType.textureKeys.side)
     const top = ensureTexture(blockType.textureKeys.top)
     const bottom = ensureTexture(blockType.textureKeys.bottom)
+    if (!side || !top || !bottom)
+      return null
 
     return [
       makeCustomMaterial(side), // right
@@ -145,6 +171,8 @@ export function createMaterials(blockType, textureItems) {
 
   // 其余方块：单一材质
   const mainTexture = ensureTexture(blockType.textureKeys.all)
+  if (!mainTexture)
+    return null
   return makeCustomMaterial(mainTexture)
 }
 

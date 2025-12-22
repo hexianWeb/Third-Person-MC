@@ -77,4 +77,19 @@ export default [
     type: 'texture',
     path: 'textures/blocks/snow.png',
   },
+  {
+    name: 'treeTrunk_TopTexture',
+    type: 'texture',
+    path: 'textures/blocks/tree_trunk_Top.png',
+  },
+  {
+    name: 'treeTrunk_SideTexture',
+    type: 'texture',
+    path: 'textures/blocks/tree_trunk_Side.png',
+  },
+  {
+    name: 'treeLeaves_Texture',
+    type: 'texture',
+    path: 'textures/blocks/tree_leaves.png',
+  },
 ]
