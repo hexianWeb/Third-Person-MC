@@ -36,12 +36,22 @@ const COLOR_BANDS = {
 }
 
 /**
- * 获取当前地形数据（从 Experience 单例暴露的容器/高度图）
+ * 获取当前地形数据（从 Experience 单例暴露的管理器中获取中心 chunk 数据）
  */
 function getTerrainState() {
   const exp = window.Experience
-  const container = exp?.terrainContainer
-  const heightMap = exp?.terrainHeightMap || container?.toHeightMap?.()
+  const manager = exp?.terrainDataManager
+  if (!manager)
+    return null
+
+  // 获取中心 chunk (0,0) 作为预览数据
+  const centerChunk = manager.getChunk(0, 0)
+  if (!centerChunk || centerChunk.state === 'init')
+    return null
+
+  const heightMap = centerChunk.generator?.heightMap
+  const container = centerChunk.container
+
   if (!heightMap || !heightMap.length)
     return null
   const size = container?.getSize?.() || { width: heightMap.length, height: heightMap.length }

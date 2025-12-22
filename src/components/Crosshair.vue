@@ -4,7 +4,7 @@ import emitter from '../js/utils/event-bus.js'
 
 /**
  * Crosshair - Minecraft 风格的十字准星
- * 
+ *
  * 特点：
  * - 固定在视口正中心
  * - 简洁的十字线设计
@@ -60,7 +60,7 @@ onUnmounted(() => {
   position: absolute;
   background-color: white;
   /* 添加黑色边框增加对比度 */
-  box-shadow: 
+  box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.8),
     0 0 4px rgba(0, 0, 0, 0.5);
 }
@@ -94,4 +94,3 @@ onUnmounted(() => {
   opacity: 0;
 }
 </style>
-

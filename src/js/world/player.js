@@ -80,12 +80,12 @@ export default class Player {
         child.material.transparent = true
       }
     })
-    
+
     this.model.children[0].children[0].traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.renderOrder = 1
       }
-    })  
+    })
     this.model.children[0].children[1].traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.renderOrder = 2
@@ -95,9 +95,8 @@ export default class Player {
     this.movement.group.add(this.model)
   }
 
-
   setOpacity(value) {
-    const isTransparent = value < 1.0 
+    const isTransparent = value < 1.0
     this.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.material.opacity = value

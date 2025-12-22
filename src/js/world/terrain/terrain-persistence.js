@@ -8,13 +8,13 @@ export default class TerrainPersistence {
   constructor(options = {}) {
     this.worldName = options.worldName || 'default'
     this.useIndexedDB = options.useIndexedDB ?? false
-    
+
     // 每个 chunk 的修改记录：Map<chunkKey, Map<blockKey, blockId>>
     // chunkKey: "x,z"
     // blockKey: "x,y,z" (chunk 局部坐标)
     // blockId: 方块类型 ID (0 表示删除)
     this.modifications = new Map()
-    
+
     // 加载已保存的修改
     this.load()
   }
@@ -102,7 +102,8 @@ export default class TerrainPersistence {
   save() {
     if (this.useIndexedDB) {
       this._saveToIndexedDB()
-    } else {
+    }
+    else {
       this._saveToLocalStorage()
     }
   }
@@ -113,7 +114,8 @@ export default class TerrainPersistence {
   load() {
     if (this.useIndexedDB) {
       this._loadFromIndexedDB()
-    } else {
+    }
+    else {
       this._loadFromLocalStorage()
     }
   }
@@ -124,7 +126,8 @@ export default class TerrainPersistence {
       const key = `terrain_mods_${this.worldName}`
       localStorage.setItem(key, JSON.stringify(data))
       console.log(`[TerrainPersistence] 已保存 ${this.modifications.size} 个 chunk 的修改`)
-    } catch (error) {
+    }
+    catch (error) {
       console.error('[TerrainPersistence] localStorage 保存失败:', error)
     }
   }
@@ -138,7 +141,8 @@ export default class TerrainPersistence {
         this.deserialize(data)
         console.log(`[TerrainPersistence] 已加载 ${this.modifications.size} 个 chunk 的修改`)
       }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('[TerrainPersistence] localStorage 加载失败:', error)
     }
   }
@@ -169,5 +173,3 @@ export default class TerrainPersistence {
     }
   }
 }
-
-

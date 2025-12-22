@@ -4,7 +4,6 @@ import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls
 
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
-import { blocks } from '../world/terrain/blocks-config.js'
 
 export default class Camera {
   constructor() {
@@ -230,19 +229,6 @@ export default class Camera {
     const terrainRenderer = this.experience.world?.terrainRenderer
     if (terrainRenderer?.getBoundingInfo) {
       return terrainRenderer.getBoundingInfo()
-    }
-    const container = this.experience.terrainContainer
-    if (container?.getSize) {
-      const { width, height } = container.getSize()
-      const depth = width
-      const radius = Math.sqrt(width * width + depth * depth) * 0.5
-      return {
-        center: new THREE.Vector3(0, height * 0.5, 0),
-        width,
-        depth,
-        height,
-        radius,
-      }
     }
     // 兜底默认尺寸
     return {
@@ -486,16 +472,13 @@ export default class Camera {
    * 采样地面高度：从容器数据中查找最高非空方块
    */
   _sampleGroundHeight(x, z) {
-    // Step2：无限地形（chunk streaming）下，terrainContainer 只是一份兜底（中心 chunk）
-    // 相机地形避障需要跨 chunk 采样，因此优先使用 ChunkManager（experience.terrainDataManager）
+    // 无限地形（chunk streaming）下，通过 ChunkManager（experience.terrainDataManager）采样
     const provider = this.experience.terrainDataManager
 
-    // scale/heightScale 仍与渲染保持一致（与旧逻辑兼容）
-    // 注意：当前项目里 scale/heightScale 主要用于视觉调试，物理/碰撞仍按 1 单位方块计算
     const scale = provider?.renderParams?.scale ?? 1
     const heightScale = provider?.renderParams?.heightScale ?? 1
 
-    // 将世界坐标映射到“方块索引空间”（与旧实现一致：除以 scale）
+    // 将世界坐标映射到“方块索引空间”
     const ix = Math.floor(x / scale)
     const iz = Math.floor(z / scale)
 
@@ -507,21 +490,6 @@ export default class Camera {
       return (topY + 1) * heightScale * scale
     }
 
-    // ===== 兜底：旧单张地形容器采样（仅覆盖中心 chunk 范围）=====
-    const container = this.experience.terrainContainer
-    if (!container?.getBlock || !container.getSize)
-      return null
-
-    const { width, height } = container.getSize()
-    if (ix < 0 || ix >= width || iz < 0 || iz >= width)
-      return null
-
-    for (let y = height - 1; y >= 0; y--) {
-      const block = container.getBlock(ix, y, iz)
-      if (block?.id && block.id !== blocks.empty.id) {
-        return (y + 1) * heightScale * scale
-      }
-    }
     return null
   }
 }

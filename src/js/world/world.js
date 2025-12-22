@@ -45,14 +45,6 @@ export default class World {
       // ===== 创建并渲染初始 3×3 chunks =====
       this.chunkManager.initInitialGrid()
 
-      // 兼容旧逻辑：给相机/其他组件一个容器兜底（仅中心 chunk）
-      // 注意：无限地形的正确查询应使用 experience.terrainDataManager
-      const centerChunk = this.chunkManager.getChunk(0, 0)
-      if (centerChunk) {
-        this.experience.terrainContainer = centerChunk.container
-        this.experience.terrainHeightMap = centerChunk.generator.heightMap
-      }
-
       // Setup
       this.player = new Player()
 

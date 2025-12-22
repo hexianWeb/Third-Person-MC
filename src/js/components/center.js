@@ -18,8 +18,8 @@ export default class Center {
    * @param {boolean} [config.disable] - Disable all centering
    * @param {boolean} [config.disableX] - Disable centering on X axis
    * @param {boolean} [config.disableY] - Disable centering on Y axis
-   * @param {boolean} [config.disableZ=false] - Disable centering on Z axis
-   * @param {boolean} [config.precise=true] - Use precise bounding calculation
+   * @param {boolean} [config.disableZ] - Disable centering on Z axis
+   * @param {boolean} [config.precise] - Use precise bounding calculation
    */
   constructor(config = {}) {
     this.experience = new Experience()
