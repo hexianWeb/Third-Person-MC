@@ -6,6 +6,7 @@ import Experience from '../../experience.js'
 import IdleQueue from '../../utils/idle-queue.js'
 import { blocks, resources } from './blocks-config.js'
 import TerrainChunk from './terrain-chunk.js'
+import TerrainPersistence from './terrain-persistence.js'
 
 export default class ChunkManager {
   constructor(options = {}) {
@@ -51,6 +52,16 @@ export default class ChunkManager {
     // streaming 内部缓存：避免重复计算
     this._lastPlayerChunkX = null
     this._lastPlayerChunkZ = null
+
+    // 持久化管理器
+    this.persistence = new TerrainPersistence({
+      worldName: options.worldName || 'default',
+      useIndexedDB: options.useIndexedDB ?? false,
+    })
+
+    // 自动保存：节流，避免频繁写入
+    this._saveTimeout = null
+    this._autoSaveDelay = 2000 // 2秒后保存
 
     if (this.debug.active) {
       this.debugInit()
@@ -165,6 +176,10 @@ export default class ChunkManager {
       }
     }
 
+    // 记录修改（0 表示删除）
+    this.persistence.recordModification(x, y, z, blocks.empty.id, this.chunkWidth)
+    this._scheduleSave()
+
     return true
   }
 
@@ -202,6 +217,10 @@ export default class ChunkManager {
         renderer.addBlockInstance(localX, y, localZ)
       }
     }
+
+    // 记录修改
+    this.persistence.recordModification(x, y, z, blockId, this.chunkWidth)
+    this._scheduleSave()
 
     return true
   }
@@ -243,6 +262,10 @@ export default class ChunkManager {
     })
 
     this.chunks.set(key, chunk)
+
+    // 标记需要应用修改（在生成后执行）
+    chunk._pendingModifications = this.persistence.getChunkModifications(chunkX, chunkZ)
+
     return chunk
   }
 
@@ -333,6 +356,35 @@ export default class ChunkManager {
     this.idleQueue.pump()
   }
 
+  // 新增：延迟保存（避免频繁写入）
+  _scheduleSave() {
+    if (this._saveTimeout) {
+      clearTimeout(this._saveTimeout)
+    }
+    this._saveTimeout = setTimeout(() => {
+      this.persistence.save()
+    }, this._autoSaveDelay)
+  }
+
+  // 新增：应用 chunk 的修改记录
+  _applyChunkModifications(chunk) {
+    if (!chunk._pendingModifications || chunk._pendingModifications.size === 0) {
+      return
+    }
+
+    console.log(`[ChunkManager] 应用 ${chunk._pendingModifications.size} 个修改到 chunk (${chunk.chunkX}, ${chunk.chunkZ})`)
+
+    for (const [blockKey, blockId] of chunk._pendingModifications.entries()) {
+      const [localX, localY, localZ] = blockKey.split(',').map(Number)
+
+      // 直接修改 container 数据（跳过渲染，稍后统一重建）
+      chunk.container.setBlockId(localX, localY, localZ, blockId)
+    }
+
+    // 清除标记
+    chunk._pendingModifications = null
+  }
+
   _enqueueChunkBuild(chunk, pcx, pcz) {
     if (!chunk)
       return
@@ -349,6 +401,9 @@ export default class ChunkManager {
       const ok = chunk.generateData()
       if (!ok)
         return
+
+      // ===== 应用玩家修改 =====
+      this._applyChunkModifications(chunk)
 
       // 数据完成后排队建网格（同 dist 优先级）
       this.idleQueue.enqueue(`${key}:mesh`, () => {
@@ -517,6 +572,47 @@ export default class ChunkManager {
     }).on('change', () => {
       this._lastPlayerChunkX = null
       this._lastPlayerChunkZ = null
+    })
+
+    const persistFolder = this.debugFolder.addFolder({
+      title: '持久化 (Persistence)',
+      expanded: false,
+    })
+
+    const stats = this.persistence.getStats()
+    const statsParams = {
+      chunkCount: stats.chunkCount,
+      totalMods: stats.totalModifications,
+    }
+
+    persistFolder.addBinding(statsParams, 'chunkCount', {
+      label: '已修改 chunk 数',
+      readonly: true,
+    })
+
+    persistFolder.addBinding(statsParams, 'totalMods', {
+      label: '总修改数',
+      readonly: true,
+    })
+
+    persistFolder.addButton({ title: '💾 手动保存' }).on('click', () => {
+      this.persistence.save()
+      const newStats = this.persistence.getStats()
+      statsParams.chunkCount = newStats.chunkCount
+      statsParams.totalMods = newStats.totalModifications
+    })
+
+    persistFolder.addButton({ title: '🔄 重新加载' }).on('click', () => {
+      this.persistence.load()
+      this._regenerateAllChunks()
+    })
+
+    persistFolder.addButton({ title: '🗑️ 清除所有修改' }).on('click', () => {
+      if (confirm('确定要清除所有玩家修改吗？此操作不可恢复！')) {
+        this.persistence.modifications.clear()
+        this.persistence.save()
+        this._regenerateAllChunks()
+      }
     })
   }
 
