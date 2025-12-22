@@ -45,7 +45,8 @@ export default class BlockSelectionHelper {
     this.object.renderOrder = 0
     this.scene.add(this.object)
 
-    // 监听射线模块输出
+    // 移除旧的事件监听 (改为 update 轮询)
+    /*
     emitter.on('game:block-hover', (info) => {
       if (!this.params.enabled)
         return
@@ -54,6 +55,7 @@ export default class BlockSelectionHelper {
     emitter.on('game:block-hover-clear', () => {
       this.clear()
     })
+    */
 
     // 监听编辑模式切换
     emitter.on('game:block_edit_mode_changed', ({ mode }) => {
@@ -65,6 +67,22 @@ export default class BlockSelectionHelper {
 
     if (this.debug.active) {
       this.debugInit()
+    }
+  }
+
+  update() {
+    if (!this.params.enabled) {
+      this.clear()
+      return
+    }
+
+    // 主动获取最新的射线检测结果
+    const raycaster = this.experience.world?.blockRaycaster
+    if (raycaster && raycaster.current) {
+      this.setTarget(raycaster.current)
+    }
+    else {
+      this.clear()
     }
   }
 
@@ -84,6 +102,7 @@ export default class BlockSelectionHelper {
     // add 模式：基于 face.normal 预览相邻格子
     if (this.mode === 'add' && info.face?.normal) {
       const normal = info.face.normal
+      // console.log(normal)
       // 注意高度可能有缩放
       const hScale = info.heightScale ?? 1
 

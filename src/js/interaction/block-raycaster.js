@@ -125,10 +125,12 @@ export default class BlockRaycaster {
       return
     }
 
+    // 始终更新 current，确保 face/point 等信息是实时的（即使是同一个方块）
+    this.current = info
+
     const key = `${info.chunkX},${info.chunkZ}:${info.local.x},${info.local.y},${info.local.z}`
     if (key !== this._currentKey) {
       this._currentKey = key
-      this.current = info
 
       // 更新调试监控
       if (this.debug.active) {

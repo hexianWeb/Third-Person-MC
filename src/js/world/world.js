@@ -131,5 +131,9 @@ export default class World {
     // 每帧射线检测：用于 hover 提示与后续交互
     if (this.blockRaycaster)
       this.blockRaycaster.update()
+
+    // 更新辅助框位置
+    if (this.blockSelectionHelper)
+      this.blockSelectionHelper.update()
   }
 }

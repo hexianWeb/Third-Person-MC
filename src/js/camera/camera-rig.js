@@ -87,6 +87,21 @@ export default class CameraRig {
         // 如果需要立即重置，可以设置 this.mouseYVelocity = 0; this.mouseYOffset = 0;
       }
     })
+
+    emitter.on('input:wheel', ({ deltaY }) => {
+      // 滚轮控制相机高度 (常规偏移 Y)
+      // 灵敏度因子，deltaY 通常是 100 左右
+      const sensitivity = 0.005
+
+      // 计算新的 Y 值
+      let newY = this._normalOffset.y + deltaY * sensitivity
+
+      // 限制范围 1.5 - 5
+      newY = THREE.MathUtils.clamp(newY, 1.5, 5.0)
+
+      // 更新常规偏移
+      this._normalOffset.y = newY
+    })
   }
 
   attachPlayer(player) {
@@ -151,16 +166,16 @@ export default class CameraRig {
 
     // 检测 3x3 范围（以玩家为中心，XZ 方向各 ±1）
     const checkRange = [-1, 0, 1]
-    
+
     for (const heightOffset of checkHeights) {
       const checkY = playerBlockY + heightOffset
-      
+
       for (const dx of checkRange) {
         for (const dz of checkRange) {
           const checkX = playerBlockX + dx
           const checkZ = playerBlockZ + dz
           const block = terrainManager.getBlockWorld(checkX, checkY, checkZ)
-          
+
           // 如果检测到非空方块，说明头顶有方块
           if (block && block.id !== 0) { // 0 为 empty 方块
             return true
@@ -179,7 +194,7 @@ export default class CameraRig {
     // 1. 根据当前状态设置目标偏移
     const targetCamOffset = this.isInCave ? this._caveOffset : this._normalOffset
     const targetLookOffset = this.isInCave ? this._caveTargetOffset : this._normalTargetOffset
-    
+
     // 2. 平滑插值
     const lerpSpeed = 0.05 // 平滑过渡速度
     this._targetOffset.lerp(targetCamOffset, lerpSpeed)
@@ -201,7 +216,8 @@ export default class CameraRig {
       const targetOpacity = this.isInCave ? 0.1 : 1.0
       // 这里可以使用简单的 lerp 或者直接设置，取决于 Player 内部实现
       // 为了平滑感，我们在这里简单处理
-      if (this._currentOpacity === undefined) this._currentOpacity = 1.0
+      if (this._currentOpacity === undefined)
+        this._currentOpacity = 1.0
       this._currentOpacity += (targetOpacity - this._currentOpacity) * 0.1
       this.target.setOpacity(this._currentOpacity)
     }
@@ -629,8 +645,8 @@ export default class CameraRig {
 
     caveFolder.addBinding(this._normalOffset, 'y', {
       label: '常规偏移 Y',
-      min: 0,
-      max: 10,
+      min: 1.5,
+      max: 5,
       step: 0.1,
     })
 

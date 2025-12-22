@@ -34,6 +34,7 @@ export default class InputManager {
     this._onMouseDown = this.onMouseDown.bind(this)
     this._onMouseUp = this.onMouseUp.bind(this)
     this._onContextMenu = this.onContextMenu.bind(this)
+    this._onWheel = this.onWheel.bind(this)
 
     this.init()
   }
@@ -46,6 +47,7 @@ export default class InputManager {
     // 鼠标按键事件
     window.addEventListener('mousedown', this._onMouseDown)
     window.addEventListener('mouseup', this._onMouseUp)
+    window.addEventListener('wheel', this._onWheel, { passive: false })
 
     // 阻止右键菜单（避免影响 PointerLock / 场景交互）
     window.addEventListener('contextmenu', this._onContextMenu)
@@ -185,6 +187,14 @@ export default class InputManager {
     event.preventDefault()
   }
 
+  /**
+   * 鼠标滚轮事件
+   */
+  onWheel(event) {
+    // 发送滚轮事件，deltaY 通常为 ±100 或类似值
+    emitter.emit('input:wheel', { deltaY: event.deltaY })
+  }
+
   // ==================== 清理 ====================
 
   destroy() {
@@ -192,6 +202,7 @@ export default class InputManager {
     window.removeEventListener('keyup', this._onKeyUp)
     window.removeEventListener('mousedown', this._onMouseDown)
     window.removeEventListener('mouseup', this._onMouseUp)
+    window.removeEventListener('wheel', this._onWheel)
     window.removeEventListener('contextmenu', this._onContextMenu)
   }
 }
