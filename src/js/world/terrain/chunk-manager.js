@@ -30,6 +30,16 @@ export default class ChunkManager {
       offset: 16,
     }
 
+    // 所有 chunk 共用的树生成参数（统一由一个 panel 控制）
+    this.treeParams = options.trees || {
+      minHeight: 3,
+      maxHeight: 6,
+      minRadius: 2,
+      maxRadius: 4,
+      // 密度：0..1，越大树越多
+      frequency: 0.02,
+    }
+
     // 所有 chunk 共用的渲染参数（统一由一个 panel 控制）
     this.renderParams = {
       scale: 1,
@@ -234,7 +244,7 @@ export default class ChunkManager {
     const z = Math.floor(worldZ)
     for (let y = this.chunkHeight - 1; y >= 0; y--) {
       const block = this.getBlockWorld(x, y, z)
-      if (block?.id && block.id !== blocks.empty.id) {
+      if (block?.id && block.id !== blocks.empty.id && block.id !== blocks.treeTrunk.id && block.id !== blocks.treeLeaves.id) {
         return y
       }
     }
@@ -259,6 +269,7 @@ export default class ChunkManager {
       terrain: this.terrainParams,
       sharedTerrainParams: this.terrainParams,
       sharedRenderParams: this.renderParams,
+      sharedTreeParams: this.treeParams,
     })
 
     this.chunks.set(key, chunk)
@@ -371,8 +382,6 @@ export default class ChunkManager {
     if (!chunk._pendingModifications || chunk._pendingModifications.size === 0) {
       return
     }
-
-    console.log(`[ChunkManager] 应用 ${chunk._pendingModifications.size} 个修改到 chunk (${chunk.chunkX}, ${chunk.chunkZ})`)
 
     for (const [blockKey, blockId] of chunk._pendingModifications.entries()) {
       const [localX, localY, localZ] = blockKey.split(',').map(Number)
@@ -514,6 +523,47 @@ export default class ChunkManager {
       min: 0,
       max: this.chunkHeight,
       step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    // ===== 树参数（全局）=====
+    const treeFolder = genFolder.addFolder({
+      title: '树参数（全局）',
+      expanded: false,
+    })
+
+    treeFolder.addBinding(this.treeParams, 'minHeight', {
+      label: '树干最小高度',
+      min: 1,
+      max: 32,
+      step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    treeFolder.addBinding(this.treeParams, 'maxHeight', {
+      label: '树干最大高度',
+      min: 1,
+      max: 32,
+      step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    treeFolder.addBinding(this.treeParams, 'minRadius', {
+      label: '树叶最小半径',
+      min: 1,
+      max: 12,
+      step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    treeFolder.addBinding(this.treeParams, 'maxRadius', {
+      label: '树叶最大半径',
+      min: 1,
+      max: 12,
+      step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    treeFolder.addBinding(this.treeParams, 'frequency', {
+      label: '树密度',
+      min: 0,
+      max: 1,
+      step: 0.01,
     }).on('change', () => this._regenerateAllChunks())
 
     const oresFolder = genFolder.addFolder({

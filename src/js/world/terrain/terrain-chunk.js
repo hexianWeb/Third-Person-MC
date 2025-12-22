@@ -29,6 +29,7 @@ export default class TerrainChunk {
       terrain,
       sharedRenderParams,
       sharedTerrainParams,
+      sharedTreeParams,
     } = options
 
     // ===== chunk 基础信息 =====
@@ -57,6 +58,7 @@ export default class TerrainChunk {
       seed,
       terrain,
       sharedTerrainParams,
+      sharedTreeParams,
       originX: this.originX,
       originZ: this.originZ,
       // Step2：延迟生成，交由 ChunkManager 的 idle 队列调度

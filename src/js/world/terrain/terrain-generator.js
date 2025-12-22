@@ -39,11 +39,25 @@ export default class TerrainGenerator {
       seed: options.seed ?? Date.now(),
       sizeWidth: size.width,
       sizeHeight: size.height,
+      soilDepth: options.soilDepth ?? 3, // 默认土层深度
       // 支持共享 terrain params：多个 chunk 共用同一份参数对象
       terrain: options.sharedTerrainParams || {
         scale: options.terrain?.scale ?? 35, // 噪声缩放（越大越平滑）
         magnitude: options.terrain?.magnitude ?? 0.5, // 振幅
         offset: options.terrain?.offset ?? 0.5, // 基准偏移
+      },
+      // 树参数：支持共享对象（chunk 场景下由 ChunkManager 统一控制）
+      trees: options.sharedTreeParams || {
+        // 树干高度范围
+        minHeight: options.trees?.minHeight ?? 3,
+        maxHeight: options.trees?.maxHeight ?? 6,
+        // 树叶半径范围（球形/近似球形树冠）
+        minRadius: options.trees?.minRadius ?? 2,
+        maxRadius: options.trees?.maxRadius ?? 4,
+        // 密度：0..1，越大树越多（同时受噪声影响呈现“成片”）
+        frequency: options.trees?.frequency ?? 0.02,
+        // 树冠稀疏度 (0 为最密，1 为最稀)
+        canopyDensity: options.trees?.canopyDensity ?? 0.5,
       },
     }
 
@@ -69,17 +83,21 @@ export default class TerrainGenerator {
 
     // 使用同一随机序列驱动 Simplex 噪声（地形与矿产一致）
     const rng = new RNG(this.params.seed)
-    const simplexTerrain = new SimplexNoise(rng)
-    const simplexResource = new SimplexNoise(rng)
+    const simplex = new SimplexNoise(rng)
+    // const simplexResource = new SimplexNoise(rng)
+    // // 树使用独立 RNG，避免与地形/矿物噪声的调用顺序耦合（保证稳定）
+    // const simplexTrees = new SimplexNoise(rng)
 
     // 生成地形与矿产
-    this.generateTerrain(simplexTerrain)
-    const oreStats = this.generateResources(simplexResource)
+    this.generateTerrain(simplex)
+    const oreStats = this.generateResources(simplex)
+    // 生成树（必须在矿产之后，避免树被矿产覆盖）
+    const treeStats = this.generateTrees(rng)
 
     // 挂载并生成渲染数据
-    this.generateMeshes(oreStats)
+    this.generateMeshes({ ...oreStats, ...treeStats })
 
-    return { heightMap: this.heightMap, oreStats }
+    return { heightMap: this.heightMap, oreStats, treeStats }
   }
 
   /**
@@ -194,6 +212,113 @@ export default class TerrainGenerator {
   }
 
   /**
+   * 使用 3D 球形采样逻辑生成树
+   * @param {RNG} rng
+   */
+  generateTrees(rng) {
+    const { width, height } = this.container.getSize()
+    const stats = {
+      treeCount: 0,
+      treeTrunkBlocks: 0,
+      treeLeavesBlocks: 0,
+    }
+
+    const p = this.params.trees
+    if (!p)
+      return stats
+
+    const simplex = new SimplexNoise(rng)
+    const canopySize = p.maxRadius
+    const frequency = p.frequency
+
+    for (let baseX = canopySize; baseX < width - canopySize; baseX++) {
+      for (let baseZ = canopySize; baseZ < width - canopySize; baseZ++) {
+        // 使用世界坐标采样噪声，确保跨 chunk 连续
+        const n = simplex.noise(
+          this.origin.x + baseX,
+          this.origin.z + baseZ,
+        ) * 0.5 + 0.5
+
+        if (n < (1 - frequency))
+          continue
+
+        // 寻找草地（从顶向下找）
+        for (let y = height - 1; y >= 0; y--) {
+          const block = this.container.getBlock(baseX, y, baseZ)
+          if (block.id !== blocks.grass.id)
+            continue
+
+          // 找到草地，在上方一层开始
+          const baseY = y + 1
+          if (baseY >= height)
+            break
+
+          // 树干高度
+          const trunkHeight = Math.round(rng.random() * (p.maxHeight - p.minHeight)) + p.minHeight
+          const topY = baseY + trunkHeight
+
+          // 填充树干
+          for (let ty = baseY; ty <= topY; ty++) {
+            if (ty >= height)
+              break
+            this.container.setBlockId(baseX, ty, baseZ, blocks.treeTrunk.id)
+            stats.treeTrunkBlocks++
+          }
+
+          // 生成树叶（球形树冠）
+          const R = Math.round(rng.random() * (p.maxRadius - p.minRadius)) + p.minRadius
+          const R2 = R * R
+
+          for (let x = -R; x <= R; x++) {
+            for (let y = -R; y <= R; y++) {
+              for (let z = -R; z <= R; z++) {
+                if (x * x + y * y + z * z > R2)
+                  continue
+
+                const px = baseX + x
+                const py = topY + y
+                const pz = baseZ + z
+
+                // 边界检查
+                if (px < 0 || px >= width || pz < 0 || pz >= width || py < 0 || py >= height)
+                  continue
+
+                // 不覆盖非空方块
+                if (this.container.getBlock(px, py, pz).id !== blocks.empty.id)
+                  continue
+
+                if (rng.random() > (p.canopyDensity ?? 0.4)) {
+                  this.container.setBlockId(px, py, pz, blocks.treeLeaves.id)
+                  stats.treeLeavesBlocks++
+                }
+              }
+            }
+          }
+
+          stats.treeCount++
+          // 这一列已经种了树，停止向下搜寻
+          break
+        }
+      }
+    }
+
+    return stats
+  }
+
+  /**
+   * 简单整数哈希 -> [0,1)
+   * 用于从 (seed, worldX, worldZ) 派生稳定随机数（跨 chunk 一致）
+   */
+  _hash01(seed, x, z) {
+    // 32-bit xorshift 风格混合（足够用于程序化生成）
+    let h = (seed | 0) ^ (x | 0) * 374761393 ^ (z | 0) * 668265263
+    h = (h ^ (h >>> 13)) * 1274126177
+    h ^= h >>> 16
+    // 转为无符号，并归一化
+    return (h >>> 0) / 4294967296
+  }
+
+  /**
    * 创建可重复 RNG（SimplexNoise 依赖 Math.random 接口）
    */
 
@@ -205,10 +330,6 @@ export default class TerrainGenerator {
     if (!this.broadcast) {
       return
     }
-
-    // 挂载到 Experience 供其他组件读取
-    this.experience.terrainContainer = this.container
-    this.experience.terrainHeightMap = this.heightMap
 
     // 通知外部：数据已准备好
     emitter.emit('terrain:data-ready', {
@@ -301,6 +422,26 @@ export default class TerrainGenerator {
         step: 1,
       }).on('change', () => this.generate())
     })
+
+    // 树木参数
+    const treeFolder = this.debugFolder.addFolder({
+      title: '树木参数',
+      expanded: false,
+    })
+
+    treeFolder.addBinding(this.params.trees, 'frequency', {
+      label: '生成频率',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', () => this.generate())
+
+    treeFolder.addBinding(this.params.trees, 'canopyDensity', {
+      label: '树冠稀疏度',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', () => this.generate())
 
     // 重新生成按钮
     this.debugFolder.addButton({

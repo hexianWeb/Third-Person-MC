@@ -288,6 +288,27 @@ export default class TerrainRenderer {
       label: '实例总数',
       readonly: true,
     })
+
+    // 方块材质调试
+    const materialsFolder = this.debugFolder.addFolder({
+      title: '方块材质',
+      expanded: false,
+    })
+
+    materialsFolder.addBinding(blocks.treeLeaves, 'alphaTest', {
+      label: '树叶 AlphaTest',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', () => {
+      this._rebuildFromContainer()
+    })
+
+    materialsFolder.addBinding(blocks.treeLeaves, 'transparent', {
+      label: '树叶 透明',
+    }).on('change', () => {
+      this._rebuildFromContainer()
+    })
   }
 
   /**

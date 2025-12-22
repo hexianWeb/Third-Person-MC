@@ -98,10 +98,12 @@ export const blocks = {
     id: BLOCK_IDS.TREE_LEAVES,
     name: 'tree_leaves',
     visible: true,
-    // 树叶：按你的需求使用不透明方块（不做 alphaTest/transparent）
+    // 树叶：使用 alphaTest 构建镂空效果
     textureKeys: {
       all: 'treeLeaves_Texture',
     },
+    alphaTest: 0.5,
+    transparent: true,
   },
 }
 
@@ -133,12 +135,14 @@ export function createMaterials(blockType, textureItems) {
   }
 
   // 使用 custom shader 包装的标准材质，便于后续扩展
-  const makeCustomMaterial = (tex) => {
+  const makeCustomMaterial = (tex, options = {}) => {
     // 这里选择 MeshStandardMaterial 作为基底以支持 metalness/roughness
     return new CustomShaderMaterial({
       baseMaterial: THREE.MeshPhongMaterial,
       map: tex,
       flatShading: true,
+      // 合并额外的材质参数，如 alphaTest, transparent 等
+      ...options,
       // 目前不自定义顶点/片段逻辑，留空挂钩便于后续扩展
       vertexShader: /* glsl */`
         void csm_vertex_main() {
@@ -151,6 +155,13 @@ export function createMaterials(blockType, textureItems) {
     })
   }
 
+  // 提取通用的材质参数
+  const materialOptions = {}
+  if (blockType.alphaTest !== undefined)
+    materialOptions.alphaTest = blockType.alphaTest
+  if (blockType.transparent !== undefined)
+    materialOptions.transparent = blockType.transparent
+
   // 六面贴图方块：草/树干（右、左、上、下、前、后）
   if (blockType.textureKeys?.side && blockType.textureKeys?.top && blockType.textureKeys?.bottom) {
     const side = ensureTexture(blockType.textureKeys.side)
@@ -160,12 +171,12 @@ export function createMaterials(blockType, textureItems) {
       return null
 
     return [
-      makeCustomMaterial(side), // right
-      makeCustomMaterial(side), // left
-      makeCustomMaterial(top), // top
-      makeCustomMaterial(bottom), // bottom
-      makeCustomMaterial(side), // front
-      makeCustomMaterial(side), // back
+      makeCustomMaterial(side, materialOptions), // right
+      makeCustomMaterial(side, materialOptions), // left
+      makeCustomMaterial(top, materialOptions), // top
+      makeCustomMaterial(bottom, materialOptions), // bottom
+      makeCustomMaterial(side, materialOptions), // front
+      makeCustomMaterial(side, materialOptions), // back
     ]
   }
 
@@ -173,7 +184,7 @@ export function createMaterials(blockType, textureItems) {
   const mainTexture = ensureTexture(blockType.textureKeys.all)
   if (!mainTexture)
     return null
-  return makeCustomMaterial(mainTexture)
+  return makeCustomMaterial(mainTexture, materialOptions)
 }
 
 /**
