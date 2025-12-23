@@ -148,9 +148,9 @@ export default class CameraRig {
 
   /**
    * 检测玩家上方是否有方块（洞内检测）
-   * 检测玩家头顶 3x3 范围内是否有方块
+   * 逻辑：检测玩家头顶 3x3 范围内（XZ 各 ±1），在高度 2 和 3 处是否至少有 4 个方块
    * @param {THREE.Vector3} playerPos 玩家脚底位置
-   * @returns {boolean} 如果头顶有方块返回 true
+   * @returns {boolean} 如果检测到至少 4 个方块返回 true
    */
   _checkBlockAbovePlayer(playerPos) {
     const terrainManager = this.experience.terrainDataManager
@@ -159,13 +159,14 @@ export default class CameraRig {
     }
 
     // 玩家高度约为 2 个方块（胶囊体高度），检测玩家头顶上方 2-3 格的位置
-    const checkHeights = [2, 3] // 检测玩家上方 2 格和 3 格位置
+    const checkHeights = [2, 3]
     const playerBlockX = Math.floor(playerPos.x)
     const playerBlockZ = Math.floor(playerPos.z)
     const playerBlockY = Math.floor(playerPos.y)
 
     // 检测 3x3 范围（以玩家为中心，XZ 方向各 ±1）
     const checkRange = [-1, 0, 1]
+    let blockCount = 0
 
     for (const heightOffset of checkHeights) {
       const checkY = playerBlockY + heightOffset
@@ -176,9 +177,13 @@ export default class CameraRig {
           const checkZ = playerBlockZ + dz
           const block = terrainManager.getBlockWorld(checkX, checkY, checkZ)
 
-          // 如果检测到非空方块，说明头顶有方块
-          if (block && block.id !== 0) { // 0 为 empty 方块
-            return true
+          // 如果检测到非空方块，增加计数
+          if (block && block.id !== 0) {
+            blockCount++
+            // 如果累计检测到至少 4 个方块，说明处于洞内/屋檐下
+            if (blockCount >= 4) {
+              return true
+            }
           }
         }
       }
