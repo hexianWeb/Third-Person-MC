@@ -6,6 +6,9 @@
 import * as THREE from 'three'
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
 
+// 导入动画着色器
+import windVertexShader from '../../../shaders/blocks/wind.vert.glsl'
+
 // 方块 ID 常量，便于在代码中保持一致引用
 export const BLOCK_IDS = {
   EMPTY: 0,
@@ -17,6 +20,31 @@ export const BLOCK_IDS = {
   // 树（体素）
   TREE_TRUNK: 6,
   TREE_LEAVES: 7,
+}
+
+/**
+ * 动画类型默认参数
+ * 用于配置不同类型的方块动画效果
+ */
+export const ANIMATION_DEFAULTS = {
+  wind: {
+    windSpeed: 2.0, // 风速，影响摇摆频率
+    swayAmplitude: 1.2, // 摇摆幅度
+    phaseScale: 2.0, // 相位缩放，控制不同树的差异程度
+  },
+  // 预留其他动画类型
+  // pulse: { frequency: 1.0, intensity: 0.1 },
+  // wave: { speed: 1.0, amplitude: 0.05 },
+}
+
+/**
+ * 动画着色器映射表
+ * 根据 animationType 获取对应的着色器代码
+ */
+const ANIMATION_SHADERS = {
+  wind: windVertexShader,
+  // pulse: pulseVertexShader, // 预留
+  // wave: waveVertexShader,   // 预留
 }
 
 /**
@@ -104,6 +132,10 @@ export const blocks = {
     },
     alphaTest: 0.5,
     transparent: true,
+    // 动画配置：风动效果
+    animated: true,
+    animationType: 'wind',
+    animationParams: {}, // 使用 ANIMATION_DEFAULTS.wind 的默认值
   },
 }
 
@@ -134,25 +166,75 @@ export function createMaterials(blockType, textureItems) {
     return tex
   }
 
+  /**
+   * 构建动画材质的 uniforms 和着色器
+   * @param {object} blockType 方块配置
+   * @returns {{ uniforms: object, vertexShader: string } | null}
+   */
+  const buildAnimationConfig = (blockType) => {
+    if (!blockType.animated || !blockType.animationType)
+      return null
+
+    const animationType = blockType.animationType
+    const shaderCode = ANIMATION_SHADERS[animationType]
+
+    if (!shaderCode) {
+      console.warn(`Unknown animation type: ${animationType}`)
+      return null
+    }
+
+    // 合并默认参数和自定义参数
+    const defaults = ANIMATION_DEFAULTS[animationType] || {}
+    const params = { ...defaults, ...blockType.animationParams }
+
+    // 构建 uniforms 对象
+    const uniforms = {
+      uTime: { value: 0 },
+    }
+
+    // 根据动画类型添加特定 uniforms
+    if (animationType === 'wind') {
+      uniforms.uWindSpeed = { value: params.windSpeed }
+      uniforms.uSwayAmplitude = { value: params.swayAmplitude }
+      uniforms.uPhaseScale = { value: params.phaseScale }
+    }
+    // 预留其他动画类型的 uniforms 配置
+    // else if (animationType === 'pulse') { ... }
+
+    return {
+      uniforms,
+      vertexShader: shaderCode,
+    }
+  }
+
   // 使用 custom shader 包装的标准材质，便于后续扩展
   const makeCustomMaterial = (tex, options = {}) => {
-    // 这里选择 MeshStandardMaterial 作为基底以支持 metalness/roughness
-    return new CustomShaderMaterial({
+    // 获取动画配置（如果有）
+    const animConfig = buildAnimationConfig(blockType)
+
+    const materialConfig = {
       baseMaterial: THREE.MeshPhongMaterial,
       map: tex,
       flatShading: true,
       // 合并额外的材质参数，如 alphaTest, transparent 等
       ...options,
-      // 目前不自定义顶点/片段逻辑，留空挂钩便于后续扩展
-      vertexShader: /* glsl */`
-        void csm_vertex_main() {
-        }
-      `,
-      fragmentShader: /* glsl */`
-        void csm_fragment_main() {
-        }
-      `,
-    })
+    }
+
+    // 如果有动画配置，注入 uniforms 和着色器
+    if (animConfig) {
+      materialConfig.uniforms = animConfig.uniforms
+      materialConfig.vertexShader = animConfig.vertexShader
+      // fragment shader 不需要修改时可以省略
+    }
+    // 无动画的材质不需要自定义着色器，使用 CSM 默认行为即可
+
+    const material = new CustomShaderMaterial(materialConfig)
+
+    // 标记是否为动画材质，供渲染器追踪
+    material._isAnimated = !!animConfig
+    material._animationType = blockType.animationType || null
+
+    return material
   }
 
   // 提取通用的材质参数

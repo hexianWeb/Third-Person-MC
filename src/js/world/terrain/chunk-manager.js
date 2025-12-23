@@ -697,6 +697,13 @@ export default class ChunkManager {
   }
 
   /**
+   * 每帧更新：遍历所有 chunk 更新动画材质
+   */
+  update() {
+    this.chunks.forEach(chunk => chunk.update())
+  }
+
+  /**
    * 全量重新生成所有 chunk（用于生成参数变更）
    * - 重新生成 container 数据
    * - 重建 renderer 的 InstancedMesh

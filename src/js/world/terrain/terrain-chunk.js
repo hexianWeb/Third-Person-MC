@@ -72,8 +72,9 @@ export default class TerrainChunk {
     // 渲染参数由 ChunkManager 提供 sharedRenderParams，统一控制所有 chunk
     this.renderer = new TerrainRenderer(this.container, {
       sharedParams: sharedRenderParams,
-      debugEnabled: false,
+      debugEnabled: true,
       listenDataReady: false,
+      chunkName: `${this.chunkX}-${this.chunkZ}`,
     })
     this.renderer.group.position.set(this.originX, 0, this.originZ)
     // 给射线拾取/交互提供 chunk 元信息（避免依赖 parent 链条猜测）
@@ -112,6 +113,15 @@ export default class TerrainChunk {
     this.renderer._rebuildFromContainer()
     this.state = 'meshReady'
     return true
+  }
+
+  /**
+   * 每帧更新：转发到 renderer 更新动画材质
+   */
+  update() {
+    if (this.state !== 'meshReady')
+      return
+    this.renderer?.update()
   }
 
   /**

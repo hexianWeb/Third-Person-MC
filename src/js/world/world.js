@@ -113,6 +113,10 @@ export default class World {
       this.chunkManager.pumpIdleQueue()
     }
 
+    // 更新动画材质（树叶摇摆等）
+    if (this.chunkManager)
+      this.chunkManager.update()
+
     if (this.player)
       this.player.update()
     if (this.floor)

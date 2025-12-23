@@ -90,6 +90,6 @@ export default [
   {
     name: 'treeLeaves_Texture',
     type: 'texture',
-    path: 'textures/blocks/tree_leaves.png',
+    path: 'textures/blocks/azalea_leaves.png',
   },
 ]

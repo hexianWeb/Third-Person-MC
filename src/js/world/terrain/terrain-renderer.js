@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event-bus.js'
-import { blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
+import { ANIMATION_DEFAULTS, blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
 // 将 id -> 配置映射缓存，避免每次遍历 Object.values
@@ -25,6 +25,7 @@ export default class TerrainRenderer {
     this.scene = this.experience.scene
     this.resources = this.experience.resources
     this.debug = this.experience.debug
+    this.time = this.experience.time
 
     // 绑定容器（默认单例）
     this.container = container || new TerrainContainer()
@@ -36,7 +37,7 @@ export default class TerrainRenderer {
       showOresOnly: false, // 仅显示矿产
     }
     this._debugEnabled = options.debugEnabled ?? true
-    this._debugTitle = options.debugTitle || '地形渲染器'
+    this._debugTitle = options.debugTitle || `地形渲染器 ${options.chunkName || ''}`.trim()
     this._listenDataReady = options.listenDataReady ?? true
 
     this.group = new THREE.Group()
@@ -45,6 +46,7 @@ export default class TerrainRenderer {
     this._tempObject = new THREE.Object3D()
     this._tempMatrix = new THREE.Matrix4()
     this._blockMeshes = new Map()
+    this._animatedMaterials = [] // 统一追踪所有动画材质
     this._statsParams = {
       totalInstances: 0,
     }
@@ -106,6 +108,14 @@ export default class TerrainRenderer {
       const materials = createMaterials(blockType, this.resources.items)
       if (!materials)
         return
+
+      // 收集动画材质，供 update() 统一更新时间 uniform
+      const matArray = Array.isArray(materials) ? materials : [materials]
+      matArray.forEach((mat) => {
+        if (mat._isAnimated) {
+          this._animatedMaterials.push(mat)
+        }
+      })
 
       const mesh = new THREE.InstancedMesh(sharedGeometry, materials, positions.length)
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
@@ -247,7 +257,7 @@ export default class TerrainRenderer {
   debugInit() {
     this.debugFolder = this.debug.ui.addFolder({
       title: this._debugTitle,
-      expanded: true,
+      expanded: false,
     })
 
     const renderFolder = this.debugFolder.addFolder({
@@ -309,6 +319,52 @@ export default class TerrainRenderer {
     }).on('change', () => {
       this._rebuildFromContainer()
     })
+
+    // ===== 风动效果参数 =====
+    const windFolder = this.debugFolder.addFolder({
+      title: '风动效果',
+      expanded: false,
+    })
+
+    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'windSpeed', {
+      label: '风速',
+      min: 0.5,
+      max: 5,
+      step: 0.1,
+    }).on('change', () => {
+      // 实时更新所有动画材质的 windSpeed uniform
+      this._animatedMaterials.forEach((mat) => {
+        if (mat.uniforms?.uWindSpeed) {
+          mat.uniforms.uWindSpeed.value = ANIMATION_DEFAULTS.wind.windSpeed
+        }
+      })
+    })
+
+    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'swayAmplitude', {
+      label: '摇摆幅度',
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }).on('change', () => {
+      this._animatedMaterials.forEach((mat) => {
+        if (mat.uniforms?.uSwayAmplitude) {
+          mat.uniforms.uSwayAmplitude.value = ANIMATION_DEFAULTS.wind.swayAmplitude
+        }
+      })
+    })
+
+    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'phaseScale', {
+      label: '相位差',
+      min: 0.1,
+      max: 3,
+      step: 0.1,
+    }).on('change', () => {
+      this._animatedMaterials.forEach((mat) => {
+        if (mat.uniforms?.uPhaseScale) {
+          mat.uniforms.uPhaseScale.value = ANIMATION_DEFAULTS.wind.phaseScale
+        }
+      })
+    })
   }
 
   /**
@@ -317,6 +373,23 @@ export default class TerrainRenderer {
   _updateStatsPanel() {
     if (this._statsBinding?.refresh)
       this._statsBinding.refresh()
+  }
+
+  /**
+   * 每帧更新：更新所有动画材质的时间 uniform
+   */
+  update() {
+    if (this._animatedMaterials.length === 0)
+      return
+
+    // 将毫秒转换为秒
+    const elapsed = this.time.elapsed * 0.001
+
+    this._animatedMaterials.forEach((mat) => {
+      if (mat.uniforms?.uTime) {
+        mat.uniforms.uTime.value = elapsed
+      }
+    })
   }
 
   /**
@@ -334,6 +407,8 @@ export default class TerrainRenderer {
       mesh.dispose?.()
     })
     this._blockMeshes.clear()
+    // 清理动画材质追踪列表
+    this._animatedMaterials = []
   }
 
   /**
