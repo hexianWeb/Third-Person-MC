@@ -50,6 +50,8 @@ export default class ChunkManager {
     // 所有 chunk 共用的水面参数（统一由一个 panel 控制）
     this.waterParams = options.water || {
       waterOffset: 8, // 水面层数（默认 8）
+      flowSpeedX: 0.5, // 水流 X 方向速度
+      flowSpeedY: 0.00, // 水流 Y 方向速度
     }
 
     this._statsParams = {
@@ -550,6 +552,20 @@ export default class ChunkManager {
       this._refreshAllWater()
     })
 
+    waterFolder.addBinding(this.waterParams, 'flowSpeedX', {
+      label: '水流速度 X',
+      min: -0.2,
+      max: 0.2,
+      step: 0.001,
+    })
+
+    waterFolder.addBinding(this.waterParams, 'flowSpeedY', {
+      label: '水流速度 Y',
+      min: -0.2,
+      max: 0.2,
+      step: 0.001,
+    })
+
     // ===== 树参数（全局）=====
     const treeFolder = genFolder.addFolder({
       title: '树参数（全局）',
@@ -734,6 +750,14 @@ export default class ChunkManager {
    * 每帧更新：遍历所有 chunk 更新动画材质
    */
   update() {
+    // 更新水面贴图偏移，实现流动效果
+    const waterTexture = this.experience.resources.items.water_Texture
+    if (waterTexture) {
+      const delta = this.experience.time.delta * 0.001 // 转换为秒
+      waterTexture.offset.x += this.waterParams.flowSpeedX * delta
+      waterTexture.offset.y += this.waterParams.flowSpeedY * delta
+    }
+
     this.chunks.forEach(chunk => chunk.update())
   }
 

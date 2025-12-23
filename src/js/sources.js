@@ -92,4 +92,9 @@ export default [
     type: 'texture',
     path: 'textures/blocks/azalea_leaves.png',
   },
+  {
+    name: 'water_Texture',
+    type: 'texture',
+    path: 'textures/blocks/water.png',
+  },
 ]

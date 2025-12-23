@@ -6,6 +6,7 @@
  * - 管理水面 mesh（水平平面，不参与射线拾取）
  */
 import * as THREE from 'three'
+import Experience from '../../experience.js'
 import TerrainContainer from './terrain-container.js'
 import TerrainGenerator from './terrain-generator.js'
 import TerrainRenderer from './terrain-renderer.js'
@@ -46,6 +47,10 @@ export default class TerrainChunk {
     this._sharedWaterParams = sharedWaterParams
     this._chunkWidth = chunkWidth
     this._chunkHeight = chunkHeight
+
+    // 获取 Experience 单例实例
+    this.experience = new Experience()
+    this.resources = this.experience.resources
 
     // ===== chunk 基础信息 =====
     this.chunkX = chunkX
@@ -122,10 +127,20 @@ export default class TerrainChunk {
     const geometry = new THREE.PlaneGeometry(this._chunkWidth, this._chunkWidth)
     geometry.rotateX(-Math.PI / 2)
 
+    // 获取并设置水面贴图
+    const waterTexture = this.resources.items.water_Texture
+    if (waterTexture) {
+      waterTexture.wrapS = THREE.RepeatWrapping
+      waterTexture.wrapT = THREE.RepeatWrapping
+      // 一单位长度 repeat 一次
+      waterTexture.repeat.set(this._chunkWidth, this._chunkWidth)
+    }
+
     const material = new THREE.MeshLambertMaterial({
+      map: waterTexture,
       color: WATER_COLOR,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.7,
       side: THREE.DoubleSide,
     })
 

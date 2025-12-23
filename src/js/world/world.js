@@ -22,26 +22,24 @@ export default class World {
     if (this.floor.grid)
       this.floor.grid.visible = false
 
-    // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====
-    this.chunkManager = new ChunkManager({
-      chunkWidth: 64,
-      chunkHeight: 32,
-      viewDistance: 1, // 3×3
-      seed: 1265,
-      terrain: {
-        // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
-        scale: 35,
-        magnitude: 6, // 振幅 (0-32)
-        // offset 为“高度偏移（方块层数）”
-        offset: 12,
-      },
-    })
-
-    // 暴露给 Experience，供玩家碰撞/贴地等使用
-    this.experience.terrainDataManager = this.chunkManager
-
-    // Environment
     this.resources.on('ready', () => {
+      // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====
+      this.chunkManager = new ChunkManager({
+        chunkWidth: 64,
+        chunkHeight: 32,
+        viewDistance: 1, // 3×3
+        seed: 1265,
+        terrain: {
+          // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
+          scale: 35,
+          magnitude: 6, // 振幅 (0-32)
+          // offset 为“高度偏移（方块层数）”
+          offset: 12,
+        },
+      })
+
+      // 暴露给 Experience，供玩家碰撞/贴地等使用
+      this.experience.terrainDataManager = this.chunkManager
       // ===== 创建并渲染初始 3×3 chunks =====
       this.chunkManager.initInitialGrid()
 
