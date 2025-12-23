@@ -20,6 +20,8 @@ export const BLOCK_IDS = {
   // 树（体素）
   TREE_TRUNK: 6,
   TREE_LEAVES: 7,
+  // 沙子（水下地表层）
+  SAND: 8,
 }
 
 /**
@@ -29,7 +31,7 @@ export const BLOCK_IDS = {
 export const ANIMATION_DEFAULTS = {
   wind: {
     windSpeed: 2.0, // 风速，影响摇摆频率
-    swayAmplitude: 1.2, // 摇摆幅度
+    swayAmplitude: 0.7, // 摇摆幅度
     phaseScale: 2.0, // 相位缩放，控制不同树的差异程度
   },
   // 预留其他动画类型
@@ -136,6 +138,15 @@ export const blocks = {
     animated: true,
     animationType: 'wind',
     animationParams: {}, // 使用 ANIMATION_DEFAULTS.wind 的默认值
+  },
+  // ===== 沙子（水下地表层）=====
+  sand: {
+    id: BLOCK_IDS.SAND,
+    name: 'sand',
+    visible: true,
+    textureKeys: {
+      all: 'sand', // 对应 sources.js 中的 'sand' 纹理
+    },
   },
 }
 

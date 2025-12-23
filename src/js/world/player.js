@@ -400,7 +400,7 @@ export default class Player {
     respawnFolder.addBinding(this.config.respawn, 'thresholdY', {
       label: '阈值Y',
       min: -100,
-      max: 10,
+      max: 100,
       step: 1,
     })
     respawnFolder.addBinding(this.config.respawn.position, 'x', { label: '重生X', min: -200, max: 200, step: 1 })

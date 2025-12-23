@@ -3,10 +3,18 @@
  * - 每个 chunk 拥有独立的 TerrainContainer
  * - 使用 TerrainGenerator 的世界偏移(originX/originZ)生成连贯地形数据
  * - 使用 TerrainRenderer 生成 InstancedMesh，并把 renderer.group 偏移到 chunk 原点
+ * - 管理水面 mesh（水平平面，不参与射线拾取）
  */
+import * as THREE from 'three'
 import TerrainContainer from './terrain-container.js'
 import TerrainGenerator from './terrain-generator.js'
 import TerrainRenderer from './terrain-renderer.js'
+
+// 水面颜色（偏蓝绿色）
+const WATER_COLOR = 0x3399CC
+
+// 水面防 z-fighting 的偏移量
+const WATER_Y_EPSILON = 2.4
 
 export default class TerrainChunk {
   /**
@@ -30,7 +38,14 @@ export default class TerrainChunk {
       sharedRenderParams,
       sharedTerrainParams,
       sharedTreeParams,
+      sharedWaterParams,
     } = options
+
+    // 保存共享参数引用，供刷新时使用
+    this._sharedRenderParams = sharedRenderParams
+    this._sharedWaterParams = sharedWaterParams
+    this._chunkWidth = chunkWidth
+    this._chunkHeight = chunkHeight
 
     // ===== chunk 基础信息 =====
     this.chunkX = chunkX
@@ -59,6 +74,7 @@ export default class TerrainChunk {
       terrain,
       sharedTerrainParams,
       sharedTreeParams,
+      sharedWaterParams,
       originX: this.originX,
       originZ: this.originZ,
       // Step2：延迟生成，交由 ChunkManager 的 idle 队列调度
@@ -85,7 +101,80 @@ export default class TerrainChunk {
 
     // 初始缩放同步一次（避免 scale 改动后新 chunk 不一致）
     this.renderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)
+
+    // ===== 水面 mesh =====
+    this.waterMesh = null
+    this._createWaterMesh()
   }
+
+  // #region 水面相关方法
+
+  /**
+   * 创建水面 mesh（PlaneGeometry + MeshLambertMaterial）
+   * - 覆写 raycast 使其不参与射线拾取
+   * - 挂到 renderer.group 下，自动继承 chunk 世界偏移与缩放
+   */
+  _createWaterMesh() {
+    const waterOffset = this._sharedWaterParams?.waterOffset ?? 8
+    const heightScale = this._sharedRenderParams?.heightScale ?? 1
+
+    // PlaneGeometry 默认在 XY 平面，旋转到 XZ 平面（水平）
+    const geometry = new THREE.PlaneGeometry(this._chunkWidth, this._chunkWidth)
+    geometry.rotateX(-Math.PI / 2)
+
+    const material = new THREE.MeshLambertMaterial({
+      color: WATER_COLOR,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+    })
+
+    this.waterMesh = new THREE.Mesh(geometry, material)
+
+    this.waterMesh.renderOrder = 3
+    // 覆写 raycast，使其永远不命中
+    this.waterMesh.raycast = () => {}
+    // 标记用于调试/识别
+    this.waterMesh.userData.noRaycast = true
+    this.waterMesh.userData.isWater = true
+
+    // 设置位置：中心对齐 chunk 中心，高度为 waterOffset * heightScale
+    this.waterMesh.position.set(
+      this._chunkWidth / 2,
+      waterOffset * heightScale + WATER_Y_EPSILON,
+      this._chunkWidth / 2,
+    )
+
+    this.renderer.group.add(this.waterMesh)
+  }
+
+  /**
+   * 刷新水面高度（当 waterOffset 或 heightScale 变化时调用）
+   */
+  refreshWater() {
+    if (!this.waterMesh)
+      return
+
+    const waterOffset = this._sharedWaterParams?.waterOffset ?? 8
+    const heightScale = this._sharedRenderParams?.heightScale ?? 1
+
+    this.waterMesh.position.y = waterOffset * heightScale + WATER_Y_EPSILON
+  }
+
+  /**
+   * 释放水面 mesh 资源
+   */
+  _disposeWaterMesh() {
+    if (!this.waterMesh)
+      return
+
+    this.waterMesh.geometry?.dispose()
+    this.waterMesh.material?.dispose()
+    this.renderer?.group?.remove(this.waterMesh)
+    this.waterMesh = null
+  }
+
+  // #endregion
 
   /**
    * 生成数据（可被重复调用，但会幂等保护）
@@ -133,6 +222,9 @@ export default class TerrainChunk {
       return
 
     this.state = 'disposed'
+
+    // 释放水面 mesh
+    this._disposeWaterMesh()
 
     if (this.renderer) {
       this.renderer.dispose()

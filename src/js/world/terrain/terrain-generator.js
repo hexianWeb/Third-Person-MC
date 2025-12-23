@@ -43,7 +43,7 @@ export default class TerrainGenerator {
       // 支持共享 terrain params：多个 chunk 共用同一份参数对象
       terrain: options.sharedTerrainParams || {
         scale: options.terrain?.scale ?? 35, // 噪声缩放（越大越平滑）
-        magnitude: options.terrain?.magnitude ?? 0.5, // 振幅
+        magnitude: options.terrain?.magnitude ?? 16, // 振幅 (0-32)
         offset: options.terrain?.offset ?? 0.5, // 基准偏移
       },
       // 树参数：支持共享对象（chunk 场景下由 ChunkManager 统一控制）
@@ -54,10 +54,15 @@ export default class TerrainGenerator {
         // 树叶半径范围（球形/近似球形树冠）
         minRadius: options.trees?.minRadius ?? 2,
         maxRadius: options.trees?.maxRadius ?? 4,
-        // 密度：0..1，越大树越多（同时受噪声影响呈现“成片”）
+        // 密度：0..1，越大树越多（同时受噪声影响呈现"成片"）
         frequency: options.trees?.frequency ?? 0.02,
         // 树冠稀疏度 (0 为最密，1 为最稀)
         canopyDensity: options.trees?.canopyDensity ?? 0.5,
+      },
+      // 水参数：支持共享对象（chunk 场景下由 ChunkManager 统一控制）
+      water: options.sharedWaterParams || {
+        // 水面层数（水平面高度 = waterOffset * heightScale）
+        waterOffset: options.water?.waterOffset ?? 8,
       },
     }
 
@@ -84,9 +89,6 @@ export default class TerrainGenerator {
     // 使用同一随机序列驱动 Simplex 噪声（地形与矿产一致）
     const rng = new RNG(this.params.seed)
     const simplex = new SimplexNoise(rng)
-    // const simplexResource = new SimplexNoise(rng)
-    // // 树使用独立 RNG，避免与地形/矿物噪声的调用顺序耦合（保证稳定）
-    // const simplexTrees = new SimplexNoise(rng)
 
     // 生成地形与矿产
     this.generateTerrain(simplex)
@@ -121,6 +123,9 @@ export default class TerrainGenerator {
     const { width, height } = this.container.getSize()
     const { scale, magnitude, offset } = this.params.terrain
 
+    // 将 magnitude (0-32) 重映射到 (0-1)
+    const normalizedMagnitude = magnitude / 32
+
     this.heightMap = []
 
     for (let z = 0; z < width; z++) {
@@ -133,7 +138,7 @@ export default class TerrainGenerator {
         const n = simplex.noise(wx / scale, wz / scale)
         // offset 改为“高度偏移（方块层数）”，通过 offset/height 转为 0..1 的基准，再叠加噪声扰动
         // 这样更直观：offset=16 表示地形基准在第 16 层附近
-        const scaled = (offset / height) + magnitude * n
+        const scaled = (offset / height) + normalizedMagnitude * n
         let columnHeight = Math.floor(height * scaled)
         columnHeight = Math.max(0, Math.min(columnHeight, height - 1))
 
@@ -148,25 +153,45 @@ export default class TerrainGenerator {
 
   /**
    * 填充一列方块：草顶 / 土层 / 石层
+   * 水下 & 水岸区域统一使用沙子
    */
   _fillColumnLayers(x, z, surfaceHeight) {
     const soilDepth = Math.max(1, this.params.soilDepth)
     const stoneStart = Math.max(0, surfaceHeight - soilDepth)
 
+    const waterOffset = this.params.water?.waterOffset ?? 8
+    const shoreDepth = this.params.water?.shoreDepth ?? 2
+
+    // 判定区域
+    const isUnderwater = surfaceHeight <= waterOffset
+    const isShore
+    = surfaceHeight > waterOffset
+      && surfaceHeight <= waterOffset + shoreDepth
+
     for (let y = 0; y <= surfaceHeight; y++) {
-      // 顶层草
+    // 顶层
       if (y === surfaceHeight) {
-        this.container.setBlockId(x, y, z, blocks.grass.id)
+        if (isUnderwater || isShore) {
+          this.container.setBlockId(x, y, z, blocks.sand.id)
+        }
+        else {
+          this.container.setBlockId(x, y, z, blocks.grass.id)
+        }
         continue
       }
 
-      // 土层（靠近表面的几层）
+      // 表层（土 / 沙）
       if (y > stoneStart) {
-        this.container.setBlockId(x, y, z, blocks.dirt.id)
+        if (isUnderwater || isShore) {
+          this.container.setBlockId(x, y, z, blocks.sand.id)
+        }
+        else {
+          this.container.setBlockId(x, y, z, blocks.dirt.id)
+        }
         continue
       }
 
-      // 更深处为石头
+      // 深层石头
       this.container.setBlockId(x, y, z, blocks.stone.id)
     }
   }
@@ -381,8 +406,8 @@ export default class TerrainGenerator {
     terrainFolder.addBinding(this.params.terrain, 'magnitude', {
       label: '地形振幅',
       min: 0,
-      max: 1,
-      step: 0.01,
+      max: 32,
+      step: 1,
     }).on('change', () => this.generate())
 
     terrainFolder.addBinding(this.params.terrain, 'offset', {

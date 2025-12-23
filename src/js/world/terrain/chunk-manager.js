@@ -25,7 +25,7 @@ export default class ChunkManager {
     // 注意：terrain 参数会直接影响噪声采样，变更后必须全量 regenerate
     this.terrainParams = options.terrain || {
       scale: 35,
-      magnitude: 0.17,
+      magnitude: 5, // 振幅 (0-32)
       // offset 为“高度偏移（方块层数）”，默认放在中间偏下更像平原
       offset: 16,
     }
@@ -45,6 +45,11 @@ export default class ChunkManager {
       scale: 1,
       heightScale: 1,
       showOresOnly: false,
+    }
+
+    // 所有 chunk 共用的水面参数（统一由一个 panel 控制）
+    this.waterParams = options.water || {
+      waterOffset: 8, // 水面层数（默认 8）
     }
 
     this._statsParams = {
@@ -270,6 +275,7 @@ export default class ChunkManager {
       sharedTerrainParams: this.terrainParams,
       sharedRenderParams: this.renderParams,
       sharedTreeParams: this.treeParams,
+      sharedWaterParams: this.waterParams,
     })
 
     this.chunks.set(key, chunk)
@@ -462,6 +468,8 @@ export default class ChunkManager {
     }).on('change', () => {
       // 需要重建所有 chunk 的 instanceMatrix
       this._rebuildAllChunks()
+      // 同步刷新所有 chunk 的水面高度
+      this._refreshAllWater()
     })
 
     renderFolder.addBinding(this.renderParams, 'showOresOnly', {
@@ -513,17 +521,34 @@ export default class ChunkManager {
     genFolder.addBinding(this.terrainParams, 'magnitude', {
       label: '地形振幅',
       min: 0,
-      max: 1,
-      step: 0.01,
+      max: 32,
+      step: 1,
     }).on('change', () => this._regenerateAllChunks())
 
     genFolder.addBinding(this.terrainParams, 'offset', {
       label: '地形偏移',
-      // offset 为“高度偏移（方块层数）”
+      // offset 为"高度偏移（方块层数）"
       min: 0,
       max: this.chunkHeight,
       step: 1,
     }).on('change', () => this._regenerateAllChunks())
+
+    // ===== 水面参数（全局）=====
+    const waterFolder = genFolder.addFolder({
+      title: '水面参数（全局）',
+      expanded: true,
+    })
+
+    waterFolder.addBinding(this.waterParams, 'waterOffset', {
+      label: '水面层数',
+      min: 0,
+      max: this.chunkHeight - 1,
+      step: 1,
+    }).on('change', () => {
+      // 水面高度变化需要：重新生成沙滩 + 刷新水面位置
+      this._regenerateAllChunks()
+      this._refreshAllWater()
+    })
 
     // ===== 树参数（全局）=====
     const treeFolder = genFolder.addFolder({
@@ -681,6 +706,15 @@ export default class ChunkManager {
   }
 
   /**
+   * 刷新所有 chunk 的水面高度（用于 waterOffset 或 heightScale 变更）
+   */
+  _refreshAllWater() {
+    this.chunks.forEach((chunk) => {
+      chunk.refreshWater?.()
+    })
+  }
+
+  /**
    * 更新全局统计信息
    */
   _updateStats() {
@@ -729,6 +763,9 @@ export default class ChunkManager {
       else
         chunk.renderer._rebuildFromContainer()
       chunk.renderer.group.scale.setScalar(this.renderParams.scale)
+
+      // 刷新水面高度
+      chunk.refreshWater?.()
     })
 
     this._updateStats()
