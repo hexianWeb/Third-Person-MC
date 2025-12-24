@@ -1,5 +1,9 @@
 import * as THREE from 'three'
 import CameraRig from '../camera/camera-rig.js'
+import {
+  CHUNK_BASIC_CONFIG,
+  TERRAIN_PARAMS,
+} from '../config/chunk-config.js'
 import Experience from '../experience.js'
 import BlockRaycaster from '../interaction/block-raycaster.js'
 import BlockSelectionHelper from '../interaction/block-selection-helper.js'
@@ -25,16 +29,16 @@ export default class World {
     this.resources.on('ready', () => {
       // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====
       this.chunkManager = new ChunkManager({
-        chunkWidth: 64,
-        chunkHeight: 32,
-        viewDistance: 1, // 3×3
-        seed: 1265,
+        chunkWidth: CHUNK_BASIC_CONFIG.chunkWidth,
+        chunkHeight: CHUNK_BASIC_CONFIG.chunkHeight,
+        viewDistance: CHUNK_BASIC_CONFIG.viewDistance, // 3×3
+        seed: 1265, // 使用自定义 seed，覆盖默认值
         terrain: {
           // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
-          scale: 35,
-          magnitude: 6, // 振幅 (0-32)
-          // offset 为“高度偏移（方块层数）”
-          offset: 12,
+          scale: TERRAIN_PARAMS.scale,
+          magnitude: 0, // 振幅 (0-32)，覆盖默认值
+          // offset 为"高度偏移（方块层数）"
+          offset: 12, // 覆盖默认值
         },
       })
 

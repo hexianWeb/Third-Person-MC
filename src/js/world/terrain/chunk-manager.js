@@ -1,7 +1,14 @@
 /**
- * ChunkManager：管理多个 TerrainChunk，并提供“世界坐标 -> 方块查询”接口
+ * ChunkManager：管理多个 TerrainChunk，并提供"世界坐标 -> 方块查询"接口
  * Step1：仅实现固定 3×3 初始化与 getBlockWorld（用于玩家碰撞/贴地）
  */
+import {
+  CHUNK_BASIC_CONFIG,
+  RENDER_PARAMS,
+  TERRAIN_PARAMS,
+  TREE_PARAMS,
+  WATER_PARAMS,
+} from '../../config/chunk-config.js'
 import Experience from '../../experience.js'
 import IdleQueue from '../../utils/idle-queue.js'
 import { blocks, resources } from './blocks-config.js'
@@ -13,46 +20,25 @@ export default class ChunkManager {
     this.experience = new Experience()
     this.debug = this.experience.debug
 
-    this.chunkWidth = options.chunkWidth ?? 64
-    this.chunkHeight = options.chunkHeight ?? 32
-    // viewDistance：加载半径（d）
-    this.viewDistance = options.viewDistance ?? 1
-    // 卸载滞后：卸载半径 = viewDistance + unloadPadding（默认 1，减少边界抖动）
-    this.unloadPadding = options.unloadPadding ?? 1
-    this.seed = options.seed ?? 1337
+    // 基础配置：使用配置常量作为默认值，options 可覆盖
+    this.chunkWidth = options.chunkWidth ?? CHUNK_BASIC_CONFIG.chunkWidth
+    this.chunkHeight = options.chunkHeight ?? CHUNK_BASIC_CONFIG.chunkHeight
+    this.viewDistance = options.viewDistance ?? CHUNK_BASIC_CONFIG.viewDistance
+    this.unloadPadding = options.unloadPadding ?? CHUNK_BASIC_CONFIG.unloadPadding
+    this.seed = options.seed ?? CHUNK_BASIC_CONFIG.seed
 
     // 所有 chunk 共用的地形生成参数（统一由一个 panel 控制）
     // 注意：terrain 参数会直接影响噪声采样，变更后必须全量 regenerate
-    this.terrainParams = options.terrain || {
-      scale: 35,
-      magnitude: 5, // 振幅 (0-32)
-      // offset 为“高度偏移（方块层数）”，默认放在中间偏下更像平原
-      offset: 16,
-    }
+    this.terrainParams = options.terrain || { ...TERRAIN_PARAMS }
 
     // 所有 chunk 共用的树生成参数（统一由一个 panel 控制）
-    this.treeParams = options.trees || {
-      minHeight: 3,
-      maxHeight: 6,
-      minRadius: 2,
-      maxRadius: 4,
-      // 密度：0..1，越大树越多
-      frequency: 0.02,
-    }
+    this.treeParams = options.trees || { ...TREE_PARAMS }
 
     // 所有 chunk 共用的渲染参数（统一由一个 panel 控制）
-    this.renderParams = {
-      scale: 1,
-      heightScale: 1,
-      showOresOnly: false,
-    }
+    this.renderParams = { ...RENDER_PARAMS }
 
     // 所有 chunk 共用的水面参数（统一由一个 panel 控制）
-    this.waterParams = options.water || {
-      waterOffset: 8, // 水面层数（默认 8）
-      flowSpeedX: 0.5, // 水流 X 方向速度
-      flowSpeedY: 0.00, // 水流 Y 方向速度
-    }
+    this.waterParams = options.water || { ...WATER_PARAMS }
 
     this._statsParams = {
       totalInstances: 0,
@@ -72,13 +58,13 @@ export default class ChunkManager {
 
     // 持久化管理器
     this.persistence = new TerrainPersistence({
-      worldName: options.worldName || 'default',
-      useIndexedDB: options.useIndexedDB ?? false,
+      worldName: options.worldName || CHUNK_BASIC_CONFIG.worldName,
+      useIndexedDB: options.useIndexedDB ?? CHUNK_BASIC_CONFIG.useIndexedDB,
     })
 
     // 自动保存：节流，避免频繁写入
     this._saveTimeout = null
-    this._autoSaveDelay = 2000 // 2秒后保存
+    this._autoSaveDelay = CHUNK_BASIC_CONFIG.autoSaveDelay
 
     if (this.debug.active) {
       this.debugInit()
@@ -699,6 +685,7 @@ export default class ChunkManager {
     })
 
     persistFolder.addButton({ title: '🗑️ 清除所有修改' }).on('click', () => {
+      // eslint-disable-next-line no-alert
       if (confirm('确定要清除所有玩家修改吗？此操作不可恢复！')) {
         this.persistence.modifications.clear()
         this.persistence.save()

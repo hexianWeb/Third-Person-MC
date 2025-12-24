@@ -40,8 +40,10 @@ export class PlayerMovementController {
     this.group.rotation.y = this.facingAngle // 初始化 group 旋轉
     this.scene.add(this.group)
 
-    // 初始化重生点监听：地形数据准备后更新到地形中心顶面
-    this._setupRespawnPoint()
+    setTimeout(() => {
+      // 初始化重生点监听：地形数据准备后更新到地形中心顶面
+      this._setupRespawnPoint()
+    }, 1000)
   }
 
   /**
