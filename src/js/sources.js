@@ -67,16 +67,37 @@ export default [
     type: 'texture',
     path: 'textures/blocks/iron_ore.png',
   },
+  // ===== 沙子（体素方块）=====
   {
     name: 'sand',
     type: 'texture',
     path: 'textures/blocks/sand.png',
   },
+  // ===== 红沙（体素方块）=====
+  {
+    name: 'red_sand',
+    type: 'texture',
+    path: 'textures/blocks/red_sand.png',
+  },
+  // ==== 陶瓦 黄色（体素方块）=====
+  {
+    name: 'terracotta_yellow',
+    type: 'texture',
+    path: 'textures/blocks/terracotta_yellow.png',
+  },
+  // ==== 陶瓦 红色（体素方块）=====
+  {
+    name: 'terracotta_red',
+    type: 'texture',
+    path: 'textures/blocks/terracotta_red.png',
+  },
+  // ===== 雪块（体素方块）=====
   {
     name: 'snow',
     type: 'texture',
     path: 'textures/blocks/snow.png',
   },
+  // ===== 树（体素方块）=====
   {
     name: 'treeTrunk_TopTexture',
     type: 'texture',
@@ -92,9 +113,66 @@ export default [
     type: 'texture',
     path: 'textures/blocks/azalea_leaves.png',
   },
+  // ===== 白桦树（体素方块）=====
+  {
+    name: 'birchTrunk_TopTexture',
+    type: 'texture',
+    path: 'textures/blocks/birch_trunk_Top.png',
+  },
+  {
+    name: 'birchTrunk_SideTexture',
+    type: 'texture',
+    path: 'textures/blocks/birch_trunk_Side.png',
+  },
+  {
+    name: 'birchLeaves_Texture',
+    type: 'texture',
+    path: 'textures/blocks/azalea_leaves.png',
+  },
+  // ===== 樱花树（体素方块）=====
+  {
+    name: 'cherryTrunk_TopTexture',
+    type: 'texture',
+    path: 'textures/blocks/cherry_trunk_Top.png',
+  },
+  {
+    name: 'cherryTrunk_SideTexture',
+    type: 'texture',
+    path: 'textures/blocks/cherry_trunk_Side.png',
+  },
+  {
+    name: 'cherryLeaves_Texture',
+    type: 'texture',
+    path: 'textures/blocks/cherry_leaves.png',
+  },
+  // ===== 仙人掌（体素方块）=====
+  {
+    name: 'cactusTrunk_TopTexture',
+    type: 'texture',
+    path: 'textures/blocks/cactus_trunk_Top.png',
+  },
+  {
+    name: 'cactusTrunk_SideTexture',
+    type: 'texture',
+    path: 'textures/blocks/cactus_trunk_Side.png',
+  },
+  // ===== 水（体素方块）=====
   {
     name: 'water_Texture',
     type: 'texture',
     path: 'textures/blocks/water.png',
   },
+  // ===== 冰（体素方块）=====
+  {
+    name: 'ice_Texture',
+    type: 'texture',
+    path: 'textures/blocks/ice.png',
+  },
+  // ===== 压缩冰（体素方块）=====
+  {
+    name: 'packedIce_Texture',
+    type: 'texture',
+    path: 'textures/blocks/ice_packed.png',
+  },
+
 ]
