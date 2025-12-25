@@ -22,6 +22,25 @@ export const BLOCK_IDS = {
   TREE_LEAVES: 7,
   // 沙子（水下地表层）
   SAND: 8,
+  // 白桦木相关
+  BIRCH_TRUNK: 9,
+  BIRCH_LEAVES: 10,
+  // 樱花树相关
+  CHERRY_TRUNK: 11,
+  CHERRY_LEAVES: 12,
+  // 沙漠相关
+  CACTUS: 13,
+  // deadBush (ID: 14) 暂不实现（纹理缺失）
+  // 恶地相关
+  TERRACOTTA: 15,
+  RED_SAND: 16,
+  // 冻洋相关
+  ICE: 17,
+  PACKED_ICE: 18,
+  SNOW: 19,
+  // snowLayer (ID: 20) 暂不实现（纹理缺失）
+  // 其他
+  GRAVEL: 21,
 }
 
 /**
@@ -148,6 +167,119 @@ export const blocks = {
       all: 'sand', // 对应 sources.js 中的 'sand' 纹理
     },
   },
+  // ===== 白桦树（体素方块）=====
+  birchTrunk: {
+    id: BLOCK_IDS.BIRCH_TRUNK,
+    name: 'birch_trunk',
+    visible: true,
+    textureKeys: {
+      top: 'birchTrunk_TopTexture',
+      bottom: 'birchTrunk_TopTexture',
+      side: 'birchTrunk_SideTexture',
+    },
+  },
+  birchLeaves: {
+    id: BLOCK_IDS.BIRCH_LEAVES,
+    name: 'birch_leaves',
+    visible: true,
+    textureKeys: {
+      all: 'birchLeaves_Texture',
+    },
+    alphaTest: 0.5,
+    transparent: true,
+    // 动画配置：风动效果
+    animated: true,
+    animationType: 'wind',
+    animationParams: {},
+  },
+  // ===== 樱花树（体素方块）=====
+  cherryTrunk: {
+    id: BLOCK_IDS.CHERRY_TRUNK,
+    name: 'cherry_trunk',
+    visible: true,
+    textureKeys: {
+      top: 'cherryTrunk_TopTexture',
+      bottom: 'cherryTrunk_TopTexture',
+      side: 'cherryTrunk_SideTexture',
+    },
+  },
+  cherryLeaves: {
+    id: BLOCK_IDS.CHERRY_LEAVES,
+    name: 'cherry_leaves',
+    visible: true,
+    textureKeys: {
+      all: 'cherryLeaves_Texture',
+    },
+    alphaTest: 0.5,
+    transparent: true,
+    // 动画配置：风动效果
+    animated: true,
+    animationType: 'wind',
+    animationParams: {},
+  },
+  // ===== 仙人掌（体素方块）=====
+  cactus: {
+    id: BLOCK_IDS.CACTUS,
+    name: 'cactus',
+    visible: true,
+    textureKeys: {
+      top: 'cactusTrunk_TopTexture',
+      bottom: 'cactusTrunk_TopTexture',
+      side: 'cactusTrunk_SideTexture',
+    },
+  },
+  // ===== 恶地相关（体素方块）=====
+  terracotta: {
+    id: BLOCK_IDS.TERRACOTTA,
+    name: 'terracotta',
+    visible: true,
+    // 使用黄色陶瓦作为默认纹理，后续可根据需要扩展为随机选择
+    textureKeys: {
+      all: 'terracotta_yellow',
+    },
+  },
+  redSand: {
+    id: BLOCK_IDS.RED_SAND,
+    name: 'red_sand',
+    visible: true,
+    textureKeys: {
+      all: 'red_sand',
+    },
+  },
+  // ===== 冻洋相关（体素方块）=====
+  ice: {
+    id: BLOCK_IDS.ICE,
+    name: 'ice',
+    visible: true,
+    textureKeys: {
+      all: 'ice_Texture',
+    },
+  },
+  packedIce: {
+    id: BLOCK_IDS.PACKED_ICE,
+    name: 'packed_ice',
+    visible: true,
+    textureKeys: {
+      all: 'packedIce_Texture',
+    },
+  },
+  snow: {
+    id: BLOCK_IDS.SNOW,
+    name: 'snow',
+    visible: true,
+    textureKeys: {
+      all: 'snow',
+    },
+  },
+  // ===== 沙砾（体素方块）=====
+  gravel: {
+    id: BLOCK_IDS.GRAVEL,
+    name: 'gravel',
+    visible: true,
+    textureKeys: {
+      all: 'gravel_Texture',
+    },
+  },
 }
 
 // 需要通过 3D 噪声生成的矿产列表
@@ -180,7 +312,7 @@ export function createMaterials(blockType, textureItems) {
   /**
    * 构建动画材质的 uniforms 和着色器
    * @param {object} blockType 方块配置
-   * @returns {{ uniforms: object, vertexShader: string } | null}
+   * @returns {{ uniforms: object, vertexShader: string } | null} 动画配置对象，无动画时返回 null
    */
   const buildAnimationConfig = (blockType) => {
     if (!blockType.animated || !blockType.animationType)

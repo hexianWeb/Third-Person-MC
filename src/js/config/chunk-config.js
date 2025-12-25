@@ -1,7 +1,7 @@
 // Chunk 基础配置参数
 export const CHUNK_BASIC_CONFIG = {
   chunkWidth: 64, // Chunk 宽度（方块数），决定每个 chunk 在 X/Z 方向上的大小
-  chunkHeight: 32, // Chunk 高度（方块数），决定每个 chunk 在 Y 方向上的大小
+  chunkHeight: 64, // Chunk 高度（方块数），决定每个 chunk 在 Y 方向上的大小
   viewDistance: 1, // 加载半径（chunk 数量），玩家周围加载的 chunk 范围，值为 1 表示 3×3 网格
   unloadPadding: 1, // 卸载滞后（chunk 数量），卸载半径 = viewDistance + unloadPadding，用于减少边界抖动
   seed: 1337, // 随机种子，用于地形生成的随机数序列，相同 seed 生成相同地形
@@ -12,9 +12,9 @@ export const CHUNK_BASIC_CONFIG = {
 
 // 地形生成参数（影响噪声采样，变更后需全量重新生成）
 export const TERRAIN_PARAMS = {
-  scale: 35, // 地形噪声缩放，控制地形的细节程度（范围: 5-120），值越大地形越平滑
-  magnitude: 5, // 地形振幅（方块层数），控制地形起伏的高度（范围: 0-32），值越大起伏越明显
-  offset: 16, // 高度偏移（方块层数），地形基准高度（范围: 0-chunkHeight），默认放在中间偏下更像平原
+  scale: 256, // 地形噪声缩放，控制地形的细节程度（范围: 5-120），值越大地形越平滑
+  magnitude: 6, // 地形振幅（方块层数），控制地形起伏的高度（范围: 0-32），值越大起伏越明显
+  offset: 8, // 高度偏移（方块层数），地形基准高度（范围: 0-chunkHeight），默认放在中间偏下更像平原
 }
 
 // 树生成参数（影响树木生成，变更后需全量重新生成）
@@ -35,8 +35,7 @@ export const RENDER_PARAMS = {
 
 // 水面参数（影响水面效果）
 export const WATER_PARAMS = {
-  waterOffset: 8, // 水面层数（方块高度，范围: 0-chunkHeight-1），水面的 Y 坐标位置
+  waterOffset: 3, // 水面层数（方块高度，范围: 0-chunkHeight-1），水面的 Y 坐标位置
   flowSpeedX: 0.5, // 水流 X 方向速度（范围: -0.2-0.2），控制水面纹理在 X 方向的流动速度
   flowSpeedY: 0.00, // 水流 Y 方向速度（范围: -0.2-0.2），控制水面纹理在 Y 方向的流动速度
 }
-

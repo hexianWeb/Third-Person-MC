@@ -125,7 +125,7 @@ export default class TerrainPersistence {
       const data = this.serialize()
       const key = `terrain_mods_${this.worldName}`
       localStorage.setItem(key, JSON.stringify(data))
-      console.log(`[TerrainPersistence] 已保存 ${this.modifications.size} 个 chunk 的修改`)
+      console.warn(`[TerrainPersistence] 已保存 ${this.modifications.size} 个 chunk 的修改`)
     }
     catch (error) {
       console.error('[TerrainPersistence] localStorage 保存失败:', error)
@@ -139,7 +139,7 @@ export default class TerrainPersistence {
       if (json) {
         const data = JSON.parse(json)
         this.deserialize(data)
-        console.log(`[TerrainPersistence] 已加载 ${this.modifications.size} 个 chunk 的修改`)
+        console.warn(`[TerrainPersistence] 已加载 ${this.modifications.size} 个 chunk 的修改`)
       }
     }
     catch (error) {

@@ -174,5 +174,10 @@ export default [
     type: 'texture',
     path: 'textures/blocks/ice_packed.png',
   },
-
+  // ===== 砂砾 （体素方块）=====
+  {
+    name: 'gravel_Texture',
+    type: 'texture',
+    path: 'textures/blocks/gravel.png',
+  },
 ]

@@ -253,7 +253,7 @@ export class PlayerMovementController {
       return
 
     // 顶面为方块中心 +0.5，再抬高一点防止穿模
-    const surfaceY = topY + 0.5
+    const surfaceY = topY + 10.5
     const respawnPos = { x: centerX, y: surfaceY + 0.05, z: centerZ }
 
     this.config.respawn.position = respawnPos

@@ -36,9 +36,9 @@ export default class World {
         terrain: {
           // 与 TerrainGenerator 默认保持一致，可后续接 Debug/Pinia
           scale: TERRAIN_PARAMS.scale,
-          magnitude: 0, // 振幅 (0-32)，覆盖默认值
+          magnitude: TERRAIN_PARAMS.magnitude, // 振幅 (0-32)，覆盖默认值
           // offset 为"高度偏移（方块层数）"
-          offset: 12, // 覆盖默认值
+          offset: TERRAIN_PARAMS.offset, // 覆盖默认值
         },
       })
 

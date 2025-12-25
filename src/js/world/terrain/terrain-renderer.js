@@ -36,7 +36,7 @@ export default class TerrainRenderer {
       heightScale: 1, // 高度缩放，仅作用于 y 轴
       showOresOnly: false, // 仅显示矿产
     }
-    this._debugEnabled = options.debugEnabled ?? true
+    this._debugEnabled = options.debugEnabled ?? false
     this._debugTitle = options.debugTitle || `地形渲染器 ${options.chunkName || ''}`.trim()
     this._listenDataReady = options.listenDataReady ?? true
 
