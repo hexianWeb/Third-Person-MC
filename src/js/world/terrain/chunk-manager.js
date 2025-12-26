@@ -40,6 +40,12 @@ export default class ChunkManager {
     // 所有 chunk 共用的水面参数（统一由一个 panel 控制）
     this.waterParams = options.water || { ...WATER_PARAMS }
 
+    // 所有 chunk 共用的群系参数（统一由一个 panel 控制）
+    this.biomeParams = {
+      biomeSource: options.biomeSource ?? 'panel', // 'panel' | 'generator'
+      forcedBiome: options.forcedBiome ?? 'plains', // 强制群系（调试模式）
+    }
+
     this._statsParams = {
       totalInstances: 0,
       chunkCount: 0,
@@ -264,6 +270,8 @@ export default class ChunkManager {
       sharedRenderParams: this.renderParams,
       sharedTreeParams: this.treeParams,
       sharedWaterParams: this.waterParams,
+      biomeSource: this.biomeParams.biomeSource,
+      forcedBiome: this.biomeParams.forcedBiome,
     })
 
     this.chunks.set(key, chunk)
@@ -502,7 +510,7 @@ export default class ChunkManager {
     genFolder.addBinding(this.terrainParams, 'scale', {
       label: '地形缩放',
       min: 5,
-      max: 120,
+      max: 300,
       step: 1,
     }).on('change', () => this._regenerateAllChunks())
 
@@ -519,6 +527,33 @@ export default class ChunkManager {
       min: 0,
       max: this.chunkHeight,
       step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    // ===== fBm 参数（全局）=====
+    const fbmFolder = genFolder.addFolder({
+      title: 'fBm 参数（全局）',
+      expanded: true,
+    })
+
+    fbmFolder.addBinding(this.terrainParams.fbm, 'octaves', {
+      label: '八度数',
+      min: 1,
+      max: 8,
+      step: 1,
+    }).on('change', () => this._regenerateAllChunks())
+
+    fbmFolder.addBinding(this.terrainParams.fbm, 'gain', {
+      label: '振幅衰减',
+      min: 0.1,
+      max: 1.0,
+      step: 0.05,
+    }).on('change', () => this._regenerateAllChunks())
+
+    fbmFolder.addBinding(this.terrainParams.fbm, 'lacunarity', {
+      label: '频率倍增',
+      min: 1.5,
+      max: 3.0,
+      step: 0.1,
     }).on('change', () => this._regenerateAllChunks())
 
     // ===== 水面参数（全局）=====
@@ -624,6 +659,41 @@ export default class ChunkManager {
     }).on('click', () => {
       this.seed = Math.floor(Math.random() * 1e9)
       this._regenerateAllChunks()
+    })
+
+    // ===== 群系参数（全局）=====
+    const biomeFolder = this.debugFolder.addFolder({
+      title: '群系系统（全局）',
+      expanded: true,
+    })
+
+    biomeFolder.addBinding(this.biomeParams, 'biomeSource', {
+      label: '群系来源',
+      options: {
+        调试面板: 'panel',
+        自动生成: 'generator',
+      },
+    }).on('change', () => {
+      // 切换模式时重新生成所有 chunk
+      this._regenerateAllChunks()
+    })
+
+    biomeFolder.addBinding(this.biomeParams, 'forcedBiome', {
+      label: '强制群系',
+      options: {
+        平原: 'plains',
+        森林: 'forest',
+        白桦木林: 'birchForest',
+        樱花树林: 'cherryForest',
+        沙漠: 'desert',
+        恶地: 'badlands',
+        冻洋: 'frozenOcean',
+      },
+    }).on('change', () => {
+      // 仅在 panel 模式下重新生成
+      if (this.biomeParams.biomeSource === 'panel') {
+        this._regenerateAllChunks()
+      }
     })
 
     // ===== Streaming 参数 =====
@@ -760,6 +830,10 @@ export default class ChunkManager {
 
       // 同步 seed（确保所有 chunk 使用一致的随机序列）
       chunk.generator.params.seed = this.seed
+
+      // 同步群系参数
+      chunk.generator.params.biomeSource = this.biomeParams.biomeSource
+      chunk.generator.params.forcedBiome = this.biomeParams.forcedBiome
 
       // 重新生成数据（不会广播 terrain:data-ready）
       // 若 chunk 还未生成，先走延迟状态机

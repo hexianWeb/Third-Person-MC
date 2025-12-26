@@ -25,7 +25,9 @@ export default class TerrainChunk {
    *  chunkWidth:number,
    *  chunkHeight:number,
    *  seed:number,
-   *  terrain?: { scale?:number, magnitude?:number, offset?:number }
+   *  terrain?: { scale?:number, magnitude?:number, offset?:number, rockExpose?: { maxDepth?:number, slopeThreshold?:number } },
+   *  biomeSource?: string,
+   *  forcedBiome?: string,
    * }} options
    */
   constructor(options) {
@@ -40,6 +42,8 @@ export default class TerrainChunk {
       sharedTerrainParams,
       sharedTreeParams,
       sharedWaterParams,
+      biomeSource,
+      forcedBiome,
     } = options
 
     // 保存共享参数引用，供刷新时使用
@@ -82,6 +86,8 @@ export default class TerrainChunk {
       sharedWaterParams,
       originX: this.originX,
       originZ: this.originZ,
+      biomeSource,
+      forcedBiome,
       // Step2：延迟生成，交由 ChunkManager 的 idle 队列调度
       autoGenerate: false,
       broadcast: false,
@@ -93,7 +99,7 @@ export default class TerrainChunk {
     // 渲染参数由 ChunkManager 提供 sharedRenderParams，统一控制所有 chunk
     this.renderer = new TerrainRenderer(this.container, {
       sharedParams: sharedRenderParams,
-      debugEnabled: true,
+      debugEnabled: false,
       listenDataReady: false,
       chunkName: `${this.chunkX}-${this.chunkZ}`,
     })

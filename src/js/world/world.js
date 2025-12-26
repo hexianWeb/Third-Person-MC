@@ -39,6 +39,8 @@ export default class World {
           magnitude: TERRAIN_PARAMS.magnitude, // 振幅 (0-32)，覆盖默认值
           // offset 为"高度偏移（方块层数）"
           offset: TERRAIN_PARAMS.offset, // 覆盖默认值
+          rockExpose: TERRAIN_PARAMS.rockExpose, // 覆盖默认值
+          fbm: TERRAIN_PARAMS.fbm, // 覆盖默认值
         },
       })
 

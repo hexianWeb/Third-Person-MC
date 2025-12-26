@@ -31,7 +31,7 @@ export const BIOMES = {
     // 植被配置
     vegetation: {
       enabled: true, // 是否生成植被
-      density: 0.015, // 基础密度（0-1），极少量树
+      density: 0.03, // 基础密度（0-1），极少量树
       types: [
         {
           type: 'oak', // 植被类型标识
@@ -89,7 +89,7 @@ export const BIOMES = {
     },
     vegetation: {
       enabled: true,
-      density: 0.06,
+      density: 0.10,
       types: [
         {
           type: 'birch',
