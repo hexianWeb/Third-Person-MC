@@ -81,6 +81,7 @@ export default class TerrainGenerator {
 
     // 内部状态
     this.heightMap = []
+    this.plantData = [] // 植物数据 [{x, y, z, plantId}]
 
     // 群系相关参数（STEP 1: 调试面板模式）
     this.params.biomeSource = options.biomeSource ?? 'panel' // 'panel' | 'generator'
@@ -112,11 +113,13 @@ export default class TerrainGenerator {
     const oreStats = this.generateResources(simplex)
     // 生成树（必须在矿产之后，避免树被矿产覆盖）
     const treeStats = this.generateTrees(rng)
+    // 生成植物（草、花等）
+    const plantStats = this.generatePlants(rng)
 
     // 挂载并生成渲染数据
-    this.generateMeshes({ ...oreStats, ...treeStats })
+    this.generateMeshes({ ...oreStats, ...treeStats, ...plantStats })
 
-    return { heightMap: this.heightMap, oreStats, treeStats }
+    return { heightMap: this.heightMap, plantData: this.plantData, oreStats, treeStats, plantStats }
   }
 
   /**
@@ -527,6 +530,94 @@ export default class TerrainGenerator {
   }
 
   /**
+   * 生成植物（草、花等）：由 biome 的 flora 配置驱动
+   * @param {RNG} rng - 随机数生成器
+   * @returns {object} 统计信息
+   */
+  generatePlants(rng) {
+    const { width } = this.container.getSize()
+    this.plantData = []
+    const stats = { plantCount: 0 }
+
+    for (let x = 0; x < width; x++) {
+      for (let z = 0; z < width; z++) {
+        // 获取当前位置的群系
+        const biomeId = this._getBiomeAt(x, z)
+        const biomeConfig = getBiomeConfig(biomeId)
+
+        if (!biomeConfig)
+          continue
+
+        // 检查群系是否允许生成植物
+        const floraConfig = biomeConfig.flora
+        if (!floraConfig?.enabled)
+          continue
+
+        // 检查地表方块是否允许
+        const surfaceHeight = this.heightMap[z]?.[x]
+        if (surfaceHeight === undefined)
+          continue
+
+        const surfaceBlock = this.container.getBlock(x, surfaceHeight, z)
+        if (!floraConfig.allowedSurface.includes(surfaceBlock.id))
+          continue
+
+        // 检查地表上方是否为空
+        const plantY = surfaceHeight + 1
+        const aboveBlock = this.container.getBlock(x, plantY, z)
+        if (aboveBlock && aboveBlock.id !== blocks.empty.id)
+          continue
+
+        // 根据密度决定是否生成
+        if (rng.random() > floraConfig.density)
+          continue
+
+        // 选择植物类型（根据权重）
+        const floraType = this._selectFloraType(floraConfig.types, rng)
+        if (!floraType)
+          continue
+
+        // 记录植物数据
+        this.plantData.push({
+          x,
+          y: plantY,
+          z,
+          plantId: floraType.plantId,
+        })
+        stats.plantCount++
+      }
+    }
+
+    return stats
+  }
+
+  /**
+   * 根据权重选择植物类型
+   * @param {Array} types - 植物类型列表
+   * @param {RNG} rng - 随机数生成器
+   * @returns {object|null}
+   */
+  _selectFloraType(types, rng) {
+    if (!types || types.length === 0)
+      return null
+
+    const totalWeight = types.reduce((sum, t) => sum + t.weight, 0)
+    if (totalWeight === 0)
+      return null
+
+    const rand = rng.random() * totalWeight
+    let cumWeight = 0
+
+    for (const type of types) {
+      cumWeight += type.weight
+      if (rand < cumWeight)
+        return type
+    }
+
+    return types[0]
+  }
+
+  /**
    * 简单整数哈希 -> [0,1)
    * 用于从 (seed, worldX, worldZ) 派生稳定随机数（跨 chunk 一致）
    */
@@ -556,6 +647,7 @@ export default class TerrainGenerator {
     emitter.emit('terrain:data-ready', {
       container: this.container,
       heightMap: this.heightMap,
+      plantData: this.plantData, // 植物数据
       size: this.container.getSize(),
       seed: this.params.seed,
       oreStats,

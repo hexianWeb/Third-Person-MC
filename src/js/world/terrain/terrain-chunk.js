@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three'
 import Experience from '../../experience.js'
+import PlantRenderer from './plant-renderer.js'
 import TerrainContainer from './terrain-container.js'
 import TerrainGenerator from './terrain-generator.js'
 import TerrainRenderer from './terrain-renderer.js'
@@ -112,6 +113,13 @@ export default class TerrainChunk {
 
     // 初始缩放同步一次（避免 scale 改动后新 chunk 不一致）
     this.renderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)
+
+    // ===== 植物渲染器 =====
+    this.plantRenderer = new PlantRenderer(this.container, {
+      sharedParams: sharedRenderParams,
+    })
+    this.plantRenderer.group.position.set(this.originX, 0, this.originZ)
+    this.plantRenderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)
 
     // ===== 水面 mesh =====
     this.waterMesh = null
@@ -221,6 +229,8 @@ export default class TerrainChunk {
       return false
 
     this.renderer._rebuildFromContainer()
+    // 构建植物 mesh
+    this.plantRenderer.build(this.generator.plantData)
     this.state = 'meshReady'
     return true
   }
@@ -232,6 +242,7 @@ export default class TerrainChunk {
     if (this.state !== 'meshReady')
       return
     this.renderer?.update()
+    this.plantRenderer?.update()
   }
 
   /**
@@ -246,6 +257,11 @@ export default class TerrainChunk {
 
     // 释放水面 mesh
     this._disposeWaterMesh()
+
+    if (this.plantRenderer) {
+      this.plantRenderer.dispose()
+      this.plantRenderer = null
+    }
 
     if (this.renderer) {
       this.renderer.dispose()

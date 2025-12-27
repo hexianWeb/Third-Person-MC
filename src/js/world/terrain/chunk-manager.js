@@ -243,7 +243,20 @@ export default class ChunkManager {
     const z = Math.floor(worldZ)
     for (let y = this.chunkHeight - 1; y >= 0; y--) {
       const block = this.getBlockWorld(x, y, z)
-      if (block?.id && block.id !== blocks.empty.id && block.id !== blocks.treeTrunk.id && block.id !== blocks.treeLeaves.id) {
+
+      if (!block?.id || block.id === blocks.empty.id)
+        continue
+
+      // 排除所有树干和树叶类型
+      const isTree
+        = block.id === blocks.treeTrunk.id
+          || block.id === blocks.treeLeaves.id
+          || block.id === blocks.birchTrunk.id
+          || block.id === blocks.birchLeaves.id
+          || block.id === blocks.cherryTrunk.id
+          || block.id === blocks.cherryLeaves.id
+
+      if (!isTree) {
         return y
       }
     }
@@ -772,8 +785,11 @@ export default class ChunkManager {
   _rebuildAllChunks() {
     this.chunks.forEach((chunk) => {
       chunk.renderer?._rebuildFromContainer?.()
+      // Rebuild plants
+      chunk.plantRenderer?.build?.(chunk.generator?.plantData)
       // 保险起见同步一次 scale
       chunk.renderer?.group?.scale?.setScalar?.(this.renderParams.scale)
+      chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
     })
     this._updateStats()
   }
@@ -843,11 +859,16 @@ export default class ChunkManager {
         chunk.generator.generate()
 
       // 重建 mesh
-      if (chunk.state === 'dataReady')
+      if (chunk.state === 'dataReady') {
         chunk.buildMesh()
-      else
+      }
+      else {
         chunk.renderer._rebuildFromContainer()
+        // Rebuild plants
+        chunk.plantRenderer?.build?.(chunk.generator?.plantData)
+      }
       chunk.renderer.group.scale.setScalar(this.renderParams.scale)
+      chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
 
       // 刷新水面高度
       chunk.refreshWater?.()
