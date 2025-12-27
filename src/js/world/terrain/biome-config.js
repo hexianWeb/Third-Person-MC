@@ -3,7 +3,7 @@
  * 纯配置数据，不包含生成算法
  * biome 不负责"怎么生成"，只负责"长什么样"
  */
-import { BLOCK_IDS } from './blocks-config.js'
+import { BLOCK_IDS, PLANT_IDS } from './blocks-config.js'
 
 /**
  * 群系配置结构
@@ -44,6 +44,18 @@ export const BIOMES = {
       ],
       allowedSurface: [BLOCK_IDS.GRASS], // 允许生成的地表方块类型
     },
+    // 植物配置（草、花等）
+    flora: {
+      enabled: true,
+      density: 0.15,
+      types: [
+        { type: 'shortGrass', plantId: PLANT_IDS.SHORT_GRASS, weight: 5 },
+        { type: 'dandelion', plantId: PLANT_IDS.DANDELION, weight: 1 },
+        { type: 'poppy', plantId: PLANT_IDS.POPPY, weight: 1 },
+        { type: 'oxeyeDaisy', plantId: PLANT_IDS.OXEYE_DAISY, weight: 1 },
+      ],
+      allowedSurface: [BLOCK_IDS.GRASS],
+    },
   },
 
   FOREST: {
@@ -70,6 +82,20 @@ export const BIOMES = {
           heightRange: [4, 6],
           canopyRadius: [3, 4], // 树冠大
         },
+      ],
+      allowedSurface: [BLOCK_IDS.GRASS],
+    },
+    // 植物配置
+    flora: {
+      enabled: true,
+      density: 0.20, // 森林植物密度更高
+      types: [
+        { type: 'shortGrass', plantId: PLANT_IDS.SHORT_GRASS, weight: 6 },
+        { type: 'dandelion', plantId: PLANT_IDS.DANDELION, weight: 1 },
+        { type: 'poppy', plantId: PLANT_IDS.POPPY, weight: 1 },
+        { type: 'oxeyeDaisy', plantId: PLANT_IDS.OXEYE_DAISY, weight: 1 },
+        { type: 'allium', plantId: PLANT_IDS.ALLIUM, weight: 1 },
+        { type: 'pinkTulip', plantId: PLANT_IDS.PINK_TULIP, weight: 1 },
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
     },
@@ -102,6 +128,18 @@ export const BIOMES = {
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
     },
+    // 植物配置
+    flora: {
+      enabled: true,
+      density: 0.15,
+      types: [
+        { type: 'shortGrass', plantId: PLANT_IDS.SHORT_GRASS, weight: 5 },
+        { type: 'dandelion', plantId: PLANT_IDS.DANDELION, weight: 1 },
+        { type: 'poppy', plantId: PLANT_IDS.POPPY, weight: 1 },
+        { type: 'oxeyeDaisy', plantId: PLANT_IDS.OXEYE_DAISY, weight: 1 },
+      ],
+      allowedSurface: [BLOCK_IDS.GRASS],
+    },
   },
 
   CHERRY_FOREST: {
@@ -131,6 +169,18 @@ export const BIOMES = {
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
     },
+    // 植物配置（樱花林以粉色花朵为主）
+    flora: {
+      enabled: true,
+      density: 0.18, // 增加密度以凸显樱花林的粉色花海效果
+      types: [
+        { type: 'shortGrass', plantId: PLANT_IDS.SHORT_GRASS, weight: 3 },
+        { type: 'cactusFlower', plantId: PLANT_IDS.CACTUS_FLOWER, weight: 6 }, // 粉色花朵大量出现
+        { type: 'pinkTulip', plantId: PLANT_IDS.PINK_TULIP, weight: 3 }, // 粉色郁金香配合
+        { type: 'allium', plantId: PLANT_IDS.ALLIUM, weight: 1 },
+      ],
+      allowedSurface: [BLOCK_IDS.GRASS],
+    },
   },
 
   DESERT: {
@@ -147,16 +197,25 @@ export const BIOMES = {
     },
     vegetation: {
       enabled: true,
-      density: 0.005, // 极少量
+      density: 0.15,
       types: [
         {
           type: 'cactus',
           weight: 1,
           trunkBlock: BLOCK_IDS.CACTUS,
           leavesBlock: null, // 仙人掌无树叶
-          heightRange: [2, 4], // 高度较小
+          heightRange: [1, 3], // 高度较小
           canopyRadius: [0, 0], // 无树冠
         },
+      ],
+      allowedSurface: [BLOCK_IDS.SAND],
+    },
+    flora: {
+      enabled: true,
+      density: 0.03, // 稀疏
+      types: [
+        { type: 'deadBush', plantId: PLANT_IDS.DEAD_BUSH, weight: 1 },
+        { type: 'shortDryGrass', plantId: PLANT_IDS.SHORT_DRY_GRASS, weight: 2 },
       ],
       allowedSurface: [BLOCK_IDS.SAND],
     },
@@ -181,14 +240,24 @@ export const BIOMES = {
       types: [],
       allowedSurface: [],
     },
+    // 恶地植物配置（枯草和死灌木）
+    flora: {
+      enabled: true,
+      density: 0.05, // 稀疏
+      types: [
+        { type: 'deadBush', plantId: PLANT_IDS.DEAD_BUSH, weight: 1 },
+        { type: 'shortDryGrass', plantId: PLANT_IDS.SHORT_DRY_GRASS, weight: 2 },
+      ],
+      allowedSurface: [BLOCK_IDS.TERRACOTTA, BLOCK_IDS.RED_SAND],
+    },
   },
 
   FROZEN_OCEAN: {
     id: 'frozenOcean',
     name: '冻洋',
     terrainParams: {
-      heightOffset: 8, // 很低，大部分在水下
-      heightMagnitude: 6, // 很小，海底较平坦
+      heightOffset: 4, // 很低，大部分在水下
+      heightMagnitude: 2, // 很小，海底较平坦
     },
     blocks: {
       // 冻洋使用冰或压缩冰（随机选择，这里先使用冰）

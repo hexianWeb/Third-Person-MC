@@ -43,6 +43,19 @@ export const BLOCK_IDS = {
   GRAVEL: 21,
 }
 
+// 植物 ID 常量（使用 200+ 区间与方块区分）
+export const PLANT_IDS = {
+  DEAD_BUSH: 200,
+  SHORT_DRY_GRASS: 201,
+  SHORT_GRASS: 202,
+  DANDELION: 203,
+  POPPY: 204,
+  OXEYE_DAISY: 205,
+  ALLIUM: 206,
+  CACTUS_FLOWER: 207,
+  PINK_TULIP: 208,
+}
+
 /**
  * 动画类型默认参数
  * 用于配置不同类型的方块动画效果
@@ -416,3 +429,308 @@ export function createMaterials(blockType, textureItems) {
  * 共享几何体，避免重复创建
  */
 export const sharedGeometry = new THREE.BoxGeometry(1, 1, 1)
+
+/**
+ * 植物配置
+ * 植物使用 X 形交叉平面几何体渲染
+ */
+export const plants = {
+  deadBush: {
+    id: PLANT_IDS.DEAD_BUSH,
+    name: 'dead_bush',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'deadBush_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: false,
+  },
+  shortDryGrass: {
+    id: PLANT_IDS.SHORT_DRY_GRASS,
+    name: 'short_dry_grass',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'shortDryGrass_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.3 },
+  },
+  shortGrass: {
+    id: PLANT_IDS.SHORT_GRASS,
+    name: 'short_grass',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'shortGrass_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.3 },
+    mixColor: 0x5B8731, // grass green color for grayscale texture
+  },
+  dandelion: {
+    id: PLANT_IDS.DANDELION,
+    name: 'dandelion',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'dandelion_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+  poppy: {
+    id: PLANT_IDS.POPPY,
+    name: 'poppy',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'poppy_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+  oxeyeDaisy: {
+    id: PLANT_IDS.OXEYE_DAISY,
+    name: 'oxeye_daisy',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'oxeyeDaisy_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+  allium: {
+    id: PLANT_IDS.ALLIUM,
+    name: 'allium',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'allium_plant_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+  cactusFlower: {
+    id: PLANT_IDS.CACTUS_FLOWER,
+    name: 'cactus_flower',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'cactus_flower_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+  pinkTulip: {
+    id: PLANT_IDS.PINK_TULIP,
+    name: 'pink_tulip',
+    visible: true,
+    isPlant: true,
+    textureKeys: { all: 'pink_tulip_Texture' },
+    alphaTest: 0.5,
+    transparent: true,
+    animated: true,
+    animationType: 'wind',
+    animationParams: { swayAmplitude: 0.2 },
+  },
+}
+
+// 植物 ID -> 配置映射
+export const PLANT_BY_ID = Object.values(plants).reduce((map, item) => {
+  map[item.id] = item
+  return map
+}, {})
+
+/**
+ * X 形交叉平面几何体（共享，供植物渲染使用）
+ * 两个相互垂直的 1x1 平面，呈 X 形
+ */
+export const sharedCrossPlaneGeometry = (() => {
+  const geometry = new THREE.BufferGeometry()
+
+  // 两个对角交叉的平面 (不需要背面三角形，使用 DoubleSide 材质)
+  // prettier-ignore
+  const vertices = new Float32Array([
+    // 平面1: 沿对角线 (-0.5,-0.5) 到 (0.5,0.5)
+    -0.5,
+    0,
+    -0.5,
+    0.5,
+    0,
+    0.5,
+    0.5,
+    1,
+    0.5,
+    -0.5,
+    0,
+    -0.5,
+    0.5,
+    1,
+    0.5,
+    -0.5,
+    1,
+    -0.5,
+    // 平面2: 沿对角线 (-0.5,0.5) 到 (0.5,-0.5)
+    -0.5,
+    0,
+    0.5,
+    0.5,
+    0,
+    -0.5,
+    0.5,
+    1,
+    -0.5,
+    -0.5,
+    0,
+    0.5,
+    0.5,
+    1,
+    -0.5,
+    -0.5,
+    1,
+    0.5,
+  ])
+
+  // prettier-ignore
+  const uvs = new Float32Array([
+    // 平面1
+    0,
+    0,
+    1,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    1,
+    // 平面2
+    0,
+    0,
+    1,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    1,
+  ])
+
+  // 使用向上的垂直法线，这样无论从哪个方向看都能正确接收光照
+  // 这是 Minecraft 风格植物的常用做法
+  // prettier-ignore
+  const normals = new Float32Array([
+    // 平面1 - 全部使用 (0, 1, 0) 向上法线
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // 平面2 - 全部使用 (0, 1, 0) 向上法线
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+  ])
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+
+  return geometry
+})()
+
+/**
+ * 创建植物材质
+ * @param {object} plantType 植物配置
+ * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
+ * @returns {THREE.Material|null} 生成的材质，缺失纹理时返回 null
+ */
+export function createPlantMaterials(plantType, textureItems) {
+  if (!plantType.visible)
+    return null
+
+  const tex = textureItems[plantType.textureKeys.all]
+  if (!tex)
+    return null
+
+  tex.magFilter = THREE.NearestFilter
+  tex.minFilter = THREE.NearestFilter
+  tex.colorSpace = THREE.SRGBColorSpace
+
+  const materialConfig = {
+    baseMaterial: THREE.MeshLambertMaterial,
+    map: tex,
+    flatShading: true,
+    alphaTest: plantType.alphaTest ?? 0.5,
+    transparent: plantType.transparent ?? true,
+    side: THREE.DoubleSide,
+    // 草类使用绿色自发光，其余使用白色
+    emissive: new THREE.Color(plantType.mixColor !== undefined ? '#83CE54' : '#FFFFFF'),
+    emissiveMap: tex,
+    emissiveIntensity: 0.6,
+    // 草类使用指定的混色，其余使用白色
+    color: new THREE.Color(plantType.mixColor !== undefined ? plantType.mixColor : '#FFFFFF'),
+  }
+
+  // 动画配置
+  if (plantType.animated && plantType.animationType) {
+    const defaults = ANIMATION_DEFAULTS[plantType.animationType] || {}
+    const params = { ...defaults, ...plantType.animationParams }
+
+    materialConfig.uniforms = {
+      uTime: { value: 0 },
+      uWindSpeed: { value: params.windSpeed ?? 2.0 },
+      uSwayAmplitude: { value: params.swayAmplitude ?? 0.3 },
+      uPhaseScale: { value: params.phaseScale ?? 2.0 },
+    }
+    materialConfig.vertexShader = windVertexShader
+  }
+
+  const material = new CustomShaderMaterial(materialConfig)
+  material._isAnimated = !!plantType.animated
+  material._animationType = plantType.animationType || null
+
+  return material
+}

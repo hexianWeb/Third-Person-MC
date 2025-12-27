@@ -180,4 +180,51 @@ export default [
     type: 'texture',
     path: 'textures/blocks/gravel.png',
   },
+
+  // 植物
+  {
+    name: 'deadBush_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/dead_bush.png',
+  },
+  {
+    name: 'shortDryGrass_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/short_dry_grass.png',
+  },
+  {
+    name: 'shortGrass_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/short_grass.png',
+  },
+  {
+    name: 'dandelion_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/dandelion.png',
+  },
+  {
+    name: 'poppy_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/poppy.png',
+  },
+  {
+    name: 'oxeyeDaisy_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/oxeye_daisy.png',
+  },
+  {
+    name: 'allium_plant_Texture',
+    type: 'texture',
+    path: 'textures/blocks/allium.png',
+  },
+  {
+    name: 'cactus_flower_Texture',
+    type: 'texture',
+    path: 'textures/blocks/cactus_flower.png',
+  },
+  {
+    name: 'pink_tulip_Texture',
+    type: 'texture',
+    path: 'textures/blocks/pink_tulip.png',
+  },
 ]
