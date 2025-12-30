@@ -81,7 +81,7 @@ export default class PlantRenderer {
       )
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
       mesh.castShadow = false
-      mesh.receiveShadow = true
+      mesh.receiveShadow = false
 
       // 辅助信息
       mesh.userData.plantId = plantId

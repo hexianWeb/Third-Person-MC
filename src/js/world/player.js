@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { PLAYER_CONFIG } from '../config/player-config.js'
+import { SHADOW_QUALITY } from '../config/shadow-config.js'
 import Experience from '../experience.js'
 import emitter from '../utils/event-bus.js'
 import {
@@ -57,6 +58,10 @@ export default class Player {
 
     this.setupInputListeners()
 
+    // Shadow quality event listener
+    this._handleShadowQuality = this._handleShadowQuality.bind(this)
+    emitter.on('shadow:quality-changed', this._handleShadowQuality)
+
     // Debug
     if (this.debug.active) {
       this.debugFolder = this.debug.ui.addFolder({
@@ -65,6 +70,19 @@ export default class Player {
       })
       this.debugInit()
     }
+  }
+
+  /**
+   * Handle shadow quality change event
+   * @param {{ quality: string }} payload - Shadow quality payload
+   */
+  _handleShadowQuality(payload) {
+    const shouldCastShadow = payload.quality !== SHADOW_QUALITY.LOW
+    this.model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = shouldCastShadow
+      }
+    })
   }
 
   setModel() {

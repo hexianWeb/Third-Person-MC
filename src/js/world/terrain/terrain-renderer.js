@@ -3,6 +3,7 @@
  * 读取 TerrainContainer 中的数据，按方块 id 分组实例化，支持遮挡剔除
  */
 import * as THREE from 'three'
+import { SHADOW_CONFIG, SHADOW_QUALITY, TREE_BLOCK_IDS } from '../../config/shadow-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event-bus.js'
 import { ANIMATION_DEFAULTS, blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
@@ -61,12 +62,50 @@ export default class TerrainRenderer {
       emitter.on('terrain:data-ready', this._handleDataReady)
     }
 
+    // Shadow quality event listener
+    this._currentShadowQuality = SHADOW_CONFIG.quality
+    this._handleShadowQuality = this._handleShadowQuality.bind(this)
+    emitter.on('shadow:quality-changed', this._handleShadowQuality)
+
     // 若容器已有数据，立即绘制
     this._rebuildFromContainer()
 
     if (this.debug.active && this._debugEnabled) {
       this.debugInit()
     }
+  }
+
+  /**
+   * Handle shadow quality change event
+   * @param {{ quality: string }} payload - Shadow quality payload
+   */
+  _handleShadowQuality(payload) {
+    this._currentShadowQuality = payload.quality
+    this._applyShadowSettings()
+  }
+
+  /**
+   * Apply shadow settings to all block meshes based on current quality
+   * - LOW: All blocks castShadow = false
+   * - MEDIUM: Only tree blocks castShadow = true
+   * - HIGH: All blocks castShadow = true
+   */
+  _applyShadowSettings() {
+    const quality = this._currentShadowQuality
+
+    this._blockMeshes.forEach((mesh, blockId) => {
+      if (quality === SHADOW_QUALITY.LOW) {
+        mesh.castShadow = false
+      }
+      else if (quality === SHADOW_QUALITY.MEDIUM) {
+        // Only tree blocks cast shadows
+        mesh.castShadow = TREE_BLOCK_IDS.has(blockId)
+      }
+      else {
+        // HIGH quality: all blocks cast shadows
+        mesh.castShadow = true
+      }
+    })
   }
 
   /**
@@ -123,7 +162,7 @@ export default class TerrainRenderer {
       const mesh = new THREE.InstancedMesh(sharedGeometry, materials, positions.length)
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
 
-      mesh.castShadow = true
+      // castShadow is dynamically controlled by _applyShadowSettings based on quality
       mesh.receiveShadow = true
 
       // 射线拾取辅助信息：记录当前 InstancedMesh 对应的方块类型
@@ -158,6 +197,9 @@ export default class TerrainRenderer {
 
     // 应用整体缩放
     this.group.scale.setScalar(this.params.scale)
+
+    // Apply shadow settings based on current quality
+    this._applyShadowSettings()
 
     this._updateStatsPanel()
   }
@@ -421,6 +463,7 @@ export default class TerrainRenderer {
     if (this._listenDataReady) {
       emitter.off('terrain:data-ready', this._handleDataReady)
     }
+    emitter.off('shadow:quality-changed', this._handleShadowQuality)
     this._disposeChildren()
     this.scene.remove(this.group)
   }

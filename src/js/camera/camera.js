@@ -96,7 +96,7 @@ export default class Camera {
       55,
       this.sizes.width / this.sizes.height,
       0.1,
-      500,
+      128,
     )
     this.perspectiveCamera.position.copy(this.position)
     this.perspectiveCamera.lookAt(this.target)

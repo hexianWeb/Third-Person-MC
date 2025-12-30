@@ -9,7 +9,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import speedLinesFragmentShader from '../shaders/speedlines/fragment.glsl'
 import speedLinesVertexShader from '../shaders/speedlines/vertex.glsl'
 
+import { SHADOW_CONFIG, SHADOW_QUALITY } from './config/shadow-config.js'
 import Experience from './experience.js'
+import emitter from './utils/event-bus.js'
 
 export default class Renderer {
   constructor() {
@@ -253,6 +255,27 @@ export default class Renderer {
       step: 0.01,
       readonly: true,
     })
+
+    // ===== 阴影质量控制 =====
+    const shadowFolder = this.debug.ui.addFolder({
+      title: 'Shadow Quality 阴影质量',
+      expanded: true,
+    })
+
+    shadowFolder.addBinding(SHADOW_CONFIG, 'quality', {
+      label: '质量等级',
+      options: {
+        '低 (Low)': SHADOW_QUALITY.LOW,
+        '中 (Medium)': SHADOW_QUALITY.MEDIUM,
+        '高 (High)': SHADOW_QUALITY.HIGH,
+      },
+    }).on('change', (ev) => {
+      // Emit event to notify all modules about shadow quality change
+      emitter.emit('shadow:quality-changed', { quality: ev.value })
+    })
+
+    // Emit initial shadow quality to ensure all modules are in sync
+    emitter.emit('shadow:quality-changed', { quality: SHADOW_CONFIG.quality })
   }
 
   resize() {

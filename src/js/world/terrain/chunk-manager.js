@@ -125,6 +125,7 @@ export default class ChunkManager {
     return chunk.container.getBlock(localX, y, localZ)
   }
 
+  // #region 世界坐标删除方块
   /**
    * 世界坐标删除方块
    * @param {number} x
@@ -192,6 +193,9 @@ export default class ChunkManager {
     return true
   }
 
+  // #endregion
+
+  // #region 世界坐标添加方块
   /**
    * 世界坐标添加方块
    * @param {number} x
@@ -234,6 +238,9 @@ export default class ChunkManager {
     return true
   }
 
+  // #endregion
+
+  // #region 获取某列 (worldX, worldZ) 的最高非空方块 y（找不到返回 null）
   /**
    * 获取某列 (worldX, worldZ) 的最高非空方块 y（找不到返回 null）
    * - 用于玩家重生点/贴地等
@@ -262,6 +269,8 @@ export default class ChunkManager {
     }
     return null
   }
+
+  // #endregion
 
   /**
    * 确保 chunk 存在（不存在则创建）
