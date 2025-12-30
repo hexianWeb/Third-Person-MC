@@ -28,8 +28,12 @@ export default class PlantRenderer {
       scale: 1,
       heightScale: 1,
     }
+    this._chunkName = options.chunkName
 
     this.group = new THREE.Group()
+    if (this._chunkName) {
+      this.group.name = `plants(${this._chunkName})`
+    }
     this.scene.add(this.group)
 
     this._tempObject = new THREE.Object3D()
@@ -82,6 +86,12 @@ export default class PlantRenderer {
       // 辅助信息
       mesh.userData.plantId = plantId
       mesh.userData.plantName = plantType.name
+      if (this._chunkName) {
+        mesh.name = `(${this._chunkName}) - ${plantType.name}`
+      }
+      else {
+        mesh.name = plantType.name
+      }
 
       positions.forEach((pos, index) => {
         this._tempObject.position.set(

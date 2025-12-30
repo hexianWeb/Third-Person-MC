@@ -618,23 +618,6 @@ export default class TerrainGenerator {
   }
 
   /**
-   * 简单整数哈希 -> [0,1)
-   * 用于从 (seed, worldX, worldZ) 派生稳定随机数（跨 chunk 一致）
-   */
-  _hash01(seed, x, z) {
-    // 32-bit xorshift 风格混合（足够用于程序化生成）
-    let h = (seed | 0) ^ (x | 0) * 374761393 ^ (z | 0) * 668265263
-    h = (h ^ (h >>> 13)) * 1274126177
-    h ^= h >>> 16
-    // 转为无符号，并归一化
-    return (h >>> 0) / 4294967296
-  }
-
-  /**
-   * 创建可重复 RNG（SimplexNoise 依赖 Math.random 接口）
-   */
-
-  /**
    * 生成渲染层需要的数据并广播事件
    */
   generateMeshes(oreStats) {

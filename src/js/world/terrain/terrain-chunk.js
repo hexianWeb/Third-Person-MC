@@ -102,7 +102,7 @@ export default class TerrainChunk {
       sharedParams: sharedRenderParams,
       debugEnabled: false,
       listenDataReady: false,
-      chunkName: `${this.chunkX}-${this.chunkZ}`,
+      chunkName: `${this.chunkX}, ${this.chunkZ}`,
     })
     this.renderer.group.position.set(this.originX, 0, this.originZ)
     // 给射线拾取/交互提供 chunk 元信息（避免依赖 parent 链条猜测）
@@ -117,6 +117,7 @@ export default class TerrainChunk {
     // ===== 植物渲染器 =====
     this.plantRenderer = new PlantRenderer(this.container, {
       sharedParams: sharedRenderParams,
+      chunkName: `${this.chunkX}, ${this.chunkZ}`,
     })
     this.plantRenderer.group.position.set(this.originX, 0, this.originZ)
     this.plantRenderer.group.scale.setScalar(sharedRenderParams?.scale ?? 1)

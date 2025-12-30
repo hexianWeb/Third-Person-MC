@@ -41,6 +41,9 @@ export default class TerrainRenderer {
     this._listenDataReady = options.listenDataReady ?? true
 
     this.group = new THREE.Group()
+    if (options.chunkName) {
+      this.group.name = `chunk(${options.chunkName})`
+    }
     this.scene.add(this.group)
 
     this._tempObject = new THREE.Object3D()
