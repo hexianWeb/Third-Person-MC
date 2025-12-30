@@ -60,7 +60,8 @@ export default class Environment {
     this.sunLight.castShadow = true
     this.sunLight.shadow.camera.near = this.params.shadowNear
     this.sunLight.shadow.camera.far = this.params.shadowFar
-    this.sunLight.shadow.mapSize.set(2048, 2048)
+    // 降低阴影贴图分辨率：低端机优先保性能
+    this.sunLight.shadow.mapSize.set(1024, 1024)
     this.sunLight.shadow.normalBias = 0.05
     this.sunLight.shadow.bias = -0.0005
     // 将位置/目标拆分为 XZ 平面与 Y 高度，便于独立调控

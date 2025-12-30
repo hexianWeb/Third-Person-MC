@@ -1,10 +1,8 @@
 import * as THREE from 'three'
-import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 
 // 速度线 Shader
@@ -27,18 +25,9 @@ export default class Renderer {
       // Bloom 辉光参数
       bloom: {
         enabled: true,
-        strength: 0.1, // 辉光强度
-        radius: 0.18, // 辉光扩散半径
+        strength: 0.05, // 辉光强度（降低 GPU 压力）
+        radius: 0.1, // 辉光扩散半径（降低 GPU 压力）
         threshold: 0.85, // 亮度阈值（高于此值才会产生辉光）
-      },
-      // Afterimage 残影/运动模糊参数
-      afterimage: {
-        enabled: true,
-        damp: 0.52, // 残影衰减系数 (0-1)，越大残影越明显
-      },
-      // SMAA 抗锯齿参数
-      smaa: {
-        enabled: true, // 是否启用 SMAA 抗锯齿
       },
       // 速度线参数
       speedLines: {
@@ -68,7 +57,7 @@ export default class Renderer {
   setInstance() {
     this.instance = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: false, // 关闭抗锯齿：低端机优先保帧率
     })
     this.instance.toneMapping = THREE.ACESFilmicToneMapping
     this.instance.toneMappingExposure = 1
@@ -81,7 +70,7 @@ export default class Renderer {
 
   /**
    * 设置后期处理管线
-   * 渲染顺序: RenderPass -> UnrealBloomPass -> AfterimagePass -> OutputPass
+   * 渲染顺序: RenderPass -> UnrealBloomPass -> SpeedLinePass -> OutputPass
    */
   setPostProcess() {
     // 创建 EffectComposer
@@ -102,12 +91,7 @@ export default class Renderer {
     this.bloomPass.enabled = this.postProcessConfig.bloom.enabled
     this.composer.addPass(this.bloomPass)
 
-    // 3. AfterimagePass - 运动残影/拖尾效果
-    this.afterimagePass = new AfterimagePass(this.postProcessConfig.afterimage.damp)
-    this.afterimagePass.enabled = this.postProcessConfig.afterimage.enabled
-    this.composer.addPass(this.afterimagePass)
-
-    // 4. SpeedLinePass - 速度线效果（冲刺时显示）
+    // 3. SpeedLinePass - 速度线效果（冲刺时显示）
     this.speedLinePass = new ShaderPass({
       uniforms: {
         tDiffuse: { value: null },
@@ -131,16 +115,7 @@ export default class Renderer {
     this.speedLinePass.enabled = this.postProcessConfig.speedLines.enabled
     this.composer.addPass(this.speedLinePass)
 
-    // 6. SMAAPass - SMAA 抗锯齿（子像素形态学抗锯齿）
-    // 注意：需要传入实际渲染分辨率（宽高 × 像素比）
-    this.smaaPass = new SMAAPass(
-      this.sizes.width * this.sizes.pixelRatio,
-      this.sizes.height * this.sizes.pixelRatio,
-    )
-    this.smaaPass.enabled = this.postProcessConfig.smaa.enabled
-    this.composer.addPass(this.smaaPass)
-
-    // 7. OutputPass - 色调映射与色彩空间转换（确保最终输出正确）
+    // 4. OutputPass - 色调映射与色彩空间转换（确保最终输出正确）
     this.outputPass = new OutputPass()
     this.composer.addPass(this.outputPass)
   }
@@ -191,39 +166,6 @@ export default class Renderer {
       step: 0.01,
     }).on('change', (ev) => {
       this.bloomPass.threshold = ev.value
-    })
-
-    // ===== Afterimage 残影控制 =====
-    const afterimageFolder = postProcessFolder.addFolder({
-      title: 'Motion Blur 运动模糊',
-      expanded: true,
-    })
-
-    afterimageFolder.addBinding(this.postProcessConfig.afterimage, 'enabled', {
-      label: '启用',
-    }).on('change', (ev) => {
-      this.afterimagePass.enabled = ev.value
-    })
-
-    afterimageFolder.addBinding(this.postProcessConfig.afterimage, 'damp', {
-      label: '残影强度',
-      min: 0,
-      max: 0.99,
-      step: 0.01,
-    }).on('change', (ev) => {
-      this.afterimagePass.uniforms.damp.value = ev.value
-    })
-
-    // ===== SMAA 抗锯齿控制 =====
-    const smaaFolder = postProcessFolder.addFolder({
-      title: 'SMAA 抗锯齿',
-      expanded: true,
-    })
-
-    smaaFolder.addBinding(this.postProcessConfig.smaa, 'enabled', {
-      label: '启用',
-    }).on('change', (ev) => {
-      this.smaaPass.enabled = ev.value
     })
 
     // ===== 速度线控制 =====
@@ -320,12 +262,6 @@ export default class Renderer {
     // 同步更新 Composer 尺寸
     this.composer.setSize(this.sizes.width, this.sizes.height)
     this.composer.setPixelRatio(this.sizes.pixelRatio)
-
-    // 更新 SMAA Pass 尺寸（需要实际渲染分辨率）
-    this.smaaPass.setSize(
-      this.sizes.width * this.sizes.pixelRatio,
-      this.sizes.height * this.sizes.pixelRatio,
-    )
   }
 
   /**
