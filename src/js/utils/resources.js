@@ -10,11 +10,10 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 
 import Experience from '../experience.js'
-import EventEmitter from './event-emitter.js'
+import emitter from './event-bus.js'
 
-export default class Resources extends EventEmitter {
+export default class Resources {
   constructor(sources, options = {}) {
-    super()
 
     this.experience = new Experience()
     this.renderer = this.experience.renderer
@@ -169,7 +168,7 @@ export default class Resources extends EventEmitter {
           this.loadingScreen.style.display = 'none'
         }, 500)
       }
-      this.trigger('ready')
+      emitter.emit('core:ready')
     }
   }
 

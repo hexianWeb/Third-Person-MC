@@ -21,7 +21,7 @@ export default class World {
 
     this.scene.add(new THREE.AxesHelper(5))
 
-    this.resources.on('ready', () => {
+    emitter.on('core:ready', () => {
       // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====
       this.chunkManager = new ChunkManager({
         chunkWidth: CHUNK_BASIC_CONFIG.chunkWidth,

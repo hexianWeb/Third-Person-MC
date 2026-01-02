@@ -1,9 +1,7 @@
-import EventEmitter from './event-emitter.js'
+import emitter from './event-bus.js'
 
-export default class Sizes extends EventEmitter {
+export default class Sizes {
   constructor() {
-    super()
-
     // Setup
     this.width = window.innerWidth
     this.height = window.innerHeight
@@ -16,7 +14,11 @@ export default class Sizes extends EventEmitter {
       this.height = window.innerHeight
       this.pixelRatio = Math.min(window.devicePixelRatio, 2)
 
-      this.trigger('resize')
+      emitter.emit('core:resize', {
+        width: this.width,
+        height: this.height,
+        pixelRatio: this.pixelRatio,
+      })
     })
   }
 }

@@ -4,6 +4,7 @@ import Camera from './camera/camera.js'
 import Renderer from './renderer.js'
 import sources from './sources.js'
 import Debug from './utils/debug.js'
+import emitter from './utils/event-bus.js'
 import IMouse from './utils/imouse.js'
 import InputManager from './utils/input.js'
 import PointerLockManager from './utils/pointer-lock.js'
@@ -44,11 +45,11 @@ export default class Experience {
     this.terrainDataManager = null // 地形数据管理器 - 将在 World 中初始化
     this.world = new World()
 
-    this.sizes.on('resize', () => {
+    emitter.on('core:resize', () => {
       this.resize()
     })
 
-    this.time.on('tick', () => {
+    emitter.on('core:tick', () => {
       this.update()
     })
   }

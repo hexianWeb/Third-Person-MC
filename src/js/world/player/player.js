@@ -319,7 +319,7 @@ export default class Player {
       multiline: true,
     })
 
-    this.experience.time.on('tick', () => {
+    emitter.on('core:tick', () => {
       if (this.animation.stateMachine.currentState) {
         debugState.state = this.animation.stateMachine.currentState.name
       }

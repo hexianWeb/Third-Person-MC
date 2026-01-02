@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 
 import Experience from '../experience.js'
+import emitter from '../utils/event-bus.js'
 import Float from './float.js'
 
 export default class TextMesh {
@@ -62,7 +63,7 @@ export default class TextMesh {
       { from: new THREE.Color('#dce35b'), to: new THREE.Color('#45b649') },
     ]
 
-    this.resources.on('ready', () => {
+    emitter.on('core:ready', () => {
       const fontSource = this.resources.items[this.font]
       if (fontSource) {
         this.setupTextMeshes(fontSource)
