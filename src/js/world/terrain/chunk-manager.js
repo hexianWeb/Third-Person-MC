@@ -27,23 +27,13 @@ export default class ChunkManager {
     this.unloadPadding = options.unloadPadding ?? CHUNK_BASIC_CONFIG.unloadPadding
     this.seed = options.seed ?? CHUNK_BASIC_CONFIG.seed
 
-    // 所有 chunk 共用的地形生成参数（统一由一个 panel 控制）
-    // 注意：terrain 参数会直接影响噪声采样，变更后必须全量 regenerate
     this.terrainParams = options.terrain || { ...TERRAIN_PARAMS }
-
-    // 所有 chunk 共用的树生成参数（统一由一个 panel 控制）
     this.treeParams = options.trees || { ...TREE_PARAMS }
-
-    // 所有 chunk 共用的渲染参数（统一由一个 panel 控制）
     this.renderParams = { ...RENDER_PARAMS }
-
-    // 所有 chunk 共用的水面参数（统一由一个 panel 控制）
     this.waterParams = options.water || { ...WATER_PARAMS }
-
-    // 所有 chunk 共用的群系参数（统一由一个 panel 控制）
     this.biomeParams = {
-      biomeSource: options.biomeSource ?? 'panel', // 'panel' | 'generator'
-      forcedBiome: options.forcedBiome ?? 'plains', // 强制群系（调试模式）
+      biomeSource: options.biomeSource ?? 'panel',
+      forcedBiome: options.forcedBiome ?? 'plains',
     }
 
     this._statsParams = {
@@ -55,10 +45,8 @@ export default class ChunkManager {
     /** @type {Map<string, TerrainChunk>} */
     this.chunks = new Map()
 
-    // requestIdleCallback 队列：用于 chunk 生成/建网格
     this.idleQueue = new IdleQueue()
 
-    // streaming 内部缓存：避免重复计算
     this._lastPlayerChunkX = null
     this._lastPlayerChunkZ = null
 
@@ -789,14 +777,12 @@ export default class ChunkManager {
   // #endregion
 
   /**
-   * 重建所有 chunk（用于全局参数变更）
+   * 重建所有 chunk 的渲染层（基础参数如 scale/heightScale 变更）
    */
   _rebuildAllChunks() {
     this.chunks.forEach((chunk) => {
-      chunk.renderer?._rebuildFromContainer?.()
-      // Rebuild plants
-      chunk.plantRenderer?.build?.(chunk.generator?.plantData)
-      // 保险起见同步一次 scale
+      chunk.buildMesh()
+      // 同步 scale
       chunk.renderer?.group?.scale?.setScalar?.(this.renderParams.scale)
       chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
     })
@@ -844,43 +830,20 @@ export default class ChunkManager {
   }
 
   /**
-   * 全量重新生成所有 chunk（用于生成参数变更）
-   * - 重新生成 container 数据
-   * - 重建 renderer 的 InstancedMesh
+   * 全量重新生成所有 chunk（用于生成参数变更：种子/群系）
    */
   _regenerateAllChunks() {
+    const params = {
+      seed: this.seed,
+      biomeSource: this.biomeParams.biomeSource,
+      forcedBiome: this.biomeParams.forcedBiome,
+    }
+
     this.chunks.forEach((chunk) => {
-      if (!chunk?.generator || !chunk?.renderer)
-        return
-
-      // 同步 seed（确保所有 chunk 使用一致的随机序列）
-      chunk.generator.params.seed = this.seed
-
-      // 同步群系参数
-      chunk.generator.params.biomeSource = this.biomeParams.biomeSource
-      chunk.generator.params.forcedBiome = this.biomeParams.forcedBiome
-
-      // 重新生成数据（不会广播 terrain:data-ready）
-      // 若 chunk 还未生成，先走延迟状态机
-      if (chunk.state === 'init')
-        chunk.generateData()
-      else
-        chunk.generator.generate()
-
-      // 重建 mesh
-      if (chunk.state === 'dataReady') {
-        chunk.buildMesh()
-      }
-      else {
-        chunk.renderer._rebuildFromContainer()
-        // Rebuild plants
-        chunk.plantRenderer?.build?.(chunk.generator?.plantData)
-      }
-      chunk.renderer.group.scale.setScalar(this.renderParams.scale)
+      chunk.regenerate(params)
+      // 同步渲染缩放
+      chunk.renderer?.group?.scale?.setScalar(this.renderParams.scale)
       chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
-
-      // 刷新水面高度
-      chunk.refreshWater?.()
     })
 
     this._updateStats()

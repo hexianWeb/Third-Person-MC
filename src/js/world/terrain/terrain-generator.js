@@ -81,6 +81,7 @@ export default class TerrainGenerator {
 
     // 内部状态
     this.heightMap = []
+    this.biomeMap = [] // 缓存群系 ID 2D 数组
     this.plantData = [] // 植物数据 [{x, y, z, plantId}]
 
     // 群系相关参数（STEP 1: 调试面板模式）
@@ -144,13 +145,16 @@ export default class TerrainGenerator {
     const { scale, magnitude: baseMagnitude, offset: baseOffset } = this.params.terrain
 
     this.heightMap = []
+    this.biomeMap = []
 
-    // 第一阶段：完全生成 heightMap
+    // 第一阶段：完全生成 heightMap 和 biomeMap
     for (let z = 0; z < width; z++) {
-      const row = []
+      const heightRow = []
+      const biomeRow = []
       for (let x = 0; x < width; x++) {
         // 获取当前位置的群系
         const biomeId = this._getBiomeAt(x, z)
+        biomeRow.push(biomeId)
         const biomeConfig = getBiomeConfig(biomeId)
 
         // 根据群系调整地形参数
@@ -181,9 +185,10 @@ export default class TerrainGenerator {
         let columnHeight = Math.floor(height * scaled)
         columnHeight = Math.max(0, Math.min(columnHeight, height - 1))
 
-        row.push(columnHeight)
+        heightRow.push(columnHeight)
       }
-      this.heightMap.push(row)
+      this.heightMap.push(heightRow)
+      this.biomeMap.push(biomeRow)
     }
 
     // 第二阶段：基于完整的 heightMap 填充方块
@@ -279,8 +284,8 @@ export default class TerrainGenerator {
    * 坡面裸岩：土层在侧面暴露时会使用石块
    */
   _fillColumnLayers(x, z, surfaceHeight) {
-    // 获取当前位置的群系（从调试面板或生成器）
-    const biomeId = this._getBiomeAt(x, z)
+    // 获取缓存的群系 ID
+    const biomeId = this.biomeMap[z][x]
 
     const soilDepth = Math.max(1, this.params.soilDepth)
     const stoneStart = Math.max(0, surfaceHeight - soilDepth)
@@ -290,45 +295,32 @@ export default class TerrainGenerator {
 
     // 判定区域
     const isUnderwater = surfaceHeight <= waterOffset
-    const isShore
-    = surfaceHeight > waterOffset
-      && surfaceHeight <= waterOffset + shoreDepth
+    const isShore = !isUnderwater && surfaceHeight <= waterOffset + shoreDepth
 
-    for (let y = 0; y <= surfaceHeight; y++) {
-      // 顶层
+    // 缓存常用配置，避免循环内重复查询
+    const surfaceBlockId = isUnderwater || isShore ? blocks.sand.id : this._selectBiomeBlock(biomeId, 'surface')
+    const subsurfaceBlockId = isUnderwater || isShore ? blocks.sand.id : this._selectBiomeBlock(biomeId, 'subsurface')
+    const deepBlockId = this._selectBiomeBlock(biomeId, 'deep')
+
+    // 1. 深层：统一填充石头（或其他深层块）
+    for (let y = 0; y <= stoneStart; y++) {
+      this.container.setBlockId(x, y, z, deepBlockId)
+    }
+
+    // 2. 表层与地表
+    for (let y = stoneStart + 1; y <= surfaceHeight; y++) {
       if (y === surfaceHeight) {
-        if (isUnderwater || isShore) {
-          // 水下/水岸保持使用沙子
-          this.container.setBlockId(x, y, z, blocks.sand.id)
+        this.container.setBlockId(x, y, z, surfaceBlockId)
+      }
+      else {
+        // 坡面裸岩判定（仅限非水域/沙滩的表层）
+        if (!isUnderwater && !isShore && this._isRockExposed(x, y, z, surfaceHeight)) {
+          this.container.setBlockId(x, y, z, BLOCK_IDS.STONE)
         }
         else {
-          // 使用群系的地表方块
-          this.container.setBlockId(x, y, z, this._selectBiomeBlock(biomeId, 'surface'))
+          this.container.setBlockId(x, y, z, subsurfaceBlockId)
         }
-        continue
       }
-
-      // 表层（土 / 沙）
-      if (y > stoneStart) {
-        if (isUnderwater || isShore) {
-          // 水下/水岸保持使用沙子
-          this.container.setBlockId(x, y, z, blocks.sand.id)
-        }
-        else {
-          // 坡面裸岩判定：如果侧面暴露且坡度足够，使用石块
-          if (this._isRockExposed(x, y, z, surfaceHeight)) {
-            this.container.setBlockId(x, y, z, BLOCK_IDS.STONE)
-          }
-          else {
-            // 使用群系的土层方块
-            this.container.setBlockId(x, y, z, this._selectBiomeBlock(biomeId, 'subsurface'))
-          }
-        }
-        continue
-      }
-
-      // 深层：石头（所有群系相同）
-      this.container.setBlockId(x, y, z, this._selectBiomeBlock(biomeId, 'deep'))
     }
   }
 
@@ -480,8 +472,8 @@ export default class TerrainGenerator {
     // 遍历每个位置
     for (let baseX = 0; baseX < width; baseX++) {
       for (let baseZ = 0; baseZ < width; baseZ++) {
-        // 获取当前位置的群系
-        const biomeId = this._getBiomeAt(baseX, baseZ)
+        // 获取缓存的群系
+        const biomeId = this.biomeMap[baseZ][baseX]
         const biomeConfig = getBiomeConfig(biomeId)
 
         if (!biomeConfig) {
@@ -541,8 +533,8 @@ export default class TerrainGenerator {
 
     for (let x = 0; x < width; x++) {
       for (let z = 0; z < width; z++) {
-        // 获取当前位置的群系
-        const biomeId = this._getBiomeAt(x, z)
+        // 获取缓存的群系
+        const biomeId = this.biomeMap[z][x]
         const biomeConfig = getBiomeConfig(biomeId)
 
         if (!biomeConfig)
@@ -595,7 +587,7 @@ export default class TerrainGenerator {
    * 根据权重选择植物类型
    * @param {Array} types - 植物类型列表
    * @param {RNG} rng - 随机数生成器
-   * @returns {object|null}
+   * @returns {object|null} 选中的植物类型配置
    */
   _selectFloraType(types, rng) {
     if (!types || types.length === 0)
@@ -635,6 +627,25 @@ export default class TerrainGenerator {
       seed: this.params.seed,
       oreStats,
     })
+  }
+
+  /**
+   * 批量更新生成器参数并重新生成（按需）
+   * @param {object} params - 需要更新的参数
+   * @param {boolean} triggerGenerate - 是否立即触发重新生成
+   */
+  updateParams(params = {}, triggerGenerate = false) {
+    if (params.seed !== undefined)
+      this.params.seed = params.seed
+    if (params.biomeSource !== undefined)
+      this.params.biomeSource = params.biomeSource
+    if (params.forcedBiome !== undefined)
+      this.params.forcedBiome = params.forcedBiome
+
+    // 如果指定了其他嵌套参数，也可以在此扩展
+    if (triggerGenerate) {
+      this.generate()
+    }
   }
 
   // #region 调试面板

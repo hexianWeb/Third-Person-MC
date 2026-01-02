@@ -212,12 +212,34 @@ export default class TerrainChunk {
   generateData() {
     if (this.state === 'disposed')
       return false
+    // 只有 init 状态才允许执行，避免重复执行
     if (this.state !== 'init')
       return false
 
     this.generator.generate()
     this.state = 'dataReady'
     return true
+  }
+
+  /**
+   * 全量重新生成（用于参数变更）
+   */
+  regenerate(params = {}) {
+    if (this.state === 'disposed')
+      return
+
+    // 更新参数
+    this.generator.updateParams(params)
+
+    // 强制执行生成
+    this.generator.generate()
+    this.state = 'dataReady'
+
+    // 重建渲染层
+    this.buildMesh()
+
+    // 刷新水面
+    this.refreshWater()
   }
 
   /**
