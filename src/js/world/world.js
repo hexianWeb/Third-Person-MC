@@ -9,8 +9,7 @@ import BlockRaycaster from '../interaction/block-raycaster.js'
 import BlockSelectionHelper from '../interaction/block-selection-helper.js'
 import emitter from '../utils/event-bus.js'
 import Environment from './environment.js'
-import Floor from './floor.js'
-import Player from './player.js'
+import Player from './player/player.js'
 import { blocks } from './terrain/blocks-config.js'
 import ChunkManager from './terrain/chunk-manager.js'
 
@@ -21,10 +20,6 @@ export default class World {
     this.resources = this.experience.resources
 
     this.scene.add(new THREE.AxesHelper(5))
-    // this.floor = new Floor(128, 1)
-    // // 隐藏原本的 Grid 地板，只保留物理
-    // if (this.floor.grid)
-    //   this.floor.grid.visible = false
 
     this.resources.on('ready', () => {
       // ===== Step1：初始化 3×3 chunk 管理器（渲染依赖资源 ready）=====

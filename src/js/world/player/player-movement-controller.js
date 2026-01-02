@@ -96,7 +96,6 @@ export class PlayerMovementController {
    */
   _updateCustomPhysics(inputState, isCombatActive) {
     const dt = this.experience.time.delta * 0.001
-
     this.collision.prepareFrame()
 
     // 计算输入方向（世界坐标）

@@ -1,17 +1,17 @@
 import * as THREE from 'three'
-import { PLAYER_CONFIG } from '../config/player-config.js'
-import { SHADOW_QUALITY } from '../config/shadow-config.js'
-import Experience from '../experience.js'
-import emitter from '../utils/event-bus.js'
+import { PLAYER_CONFIG } from '../../config/player-config.js'
+import { SHADOW_QUALITY } from '../../config/shadow-config.js'
+import Experience from '../../experience.js'
+import emitter from '../../utils/event-bus.js'
 import {
   AnimationCategories,
   AnimationClips,
   AnimationStates,
   timeScaleConfig,
-} from './player/animation-config.js'
-import { resolveDirectionInput } from './player/input-resolver.js'
-import { PlayerAnimationController } from './player/player-animation-controller.js'
-import { PlayerMovementController } from './player/player-movement-controller.js'
+} from './animation-config.js'
+import { resolveDirectionInput } from './input-resolver.js'
+import { PlayerAnimationController } from './player-animation-controller.js'
+import { PlayerMovementController } from './player-movement-controller.js'
 
 export default class Player {
   constructor() {
@@ -114,7 +114,6 @@ export default class Player {
   }
 
   setOpacity(value) {
-    const isTransparent = value < 1.0
     this.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.material.opacity = value
