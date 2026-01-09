@@ -52,6 +52,10 @@ export default class Experience {
     emitter.on('core:tick', () => {
       this.update()
     })
+
+    window.addEventListener('beforeunload', () => {
+      this.destroy()
+    })
   }
 
   resize() {
@@ -65,5 +69,52 @@ export default class Experience {
     this.renderer.update() // 切换为手动更新
     this.stats.update()
     this.iMouse.update()
+  }
+
+  destroy() {
+    // 1. Stop update loop first
+    this.time?.destroy()
+
+    // 2. Destroy child components (reverse init order)
+    this.world?.destroy()
+    this.pointerLock?.destroy()
+    this.input?.destroy()
+    this.iMouse?.destroy()
+    this.resources?.destroy()
+    this.renderer?.destroy()
+    this.camera?.destroy()
+
+    // 3. Destroy utils
+    this.stats?.destroy()
+    this.sizes?.destroy()
+    this.debug?.destroy()
+
+    // 4. Clear scene
+    if (this.scene) {
+      this.scene.traverse((child) => {
+        if (child.geometry)
+          child.geometry.dispose()
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose())
+          }
+          else {
+            child.material.dispose()
+          }
+        }
+      })
+      this.scene.clear()
+    }
+
+    // 5. Clear all mitt events (unified cleanup)
+    emitter.all.clear()
+
+    // 6. Clear global references
+    if (window.Experience === this) {
+      window.Experience = null
+    }
+
+    // 7. Reset singleton
+    instance = null
   }
 }

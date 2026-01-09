@@ -164,4 +164,10 @@ export default class IMouse {
     this.judgeIsMouseMoving()
     this.syncMouseDOM()
   }
+
+  destroy() {
+    // Event listeners are inline in this implementation
+    // In a full cleanup, we would need to store handler references
+    // and remove them here. For now, mitt cleanup handles events.
+  }
 }

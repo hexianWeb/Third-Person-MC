@@ -8,4 +8,11 @@ export default class Debug {
       this.ui = new Pane()
     }
   }
+
+  destroy() {
+    if (this.ui) {
+      this.ui.dispose()
+      this.ui = null
+    }
+  }
 }

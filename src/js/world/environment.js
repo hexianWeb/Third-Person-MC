@@ -339,4 +339,30 @@ export default class Environment {
       }
     }
   }
+
+  destroy() {
+    // Remove lights from scene
+    if (this.sunLight) {
+      this.scene.remove(this.sunLight)
+      this.scene.remove(this.sunLight.target)
+    }
+    if (this.ambientLight) {
+      this.scene.remove(this.ambientLight)
+    }
+
+    // Remove helper
+    if (this.helper) {
+      this.scene.remove(this.helper)
+      this.helper.dispose?.()
+    }
+
+    // Remove axes helper
+    if (this.axesHelper) {
+      this.scene.remove(this.axesHelper)
+      this.axesHelper.dispose?.()
+    }
+
+    // Clear fog
+    this.scene.fog = null
+  }
 }

@@ -492,4 +492,33 @@ export default class Camera {
 
     return null
   }
+
+  destroy() {
+    // Dispose controls
+    if (this.orbitControls) {
+      this.orbitControls.dispose()
+      this.orbitControls = null
+    }
+    if (this.trackballControls) {
+      this.trackballControls.dispose()
+      this.trackballControls = null
+    }
+
+    // Dispose camera helper
+    if (this.cameraHelper) {
+      this.scene.remove(this.cameraHelper)
+      this.cameraHelper.geometry?.dispose()
+      this.cameraHelper.material?.dispose()
+      this.cameraHelper = null
+    }
+
+    // Remove camera from scene
+    if (this.perspectiveCamera) {
+      this.scene.remove(this.perspectiveCamera)
+    }
+
+    // Clear references
+    this.rig = null
+    this.rendererRef = null
+  }
 }

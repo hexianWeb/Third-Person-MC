@@ -247,4 +247,9 @@ Dist: ${info.distance?.toFixed(2) || 'N/A'}`
       emitter.emit('game:block-hover-clear')
     }
   }
+
+  destroy() {
+    this._clear()
+    this.chunkManager = null
+  }
 }

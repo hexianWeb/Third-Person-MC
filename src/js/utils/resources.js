@@ -14,7 +14,6 @@ import emitter from './event-bus.js'
 
 export default class Resources {
   constructor(sources, options = {}) {
-
     this.experience = new Experience()
     this.renderer = this.experience.renderer
     this.sources = sources
@@ -199,5 +198,33 @@ export default class Resources {
 
   get isLoaded() {
     return this.loaded === this.toLoad
+  }
+
+  destroy() {
+    // Dispose all loaded textures
+    for (const item of Object.values(this.items)) {
+      if (item?.dispose) {
+        item.dispose()
+      }
+      // For GLTF models, traverse and dispose
+      if (item?.scene?.traverse) {
+        item.scene.traverse((child) => {
+          if (child.geometry)
+            child.geometry.dispose()
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.dispose())
+            }
+            else {
+              child.material.dispose()
+            }
+          }
+        })
+      }
+    }
+
+    // Clear items
+    this.items = {}
+    this.loaded = 0
   }
 }

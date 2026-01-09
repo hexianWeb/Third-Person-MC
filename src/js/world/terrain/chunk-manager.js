@@ -848,4 +848,23 @@ export default class ChunkManager {
 
     this._updateStats()
   }
+
+  destroy() {
+    // Cancel pending save
+    if (this._saveTimeout) {
+      clearTimeout(this._saveTimeout)
+      this._saveTimeout = null
+    }
+
+    // Clear idle queue
+    if (this.idleQueue) {
+      this.idleQueue.clear?.()
+    }
+
+    // Dispose all chunks
+    this.chunks.forEach((chunk) => {
+      chunk.dispose()
+    })
+    this.chunks.clear()
+  }
 }

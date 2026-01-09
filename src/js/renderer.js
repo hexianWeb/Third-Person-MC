@@ -313,4 +313,26 @@ export default class Renderer {
       this.renderPass.camera = cameraInstance
     }
   }
+
+  destroy() {
+    // Dispose all passes
+    if (this.renderPass) this.renderPass.dispose?.()
+    if (this.bloomPass) this.bloomPass.dispose?.()
+    if (this.speedLinePass) this.speedLinePass.dispose?.()
+    if (this.outputPass) this.outputPass.dispose?.()
+
+    // Dispose composer and its render targets
+    if (this.composer) {
+      this.composer.renderTarget1?.dispose()
+      this.composer.renderTarget2?.dispose()
+      this.composer.dispose?.()
+    }
+
+    // Force context loss and cleanup renderer
+    if (this.instance) {
+      this.instance.forceContextLoss()
+      this.instance.dispose()
+      this.instance.domElement = null
+    }
+  }
 }

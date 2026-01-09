@@ -1,15 +1,20 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import Crosshair from './components/Crosshair.vue'
 import MiniMap from './components/MiniMap.vue'
 import Experience from './js/experience.js'
 import ExamplePanel from './vue/ExamplePanel.vue'
 
 const threeCanvas = ref(null)
-
+let experience = null
 onMounted(() => {
   // 初始化 three.js 场景
-  const experience = new Experience(threeCanvas.value)
+  experience = new Experience(threeCanvas.value)
+})
+
+onBeforeUnmount(() => {
+  experience?.destroy()
+  experience = null
 })
 </script>
 

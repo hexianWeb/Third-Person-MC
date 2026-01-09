@@ -8,7 +8,10 @@ export default class Time {
     this.elapsed = 0
     this.delta = 16
 
-    window.requestAnimationFrame(() => {
+    // RAF ID for cleanup
+    this.rafId = null
+
+    this.rafId = window.requestAnimationFrame(() => {
       this.tick()
     })
   }
@@ -24,8 +27,15 @@ export default class Time {
       elapsed: this.elapsed,
     })
 
-    window.requestAnimationFrame(() => {
+    this.rafId = window.requestAnimationFrame(() => {
       this.tick()
     })
+  }
+
+  destroy() {
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = null
+    }
   }
 }

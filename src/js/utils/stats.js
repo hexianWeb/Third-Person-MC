@@ -20,4 +20,10 @@ export default class StatsPanel {
       this.stats.update()
     }
   }
+
+  destroy() {
+    if (this.stats?.dom) {
+      this.stats.dom.remove()
+    }
+  }
 }

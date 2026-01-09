@@ -697,4 +697,27 @@ export default class CameraRig {
       step: 0.1,
     })
   }
+
+  destroy() {
+    // Dispose helpers
+    if (this.helpers.camera) {
+      this.helpers.camera.geometry?.dispose()
+      this.helpers.camera.material?.dispose()
+    }
+    if (this.helpers.target) {
+      this.helpers.target.geometry?.dispose()
+      this.helpers.target.material?.dispose()
+    }
+    if (this.helpers.groupAxes) {
+      this.helpers.groupAxes.dispose?.()
+    }
+
+    // Remove group from scene
+    if (this.group) {
+      this.experience.scene.remove(this.group)
+    }
+
+    // Clear references
+    this.target = null
+  }
 }

@@ -8,8 +8,8 @@ export default class Sizes {
     this.aspect = this.width / this.height
     this.pixelRatio = Math.min(window.devicePixelRatio, 2)
 
-    // Resize event
-    window.addEventListener('resize', () => {
+    // Save handler reference for cleanup
+    this._resizeHandler = () => {
       this.width = window.innerWidth
       this.height = window.innerHeight
       this.pixelRatio = Math.min(window.devicePixelRatio, 2)
@@ -19,6 +19,13 @@ export default class Sizes {
         height: this.height,
         pixelRatio: this.pixelRatio,
       })
-    })
+    }
+
+    // Resize event
+    window.addEventListener('resize', this._resizeHandler)
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this._resizeHandler)
   }
 }

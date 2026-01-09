@@ -131,4 +131,19 @@ export default class World {
     if (this.blockSelectionHelper)
       this.blockSelectionHelper.update()
   }
+
+  destroy() {
+    // Destroy child components
+    this.blockSelectionHelper?.dispose()
+    this.blockRaycaster?.destroy()
+    this.environment?.destroy()
+    this.cameraRig?.destroy()
+    this.player?.destroy()
+    this.chunkManager?.destroy()
+
+    // Clear terrainDataManager reference
+    if (this.experience.terrainDataManager === this.chunkManager) {
+      this.experience.terrainDataManager = null
+    }
+  }
 }
