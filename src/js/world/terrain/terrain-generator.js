@@ -10,6 +10,7 @@ import { RNG } from '../../tools/rng.js'
 import emitter from '../../utils/event-bus.js'
 import { fbm2D } from '../../utils/noise-utils.js'
 import { getBiomeConfig } from './biome-config.js'
+import BiomeGenerator from './biome-generator.js'
 import { BLOCK_IDS, blocks, resources } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
@@ -82,11 +83,25 @@ export default class TerrainGenerator {
     // 内部状态
     this.heightMap = []
     this.biomeMap = [] // 缓存群系 ID 2D 数组
+    this.biomeDataMap = [] // 缓存群系数据（包含权重）
     this.plantData = [] // 植物数据 [{x, y, z, plantId}]
 
-    // 群系相关参数（STEP 1: 调试面板模式）
+    // 群系相关参数
     this.params.biomeSource = options.biomeSource ?? 'panel' // 'panel' | 'generator'
     this.params.forcedBiome = options.forcedBiome ?? 'plains' // 强制群系（调试模式）
+
+    // STEP 2: 共享的群系生成器（由 ChunkManager 传入，所有 chunk 共用）
+    // 如果没有提供共享生成器，则创建一个私有实例
+    if (options.sharedBiomeGenerator) {
+      this.biomeGenerator = options.sharedBiomeGenerator
+    }
+    else if (this.params.biomeSource === 'generator') {
+      // 创建私有 BiomeGenerator 实例
+      this.biomeGenerator = new BiomeGenerator(this.params.seed)
+    }
+    else {
+      this.biomeGenerator = null
+    }
 
     // 自动生成
     if (options.autoGenerate ?? true) {
@@ -146,22 +161,57 @@ export default class TerrainGenerator {
 
     this.heightMap = []
     this.biomeMap = []
+    this.biomeDataMap = []
+
+    // STEP 2: 如果使用生成器模式且有 BiomeGenerator，预生成整个 chunk 的群系图
+    let generatedBiomeMap = null
+    if (this.params.biomeSource === 'generator' && this.biomeGenerator) {
+      generatedBiomeMap = this.biomeGenerator.generateBiomeMap(
+        this.origin.x,
+        this.origin.z,
+        width,
+      )
+    }
 
     // 第一阶段：完全生成 heightMap 和 biomeMap
     for (let z = 0; z < width; z++) {
       const heightRow = []
       const biomeRow = []
+      const biomeDataRow = []
       for (let x = 0; x < width; x++) {
-        // 获取当前位置的群系
-        const biomeId = this._getBiomeAt(x, z)
+        // 获取当前位置的群系数据
+        let biomeId
+        let biomeData = null
+
+        if (generatedBiomeMap && generatedBiomeMap[x] && generatedBiomeMap[x][z]) {
+          // 使用生成器提供的群系数据
+          biomeData = generatedBiomeMap[x][z]
+          biomeId = biomeData.biome
+        }
+        else {
+          // 回退到手动模式
+          biomeId = this._getBiomeAt(x, z)
+          biomeData = { biome: biomeId, temp: 0.5, humidity: 0.5, weights: null }
+        }
+
         biomeRow.push(biomeId)
+        biomeDataRow.push(biomeData)
         const biomeConfig = getBiomeConfig(biomeId)
 
         // 根据群系调整地形参数
-        // heightOffset: 高度偏移（相对基准），直接叠加到 offset
-        // heightMagnitude: 振幅倍数，乘以基础 magnitude
-        const heightOffset = biomeConfig?.terrainParams?.heightOffset ?? 0
-        const heightMagnitude = biomeConfig?.terrainParams?.heightMagnitude ?? 1.0
+        // 支持混合群系的参数插值
+        let heightOffset, heightMagnitude
+
+        if (biomeData.weights) {
+          // 混合群系：按权重插值参数
+          heightOffset = this._blendBiomeParam(biomeData.weights, 'heightOffset')
+          heightMagnitude = this._blendBiomeParam(biomeData.weights, 'heightMagnitude')
+        }
+        else {
+          // 单一群系：直接应用参数
+          heightOffset = biomeConfig?.terrainParams?.heightOffset ?? 0
+          heightMagnitude = biomeConfig?.terrainParams?.heightMagnitude ?? 1.0
+        }
 
         const offset = baseOffset + heightOffset
         const magnitude = baseMagnitude * heightMagnitude
@@ -189,27 +239,58 @@ export default class TerrainGenerator {
       }
       this.heightMap.push(heightRow)
       this.biomeMap.push(biomeRow)
+      this.biomeDataMap.push(biomeDataRow)
     }
 
-    // 第二阶段：基于完整的 heightMap 填充方块
+    // 第二阶段：基于完整的 heightMap 填充方块（支持混合群系）
     for (let z = 0; z < width; z++) {
       for (let x = 0; x < width; x++) {
         const columnHeight = this.heightMap[z][x]
-        this._fillColumnLayers(x, z, columnHeight)
+        const biomeData = this.biomeDataMap[z][x]
+        this._fillColumnLayers(x, z, columnHeight, biomeData)
       }
     }
   }
 
   /**
-   * 获取指定位置的群系 ID（临时实现，STEP 2 会替换）
-   * @param {number} _x - 局部 X 坐标（当前未使用）
-   * @param {number} _z - 局部 Z 坐标（当前未使用）
+   * 混合群系参数（按权重插值）
+   * @param {object} weights - 群系权重对象 { biomeId: weight, ... }
+   * @param {string} paramName - 参数名 ('heightOffset' 或 'heightMagnitude')
+   * @returns {number} 插值后的参数值
+   */
+  _blendBiomeParam(weights, paramName) {
+    let result = 0
+    for (const [biomeId, weight] of Object.entries(weights)) {
+      const biomeConfig = getBiomeConfig(biomeId)
+      if (biomeConfig?.terrainParams?.[paramName] !== undefined) {
+        result += biomeConfig.terrainParams[paramName] * weight
+      }
+      else {
+        // 默认值
+        result += (paramName === 'heightMagnitude' ? 1.0 : 0) * weight
+      }
+    }
+    return result
+  }
+
+  /**
+   * 获取指定位置的群系 ID
+   * @param {number} x - 局部 X 坐标
+   * @param {number} z - 局部 Z 坐标
    * @returns {string} 群系 ID
    */
-  _getBiomeAt(_x, _z) {
-    // STEP 1: 从调试面板获取强制群系
+  _getBiomeAt(x, z) {
+    // Panel 模式：从调试面板获取强制群系
     if (this.params.biomeSource === 'panel' && this.params.forcedBiome) {
       return this.params.forcedBiome
+    }
+
+    // Generator 模式：使用 BiomeGenerator 查询
+    if (this.params.biomeSource === 'generator' && this.biomeGenerator) {
+      const wx = this.origin.x + x
+      const wz = this.origin.z + z
+      const biomeData = this.biomeGenerator.getBiomeAt(wx, wz)
+      return biomeData.biome
     }
 
     // 默认返回平原（向后兼容）
@@ -282,10 +363,14 @@ export default class TerrainGenerator {
    * 填充一列方块：根据群系选择地表/土层/深层方块
    * 水下 & 水岸区域统一使用沙子（保持原有逻辑）
    * 坡面裸岩：土层在侧面暴露时会使用石块
+   * @param {number} x - 局部 X 坐标
+   * @param {number} z - 局部 Z 坐标
+   * @param {number} surfaceHeight - 表面高度
+   * @param {object} biomeData - 群系数据（包含 biome, weights）
    */
-  _fillColumnLayers(x, z, surfaceHeight) {
-    // 获取缓存的群系 ID
-    const biomeId = this.biomeMap[z][x]
+  _fillColumnLayers(x, z, surfaceHeight, biomeData = null) {
+    // 获取群系 ID（兼容旧调用方式）
+    const biomeId = biomeData?.biome || this.biomeMap[z][x]
 
     const soilDepth = Math.max(1, this.params.soilDepth)
     const stoneStart = Math.max(0, surfaceHeight - soilDepth)
@@ -298,8 +383,22 @@ export default class TerrainGenerator {
     const isShore = !isUnderwater && surfaceHeight <= waterOffset + shoreDepth
 
     // 缓存常用配置，避免循环内重复查询
-    const surfaceBlockId = isUnderwater || isShore ? blocks.sand.id : this._selectBiomeBlock(biomeId, 'surface')
-    const subsurfaceBlockId = isUnderwater || isShore ? blocks.sand.id : this._selectBiomeBlock(biomeId, 'subsurface')
+    // 对于水下/沙滩区域，不使用混合，直接使用沙子
+    let surfaceBlockId, subsurfaceBlockId
+    if (isUnderwater || isShore) {
+      surfaceBlockId = blocks.sand.id
+      subsurfaceBlockId = blocks.sand.id
+    }
+    else if (biomeData?.weights) {
+      // 混合群系：按权重随机选择方块
+      surfaceBlockId = this._selectBiomeBlockWithWeights(biomeData, 'surface')
+      subsurfaceBlockId = this._selectBiomeBlockWithWeights(biomeData, 'subsurface')
+    }
+    else {
+      // 单一群系
+      surfaceBlockId = this._selectBiomeBlock(biomeId, 'surface')
+      subsurfaceBlockId = this._selectBiomeBlock(biomeId, 'subsurface')
+    }
     const deepBlockId = this._selectBiomeBlock(biomeId, 'deep')
 
     // 1. 深层：统一填充石头（或其他深层块）
@@ -322,6 +421,33 @@ export default class TerrainGenerator {
         }
       }
     }
+  }
+
+  /**
+   * 根据群系数据选择方块（支持混合）
+   * @param {object} biomeData - 群系数据
+   * @param {string} layer - 层级：'surface' | 'subsurface' | 'deep'
+   * @returns {number} 方块 ID
+   */
+  _selectBiomeBlockWithWeights(biomeData, layer) {
+    // 如果没有权重，直接返回单一群系的方块
+    if (!biomeData.weights) {
+      return this._selectBiomeBlock(biomeData.biome, layer)
+    }
+
+    // 混合群系：按权重随机选择
+    const rand = Math.random()
+    let cumWeight = 0
+
+    for (const [biomeId, weight] of Object.entries(biomeData.weights)) {
+      cumWeight += weight
+      if (rand < cumWeight) {
+        return this._selectBiomeBlock(biomeId, layer)
+      }
+    }
+
+    // 兜底
+    return this._selectBiomeBlock(biomeData.biome, layer)
   }
 
   /**

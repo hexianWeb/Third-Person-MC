@@ -11,6 +11,7 @@ import {
 } from '../../config/chunk-config.js'
 import Experience from '../../experience.js'
 import IdleQueue from '../../utils/idle-queue.js'
+import BiomeGenerator from './biome-generator.js'
 import { blocks, resources } from './blocks-config.js'
 import TerrainChunk from './terrain-chunk.js'
 import TerrainPersistence from './terrain-persistence.js'
@@ -32,9 +33,12 @@ export default class ChunkManager {
     this.renderParams = { ...RENDER_PARAMS }
     this.waterParams = options.water || { ...WATER_PARAMS }
     this.biomeParams = {
-      biomeSource: options.biomeSource ?? 'panel',
+      biomeSource: options.biomeSource ?? 'generator',
       forcedBiome: options.forcedBiome ?? 'plains',
     }
+
+    // STEP 2: 共享的群系生成器（所有 chunk 共用，确保跨 chunk 群系连贯）
+    this.biomeGenerator = new BiomeGenerator(this.seed)
 
     this._statsParams = {
       totalInstances: 0,
@@ -280,6 +284,7 @@ export default class ChunkManager {
       sharedRenderParams: this.renderParams,
       sharedTreeParams: this.treeParams,
       sharedWaterParams: this.waterParams,
+      sharedBiomeGenerator: this.biomeGenerator, // STEP 2: 共享群系生成器
       biomeSource: this.biomeParams.biomeSource,
       forcedBiome: this.biomeParams.forcedBiome,
     })
@@ -706,6 +711,48 @@ export default class ChunkManager {
       }
     })
 
+    // STEP 2: BiomeGenerator 参数控制（仅在 generator 模式下生效）
+    const biomeGenFolder = biomeFolder.addFolder({
+      title: '生成器参数',
+      expanded: false,
+    })
+
+    biomeGenFolder.addBinding(this.biomeGenerator, 'tempScale', {
+      label: '温度噪声缩放',
+      min: 20,
+      max: 300,
+      step: 5,
+    }).on('change', () => {
+      if (this.biomeParams.biomeSource === 'generator') {
+        this.biomeGenerator.clearAllCache()
+        this._regenerateAllChunks()
+      }
+    })
+
+    biomeGenFolder.addBinding(this.biomeGenerator, 'humidityScale', {
+      label: '湿度噪声缩放',
+      min: 20,
+      max: 300,
+      step: 5,
+    }).on('change', () => {
+      if (this.biomeParams.biomeSource === 'generator') {
+        this.biomeGenerator.clearAllCache()
+        this._regenerateAllChunks()
+      }
+    })
+
+    biomeGenFolder.addBinding(this.biomeGenerator, 'transitionThreshold', {
+      label: '过渡阈值',
+      min: 0.05,
+      max: 0.5,
+      step: 0.01,
+    }).on('change', () => {
+      if (this.biomeParams.biomeSource === 'generator') {
+        this.biomeGenerator.clearAllCache()
+        this._regenerateAllChunks()
+      }
+    })
+
     // ===== Streaming 参数 =====
     const streamingFolder = this.debugFolder.addFolder({
       title: 'Streaming 参数',
@@ -833,6 +880,9 @@ export default class ChunkManager {
    * 全量重新生成所有 chunk（用于生成参数变更：种子/群系）
    */
   _regenerateAllChunks() {
+    // STEP 2: 清除群系缓存（确保使用新参数重新计算）
+    this.biomeGenerator.clearAllCache()
+
     const params = {
       seed: this.seed,
       biomeSource: this.biomeParams.biomeSource,
@@ -840,6 +890,8 @@ export default class ChunkManager {
     }
 
     this.chunks.forEach((chunk) => {
+      // 确保每个 chunk 的 generator 使用共享的 biomeGenerator
+      chunk.generator.biomeGenerator = this.biomeGenerator
       chunk.regenerate(params)
       // 同步渲染缩放
       chunk.renderer?.group?.scale?.setScalar(this.renderParams.scale)

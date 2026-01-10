@@ -43,6 +43,7 @@ export default class TerrainChunk {
       sharedTerrainParams,
       sharedTreeParams,
       sharedWaterParams,
+      sharedBiomeGenerator, // STEP 2: 共享群系生成器
       biomeSource,
       forcedBiome,
     } = options
@@ -85,6 +86,7 @@ export default class TerrainChunk {
       sharedTerrainParams,
       sharedTreeParams,
       sharedWaterParams,
+      sharedBiomeGenerator, // STEP 2: 传递共享群系生成器
       originX: this.originX,
       originZ: this.originZ,
       biomeSource,
@@ -94,6 +96,7 @@ export default class TerrainChunk {
       broadcast: false,
       debugEnabled: false,
     })
+
 
     // ===== 渲染：实例化 mesh，并把 group 放到 chunk 世界位置 =====
     // 注意：chunk 场景下不允许每个 chunk 各自创建 debug panel，否则面板会爆炸式增长

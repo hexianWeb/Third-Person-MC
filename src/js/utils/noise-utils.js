@@ -6,7 +6,7 @@
 /**
  * 生成 2D fBm（分形布朗运动）噪声
  * 通过叠加多个不同频率和振幅的 Simplex 噪声来创建更自然的地形
- * 
+ *
  * @param {SimplexNoise} simplex - SimplexNoise 实例
  * @param {number} x - 世界 X 坐标
  * @param {number} z - 世界 Z 坐标
@@ -35,10 +35,10 @@ export function fbm2D(simplex, x, z, options = {}) {
     // 计算当前八度的采样坐标
     const sampleX = x / (scale / frequency)
     const sampleZ = z / (scale / frequency)
-    
+
     // 获取 Simplex 噪声值（范围约 [-1, 1]）
     const noiseVal = simplex.noise(sampleX, sampleZ)
-    
+
     // 累加加权噪声值
     result += noiseVal * amplitude
     maxAmplitude += amplitude
@@ -51,4 +51,3 @@ export function fbm2D(simplex, x, z, options = {}) {
   // 归一化到 [-1, 1] 范围
   return result / maxAmplitude
 }
-
