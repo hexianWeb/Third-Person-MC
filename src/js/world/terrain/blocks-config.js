@@ -6,6 +6,9 @@
 import * as THREE from 'three'
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
 
+import aoFragmentShader from '../../../shaders/blocks/ao.frag.glsl'
+// 导入 AO 着色器
+import aoVertexShader from '../../../shaders/blocks/ao.vert.glsl'
 // 导入动画着色器
 import windVertexShader from '../../../shaders/blocks/wind.vert.glsl'
 
@@ -368,6 +371,7 @@ export function createMaterials(blockType, textureItems) {
     // 获取动画配置（如果有）
     const animConfig = buildAnimationConfig(blockType)
 
+    // 基础材质配置
     const materialConfig = {
       baseMaterial: THREE.MeshPhongMaterial,
       map: tex,
@@ -376,13 +380,30 @@ export function createMaterials(blockType, textureItems) {
       ...options,
     }
 
-    // 如果有动画配置，注入 uniforms 和着色器
-    if (animConfig) {
+    // 始终注入 AO 着色器（非透明方块）
+    // 透明方块（如树叶）不使用 AO，避免视觉问题
+    const useAO = !blockType.transparent
+
+    if (useAO) {
+      // 合并 AO 顶点着色器
+      let vertexShader = aoVertexShader
+
+      // 如果同时有动画，需要合并着色器
+      if (animConfig) {
+        // 动画材质：AO + 动画
+        // TODO: 合并两个顶点着色器（当前先使用动画着色器，后续迭代）
+        vertexShader = animConfig.vertexShader
+        materialConfig.uniforms = animConfig.uniforms
+      }
+
+      materialConfig.vertexShader = vertexShader
+      materialConfig.fragmentShader = aoFragmentShader
+    }
+    else if (animConfig) {
+      // 仅动画（透明方块如树叶）
       materialConfig.uniforms = animConfig.uniforms
       materialConfig.vertexShader = animConfig.vertexShader
-      // fragment shader 不需要修改时可以省略
     }
-    // 无动画的材质不需要自定义着色器，使用 CSM 默认行为即可
 
     const material = new CustomShaderMaterial(materialConfig)
 

@@ -9,6 +9,7 @@ import Experience from '../../experience.js'
 import { RNG } from '../../tools/rng.js'
 import emitter from '../../utils/event-bus.js'
 import { fbm2D } from '../../utils/noise-utils.js'
+import { computeAllBlocksAO } from './ao-calculator.js'
 import { getBiomeConfig } from './biome-config.js'
 import BiomeGenerator from './biome-generator.js'
 import { BLOCK_IDS, blocks, resources } from './blocks-config.js'
@@ -131,6 +132,9 @@ export default class TerrainGenerator {
     const treeStats = this.generateTrees(rng)
     // 生成植物（草、花等）
     const plantStats = this.generatePlants(rng)
+
+    // 计算 AO（必须在 mesh 生成前）
+    this.computeAO()
 
     // 挂载并生成渲染数据
     this.generateMeshes({ ...oreStats, ...treeStats, ...plantStats })
@@ -733,6 +737,13 @@ export default class TerrainGenerator {
     }
 
     return types[0]
+  }
+
+  /**
+   * 计算所有可见方块的 AO 值
+   */
+  computeAO() {
+    computeAllBlocksAO(this.container)
   }
 
   /**

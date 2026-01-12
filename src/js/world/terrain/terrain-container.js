@@ -50,6 +50,7 @@ export default class TerrainContainer {
           row.push({
             id: blocks.empty.id,
             instanceId: null,
+            ao: null, // Uint8Array(6) for visible blocks, null otherwise
           })
         }
         slice.push(row)
