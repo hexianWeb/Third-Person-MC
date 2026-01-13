@@ -159,37 +159,19 @@ export default class TerrainRenderer {
         }
       })
 
-      // 克隆几何体以便添加实例属性（AO）
+      // Clone geometry to add instance attributes (AO)
       const geometry = sharedGeometry.clone()
 
-      // 创建 AO 实例属性
-      // 拆分为两个属性: instanceAO (vec4: +X, -X, +Y, -Y) 和 instanceAO2 (vec2: +Z, -Z)
-      const aoArray = new Float32Array(positions.length * 4)
-      const ao2Array = new Float32Array(positions.length * 2)
+      // Create AO instance attribute: single float per block (Top-Column AO)
+      // aAo: 0 = no occlusion (bright), 1 = max occlusion (darkest)
+      const aoArray = new Float32Array(positions.length)
 
       positions.forEach((pos, i) => {
         const block = this.container.getBlock(pos.x, pos.y, pos.z)
-        if (block.ao) {
-          // AO 存储为 0-255，转换为 0-1 范围
-          aoArray[i * 4 + 0] = block.ao[0] / 255 // +X
-          aoArray[i * 4 + 1] = block.ao[1] / 255 // -X
-          aoArray[i * 4 + 2] = block.ao[2] / 255 // +Y
-          aoArray[i * 4 + 3] = block.ao[3] / 255 // -Y
-          ao2Array[i * 2 + 0] = block.ao[4] / 255 // +Z
-          ao2Array[i * 2 + 1] = block.ao[5] / 255 // -Z
-        }
-        else {
-          // 无 AO 数据，使用最大值（无遮挡）
-          aoArray[i * 4 + 0] = 1.0
-          aoArray[i * 4 + 1] = 1.0
-          aoArray[i * 4 + 2] = 1.0
-          aoArray[i * 4 + 3] = 1.0
-          ao2Array[i * 2 + 0] = 1.0
-          ao2Array[i * 2 + 1] = 1.0
-        }
+        // block.ao is now 0-3 (Top-Column AO), map to 0-1 where higher = more occlusion
+        aoArray[i] = block.ao != null ? block.ao / 3.0 : 0.0
       })
-      geometry.setAttribute('instanceAO', new THREE.InstancedBufferAttribute(aoArray, 4))
-      geometry.setAttribute('instanceAO2', new THREE.InstancedBufferAttribute(ao2Array, 2))
+      geometry.setAttribute('aAo', new THREE.InstancedBufferAttribute(aoArray, 1))
 
       const mesh = new THREE.InstancedMesh(geometry, materials, positions.length)
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
