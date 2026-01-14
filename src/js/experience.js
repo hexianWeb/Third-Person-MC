@@ -53,6 +53,28 @@ export default class Experience {
       this.update()
     })
 
+    // Listen for pause state changes from UI
+    this.isPaused = false
+    emitter.on('ui:pause-changed', (paused) => {
+      this.isPaused = paused
+    })
+
+    // Listen for world creation/reset events from UI
+    emitter.on('game:create_world', ({ seed, terrain, trees }) => {
+      // First world creation - world is initialized on core:ready
+      // Just update seed if chunkManager already exists
+      if (this.world?.chunkManager) {
+        this.world.reset({ seed, terrain, trees })
+      }
+    })
+
+    emitter.on('game:reset_world', ({ seed, terrain, trees }) => {
+      // Reset existing world with new seed and worldgen params
+      if (this.world) {
+        this.world.reset({ seed, terrain, trees })
+      }
+    })
+
     window.addEventListener('beforeunload', () => {
       this.destroy()
     })
@@ -64,9 +86,13 @@ export default class Experience {
   }
 
   update() {
-    this.camera.update()
-    this.world.update()
-    this.renderer.update() // 切换为手动更新
+    // When paused, skip world and camera updates but keep rendering
+    if (!this.isPaused) {
+      this.camera.update()
+      this.world.update()
+    }
+    // Always render (for static scene display)
+    this.renderer.update()
     this.stats.update()
     this.iMouse.update()
   }

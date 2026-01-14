@@ -83,6 +83,113 @@ export default class ChunkManager {
   }
 
   /**
+   * Set world seed and regenerate all chunks
+   * @param {number} newSeed - The new seed value
+   */
+  setSeed(newSeed) {
+    this.seed = newSeed
+    this.biomeGenerator.seed = newSeed
+    this._regenerateAllChunks()
+  }
+
+  // ========================================
+  // Public API for lightweight world regeneration
+  // ========================================
+
+  /**
+   * Apply WorldGen params (field-by-field to preserve object references)
+   * @param {object} params - { terrain, trees, water, biome }
+   */
+  applyWorldGenParams({ terrain, trees, water, biome } = {}) {
+    // Apply terrain params
+    if (terrain) {
+      if (terrain.scale !== undefined) this.terrainParams.scale = terrain.scale
+      if (terrain.magnitude !== undefined) this.terrainParams.magnitude = terrain.magnitude
+      if (terrain.offset !== undefined) this.terrainParams.offset = terrain.offset
+      if (terrain.fbm) {
+        if (terrain.fbm.octaves !== undefined) this.terrainParams.fbm.octaves = terrain.fbm.octaves
+        if (terrain.fbm.gain !== undefined) this.terrainParams.fbm.gain = terrain.fbm.gain
+        if (terrain.fbm.lacunarity !== undefined) this.terrainParams.fbm.lacunarity = terrain.fbm.lacunarity
+      }
+    }
+
+    // Apply tree params
+    if (trees) {
+      if (trees.minHeight !== undefined) this.treeParams.minHeight = trees.minHeight
+      if (trees.maxHeight !== undefined) this.treeParams.maxHeight = trees.maxHeight
+      if (trees.minRadius !== undefined) this.treeParams.minRadius = trees.minRadius
+      if (trees.maxRadius !== undefined) this.treeParams.maxRadius = trees.maxRadius
+      if (trees.frequency !== undefined) this.treeParams.frequency = trees.frequency
+    }
+
+    // Apply water params
+    if (water) {
+      if (water.waterOffset !== undefined) this.waterParams.waterOffset = water.waterOffset
+    }
+
+    // Apply biome params
+    if (biome) {
+      if (biome.biomeSource !== undefined) this.biomeParams.biomeSource = biome.biomeSource
+      if (biome.forcedBiome !== undefined) this.biomeParams.forcedBiome = biome.forcedBiome
+    }
+  }
+
+  /**
+   * Lightweight world regeneration entry point
+   * @param {object} options - { seed, terrain, trees, water, biome, centerPos, forceSyncCenterChunk }
+   */
+  regenerateAll({
+    seed,
+    terrain,
+    trees,
+    water,
+    biome,
+    centerPos = { x: this.chunkWidth * 0.5, z: this.chunkWidth * 0.5 },
+    forceSyncCenterChunk = true,
+  } = {}) {
+    // (1) Cancel old queue tasks
+    this.idleQueue.clear?.()
+    // Alternatively, cancel by prefix for all chunks
+    this.chunks.forEach((_, key) => {
+      this.idleQueue.cancelByPrefix(`${key}:`)
+    })
+
+    // (2) Update seed
+    if (seed !== undefined) {
+      this.seed = seed
+      this.biomeGenerator.seed = seed
+    }
+
+    // (3) Apply worldgen params
+    this.applyWorldGenParams({ terrain, trees, water, biome })
+
+    // (4) Force rebuild all existing chunks
+    this._regenerateAllChunks()
+
+    // (5) Force refresh streaming grid
+    this._lastPlayerChunkX = null
+    this._lastPlayerChunkZ = null
+    this.updateStreaming(centerPos, true)
+
+    // (6) Sync-generate center chunk if requested
+    if (forceSyncCenterChunk) {
+      const pcx = Math.floor(centerPos.x / this.chunkWidth)
+      const pcz = Math.floor(centerPos.z / this.chunkWidth)
+      const currentKey = this._key(pcx, pcz)
+      const currentChunk = this.chunks.get(currentKey)
+      if (currentChunk?.state === 'init') {
+        currentChunk.generator.params.seed = this.seed
+        currentChunk.generateData()
+        currentChunk.buildMesh()
+        currentChunk.renderer.group.scale.setScalar(this.renderParams.scale)
+      }
+    }
+
+    // (7) Return info
+    return { seed: this.seed }
+  }
+
+  /**
    * 获取 chunk（不存在则返回 null）
    */
   getChunk(chunkX, chunkZ) {

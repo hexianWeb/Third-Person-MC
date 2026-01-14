@@ -9,7 +9,197 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'MinecraftV2';
+  src: url('/fonts/MinecraftV2.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   font-family: 'Minecraftia', sans-serif;
   font-weight: 400;
+}
+
+.mc-text {
+  font-family: 'MinecraftV2', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+}
+// ========================================
+// Minecraft UI System - Global Styles
+// ========================================
+
+// Mixin: Flex center both directions
+@mixin flex-center-hv {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+// CSS Variables for MC UI
+// Responsive scaling: ~1.2x on PC (wide screens), scales down on narrow screens
+:root {
+  // Base scale factor: 1.2 on wide screens, scales down to 1.0 on narrow
+  // Using calc inside clamp for proper unit mixing
+  --mc-ui-scale: 1.2;
+  
+  // Derived dimensions from scale
+  --mc-btn-height: calc(40px * var(--mc-ui-scale));
+  --mc-btn-width: min(calc(400px * var(--mc-ui-scale)), 92vw);
+  --mc-btn-gap: calc(8px * var(--mc-ui-scale));
+  
+  // Font size scaling for buttons
+  --mc-btn-font-size: calc(1em * var(--mc-ui-scale));
+}
+
+// Media query for smaller screens - reduce scale
+@media (max-width: 600px) {
+  :root {
+    --mc-ui-scale: 1.0;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1000px) {
+  :root {
+    --mc-ui-scale: 1.1;
+  }
+}
+
+// ========================================
+// MC Menu Container
+// ========================================
+.mc-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mc-btn-gap);
+  padding: 16px;
+
+  // Double button row
+  &.double {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+// ========================================
+// MC Button Style
+// ========================================
+.mc-button {
+  height: var(--mc-btn-height);
+  width: var(--mc-btn-width);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+
+  background: #999 url('/textures/hub/btn_bg.png') center / cover;
+  image-rendering: pixelated;
+  border: 2px solid #000;
+
+  // Hover state
+  &:hover .title {
+    background-color: rgba(100, 100, 255, 0.45);
+    text-shadow: 2px 2px #202013cc;
+    color: #ffffa0;
+  }
+
+  // Active/pressed state
+  &:active .title {
+    box-shadow: inset -2px -4px #0004, inset 2px 2px #fff5;
+  }
+
+  // Button title text
+  .title {
+    width: 100%;
+    height: 100%;
+    font-size: var(--mc-btn-font-size);
+    line-height: 1;
+    @include flex-center-hv;
+
+    color: #ddd;
+    text-shadow: 2px 2px #000a;
+    box-shadow: inset -2px -4px #0006, inset 2px 2px #fff7;
+  }
+
+  // Modifier: full width
+  &.full {
+    width: 100%;
+    height: 100%;
+  }
+
+  // Modifier: half width (for double layout)
+  &.half {
+    width: calc(var(--mc-btn-width) / 2 - var(--mc-btn-gap) / 2);
+  }
+
+  // Modifier: small button
+  &.small {
+    width: 200px;
+    height: 36px;
+  }
+
+  // Modifier: disabled state
+  &:disabled,
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+
+// ========================================
+// MC Input Field Style
+// ========================================
+.mc-input {
+  height: var(--mc-btn-height);
+  width: var(--mc-btn-width);
+  padding: 0 12px;
+
+  background: #000;
+  border: 2px solid #a0a0a0;
+  color: #fff;
+  font-size: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: #fff;
+  }
+
+  &::placeholder {
+    color: #666;
+  }
+}
+
+// ========================================
+// MC Dialog/Panel Style
+// ========================================
+.mc-panel {
+  background: #c6c6c6;
+  border: 4px solid;
+  border-color: #fff #555 #555 #fff;
+  padding: 16px;
+  image-rendering: pixelated;
+}
+
+// ========================================
+// Menu Overlay
+// ========================================
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  @include flex-center-hv;
+  
+  // Semi-transparent dark overlay
+  &.dark {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  
+  // Deeper overlay for loading
+  &.loading {
+    background: rgba(0, 0, 0, 0.85);
+  }
 }

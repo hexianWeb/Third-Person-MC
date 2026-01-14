@@ -63,6 +63,12 @@ export default class InputManager {
       event.preventDefault()
     }
 
+    // ESC key - emit ui:escape for menu system
+    if (event.key === 'Escape') {
+      emitter.emit('ui:escape')
+      return
+    }
+
     if (key === 'tab') {
       emitter.emit('input:toggle_camera_side')
       return

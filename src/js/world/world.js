@@ -132,6 +132,39 @@ export default class World {
       this.blockSelectionHelper.update()
   }
 
+  /**
+   * Reset the world with new seed and worldgen params (lightweight rebuild)
+   * @param {object} options
+   * @param {number} options.seed - The new world seed
+   * @param {object} [options.terrain] - Terrain generation params
+   * @param {object} [options.trees] - Tree generation params
+   */
+  reset({ seed, terrain, trees } = {}) {
+    if (!this.chunkManager) {
+      console.warn('[World] Cannot reset: chunkManager not initialized')
+      return
+    }
+
+    // Use the new lightweight regeneration API
+    this.chunkManager.regenerateAll({
+      seed,
+      terrain,
+      trees,
+      centerPos: { x: this.chunkManager.chunkWidth * 0.5, z: this.chunkManager.chunkWidth * 0.5 },
+      forceSyncCenterChunk: true,
+    })
+
+    // Reset player position to safe spawn point (Strategy A)
+    if (this.player) {
+      const spawnX = this.chunkManager.chunkWidth * 0.5
+      const spawnZ = this.chunkManager.chunkWidth * 0.5
+      // Get ground height, fallback to safe height if null
+      const groundY = this.chunkManager.getTopSolidYWorld(spawnX, spawnZ)
+      const spawnY = (groundY ?? (this.chunkManager.chunkHeight - 2)) + 1
+      this.player.setPosition(spawnX, spawnY + 1, spawnZ)
+    }
+  }
+
   destroy() {
     // Destroy child components
     this.blockSelectionHelper?.dispose()

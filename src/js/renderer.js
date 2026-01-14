@@ -54,6 +54,55 @@ export default class Renderer {
 
     // 将渲染器与相机绑定，支持动态切换相机实例
     this.camera.attachRenderer(this)
+
+    // Listen for settings changes from Settings UI
+    this._setupSettingsListeners()
+  }
+
+  /**
+   * Setup listeners for settings changes from Settings UI
+   */
+  _setupSettingsListeners() {
+    emitter.on('settings:postprocess-changed', ({ speedLines }) => {
+      if (speedLines) {
+        // Update speedLines config
+        this.postProcessConfig.speedLines.enabled = speedLines.enabled
+        this.speedLinePass.enabled = speedLines.enabled
+        
+        if (speedLines.color) {
+          this.postProcessConfig.speedLines.color = speedLines.color
+          this.speedLinePass.uniforms.uColor.value.setRGB(
+            speedLines.color.r / 255,
+            speedLines.color.g / 255,
+            speedLines.color.b / 255,
+          )
+        }
+        if (speedLines.density !== undefined) {
+          this.postProcessConfig.speedLines.density = speedLines.density
+          this.speedLinePass.uniforms.uDensity.value = speedLines.density
+        }
+        if (speedLines.speed !== undefined) {
+          this.postProcessConfig.speedLines.speed = speedLines.speed
+          this.speedLinePass.uniforms.uSpeed.value = speedLines.speed
+        }
+        if (speedLines.thickness !== undefined) {
+          this.postProcessConfig.speedLines.thickness = speedLines.thickness
+          this.speedLinePass.uniforms.uThickness.value = speedLines.thickness
+        }
+        if (speedLines.minRadius !== undefined) {
+          this.postProcessConfig.speedLines.minRadius = speedLines.minRadius
+          this.speedLinePass.uniforms.uMinRadius.value = speedLines.minRadius
+        }
+        if (speedLines.maxRadius !== undefined) {
+          this.postProcessConfig.speedLines.maxRadius = speedLines.maxRadius
+          this.speedLinePass.uniforms.uMaxRadius.value = speedLines.maxRadius
+        }
+        if (speedLines.randomness !== undefined) {
+          this.postProcessConfig.speedLines.randomness = speedLines.randomness
+          this.speedLinePass.uniforms.uRandomness.value = speedLines.randomness
+        }
+      }
+    })
   }
 
   setInstance() {

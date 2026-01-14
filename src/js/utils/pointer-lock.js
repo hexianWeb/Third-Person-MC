@@ -41,6 +41,18 @@ export default class PointerLockManager {
 
     // 点击 canvas 请求锁定
     this.canvas.addEventListener('click', this._onClick)
+
+    // 监听 UI 暂停事件 - 暂停时退出锁定
+    emitter.on('ui:pause-changed', (isPaused) => {
+      if (isPaused && this.isLocked) {
+        this.exitLock()
+      }
+    })
+
+    // 监听请求锁定事件（从 Vue UI 触发）
+    emitter.on('game:request_pointer_lock', () => {
+      this.requestLock()
+    })
   }
 
   /**

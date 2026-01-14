@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import Experience from '../experience.js'
+import emitter from '../utils/event-bus.js'
 
 export default class Environment {
   constructor() {
@@ -35,6 +36,33 @@ export default class Environment {
     this.setEnvironmentMap()
     this.setFog()
     this.debuggerInit()
+
+    // Listen for settings changes from Settings UI
+    this._setupSettingsListeners()
+  }
+
+  /**
+   * Setup listeners for settings changes from Settings UI
+   */
+  _setupSettingsListeners() {
+    emitter.on('settings:environment-changed', (patch) => {
+      if (patch.skyMode !== undefined) {
+        this.params.background = patch.skyMode
+        this.updateBackground()
+      }
+      if (patch.sunIntensity !== undefined) {
+        this.params.sunIntensity = patch.sunIntensity
+        this.updateSunLightIntensity()
+      }
+      if (patch.ambientIntensity !== undefined) {
+        this.params.ambientIntensity = patch.ambientIntensity
+        this.updateAmbientLight()
+      }
+      if (patch.fogDensity !== undefined) {
+        this.params.fogDensity = patch.fogDensity
+        this.updateFog()
+      }
+    })
   }
 
   setFog() {

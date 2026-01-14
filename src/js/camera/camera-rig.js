@@ -102,6 +102,39 @@ export default class CameraRig {
       // 更新常规偏移
       this._normalOffset.y = newY
     })
+
+    // Listen for mouse sensitivity changes from Settings UI
+    emitter.on('settings:mouse-sensitivity-changed', (value) => {
+      this.config.follow.mouseTargetY.sensitivity = value
+    })
+
+    // Listen for camera preset changes from Settings UI
+    emitter.on('settings:camera-rig-changed', ({ fov, bobbing }) => {
+      if (fov) {
+        // Update FOV config
+        this.config.trackingShot.fov.enabled = fov.enabled
+        this.config.trackingShot.fov.baseFov = fov.baseFov
+        this.config.trackingShot.fov.maxFov = fov.maxFov
+        this.config.trackingShot.fov.speedThreshold = fov.speedThreshold
+        this.config.trackingShot.fov.smoothSpeed = fov.smoothSpeed
+      }
+      if (bobbing) {
+        // Update Bobbing config
+        this.config.trackingShot.bobbing.enabled = bobbing.enabled
+        this.config.trackingShot.bobbing.verticalFrequency = bobbing.verticalFrequency
+        this.config.trackingShot.bobbing.verticalAmplitude = bobbing.verticalAmplitude
+        this.config.trackingShot.bobbing.horizontalFrequency = bobbing.horizontalFrequency
+        this.config.trackingShot.bobbing.horizontalAmplitude = bobbing.horizontalAmplitude
+        this.config.trackingShot.bobbing.rollFrequency = bobbing.rollFrequency
+        this.config.trackingShot.bobbing.rollAmplitude = bobbing.rollAmplitude
+        this.config.trackingShot.bobbing.speedMultiplier = bobbing.speedMultiplier
+        if (bobbing.idleBreathing) {
+          this.config.trackingShot.bobbing.idleBreathing.enabled = bobbing.idleBreathing.enabled
+          this.config.trackingShot.bobbing.idleBreathing.frequency = bobbing.idleBreathing.frequency
+          this.config.trackingShot.bobbing.idleBreathing.amplitude = bobbing.idleBreathing.amplitude
+        }
+      }
+    })
   }
 
   attachPlayer(player) {
