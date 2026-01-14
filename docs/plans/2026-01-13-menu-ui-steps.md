@@ -46,7 +46,7 @@
 	background: #999 url('/textures/hub/bgbtn.png') center / cover;
 	image-rendering: pixelated;
 	border: 2px solid #000;
-	
+
 	/* Mouse over */
 	&:hover .title {
 		background-color: rgba(100, 100, 255, .45);
@@ -61,7 +61,7 @@
 		width: 100%; height: 100%;
 		padding-bottom: .3em;
 		@include flex-center-hv;
-		
+
 		color: #DDD;
 		text-shadow: 2px 2px #000A;
 		box-shadow: inset -2px -4px #0006, inset 2px 2px #FFF7;
@@ -73,8 +73,6 @@
 		& .title  { padding-bottom: 0; } }
 }
 ```
-
-
 
 **手动验证：**
 - 任意页面里临时写一个 `<div class="mc-button"><div class="title">Test</div></div>` 能呈现 MC 按钮视觉
@@ -368,4 +366,3 @@
 3. ESC → PauseMenu → Main Menu（保留世界且暂停）→ Continue 回 playing
 4. Main Menu → New World → World Setup → Create → 弹覆盖确认 → Confirm → 世界重建
 5. Settings 可打开并调节至少 3 个参数
-

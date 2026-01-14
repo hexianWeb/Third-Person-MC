@@ -203,7 +203,7 @@ export const BIOMES = {
     tempRange: [0.6, 1.0], // Start closer to center (0.6) to appear more often
     humidityRange: [0.0, 0.45], // Allow a bit more humidity
     terrainParams: {
-      heightOffset: 0, // 基准或略低
+      heightOffset: 2, // 基准或略低
       heightMagnitude: 3.0, // 较大，沙丘起伏
     },
     blocks: {
@@ -244,7 +244,7 @@ export const BIOMES = {
     tempRange: [0.55, 0.9], // Overlaps with Desert but distinct band
     humidityRange: [0.0, 0.25],
     terrainParams: {
-      heightOffset: 0, // 较高
+      heightOffset: 2, // 较高
       heightMagnitude: 5,
     },
     blocks: {
