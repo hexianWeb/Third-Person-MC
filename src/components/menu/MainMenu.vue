@@ -17,7 +17,7 @@ const showConfirmDialog = ref(false)
 const taglines = [
   'Web3D Powered!',
   'Three.js Rocks!',
-  'No install required!'
+  'No install required!',
 ]
 
 // Randomly select a tagline on component mount
@@ -79,7 +79,7 @@ function cancelOverwrite() {
         <button class="mc-button" @click="ui.toSettings('mainMenu')">
           <span class="title">Settings</span>
         </button>
-        <button class="mc-button disabled">
+        <button class="mc-button" @click="ui.toHowToPlay()">
           <span class="title">How to Play</span>
         </button>
       </template>
@@ -96,7 +96,7 @@ function cancelOverwrite() {
           <span class="title">Settings</span>
         </button>
         <div class="mc-menu double">
-          <button class="mc-button half disabled">
+          <button class="mc-button half" @click="ui.toHowToPlay()">
             <span class="title">How to Play</span>
           </button>
           <button class="mc-button half disabled">
@@ -268,14 +268,14 @@ function cancelOverwrite() {
 
 .tagline {
   position: absolute;
-  top: 0;
+  top: -10%;
   right: 0;
   transform-origin: center;
   transform: translate(10%, -20%) rotate(-15deg);
   font-family: 'MinecraftV2', 'Minecraftia', monospace;
-  font-size: clamp(18px, 3vw, 28px);
+  font-size: clamp(20px, 3vw, 32px);
   color: #ffff00;
-  text-shadow: 
+  text-shadow:
     3px 3px 0 #3f3f00,
     -1px -1px 0 #000,
     1px -1px 0 #000,

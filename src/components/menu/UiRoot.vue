@@ -6,6 +6,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import emitter from '../../js/utils/event-bus.js'
 import { useUiStore } from '../../vue/uiStore.js'
+import HowToPlay from './HowToPlay.vue'
 import LoadingScreen from './LoadingScreen.vue'
 import MainMenu from './MainMenu.vue'
 import PauseMenu from './PauseMenu.vue'
@@ -42,14 +43,17 @@ function handleEscape() {
       class="menu-overlay"
       :class="{
         loading: ui.screen === 'loading',
-        dark: ui.screen !== 'loading'
+        dark: ui.screen !== 'loading',
       }"
     >
       <!-- Loading Screen -->
       <LoadingScreen v-if="ui.screen === 'loading'" />
 
       <!-- Main Menu -->
-      <MainMenu v-else-if="ui.screen === 'mainMenu'" />
+      <template v-else-if="ui.screen === 'mainMenu'">
+        <HowToPlay v-if="ui.mainMenuView === 'howToPlay'" />
+        <MainMenu v-else />
+      </template>
 
       <!-- Pause Menu -->
       <PauseMenu v-else-if="ui.screen === 'pauseMenu'" />

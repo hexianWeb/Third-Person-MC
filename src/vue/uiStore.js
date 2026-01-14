@@ -28,7 +28,7 @@ export const useUiStore = defineStore('ui', () => {
   /** Current screen: 'loading' | 'mainMenu' | 'playing' | 'pauseMenu' | 'settings' */
   const screen = ref('loading')
 
-  /** Main menu sub-view: 'root' | 'worldSetup' */
+  /** Main menu sub-view: 'root' | 'worldSetup' | 'howToPlay' */
   const mainMenuView = ref('root')
 
   /** Whether a new world creation is pending (for overwrite confirmation) */
@@ -224,6 +224,20 @@ export const useUiStore = defineStore('ui', () => {
     advancedExpanded.value = false
   }
 
+  /**
+   * Enter How to Play view
+   */
+  function toHowToPlay() {
+    mainMenuView.value = 'howToPlay'
+  }
+
+  /**
+   * Exit How to Play back to Main Menu root
+   */
+  function exitHowToPlay() {
+    backToMainRoot()
+  }
+
   // ----------------------------------------
   // Actions: WorldGen Draft
   // ----------------------------------------
@@ -332,6 +346,11 @@ export const useUiStore = defineStore('ui', () => {
       case 'playing':
         toPauseMenu()
         break
+      case 'mainMenu':
+        // 在 mainMenu 的子视图中（worldSetup/howToPlay）统一返回 root
+        if (mainMenuView.value !== 'root')
+          backToMainRoot()
+        break
       // 'loading', 'mainMenu' - ignore ESC
     }
   }
@@ -372,6 +391,8 @@ export const useUiStore = defineStore('ui', () => {
     // Main Menu
     enterWorldSetup,
     backToMainRoot,
+    toHowToPlay,
+    exitHowToPlay,
 
     // WorldGen
     applyWorldGenPreset,
