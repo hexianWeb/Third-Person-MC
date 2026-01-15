@@ -213,6 +213,28 @@ export default class Player {
       // 更新目标朝向，而非直接设置
       this.targetFacingAngle -= movementX * this.config.mouseSensitivity
     })
+
+    // ==================== 重生 ====================
+    emitter.on('input:respawn', () => {
+      this.respawn()
+    })
+  }
+
+  /**
+   * 触发角色重生
+   */
+  respawn() {
+    this.movement.respawn()
+  }
+
+  /**
+   * 瞬间移动角色到指定位置
+   * @param {number} x
+   * @param {number} y
+   * @param {number} z
+   */
+  setPosition(x, y, z) {
+    this.movement.setPosition(x, y, z)
   }
 
   update() {

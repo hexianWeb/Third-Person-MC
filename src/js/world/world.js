@@ -156,12 +156,8 @@ export default class World {
 
     // Reset player position to safe spawn point (Strategy A)
     if (this.player) {
-      const spawnX = this.chunkManager.chunkWidth * 0.5
-      const spawnZ = this.chunkManager.chunkWidth * 0.5
-      // Get ground height, fallback to safe height if null
-      const groundY = this.chunkManager.getTopSolidYWorld(spawnX, spawnZ)
-      const spawnY = (groundY ?? (this.chunkManager.chunkHeight - 2)) + 1
-      this.player.setPosition(spawnX, spawnY + 1, spawnZ)
+      // 触发一次重生，它内部会通过最新的 chunkManager 数据计算正确的高度
+      this.player.respawn()
     }
   }
 

@@ -48,6 +48,8 @@ export default class CameraRig {
     // 初始化时记录偏移量的绝对值，用于切换时的基准
     this._cachedMagnitude = Math.abs(this.config.follow.offset.x)
     this._currentSide = Math.sign(this.config.follow.offset.x) || 1
+    // 用于控制左右切换的因子 (-1 到 1)，平滑过渡
+    this._sideFactor = this._currentSide
 
     // 洞内状态管理
     this.isInCave = false // 当前是否在洞内（头顶有方块）
@@ -155,24 +157,12 @@ export default class CameraRig {
   }
 
   toggleSide() {
-    // 每次切换时更新当前的偏移幅度和方向状态
-    // 如果当前正在动画中，则不更新幅度，避免幅度衰减
-    if (!gsap.isTweening(this.config.follow.offset)) {
-      this._cachedMagnitude = Math.abs(this.config.follow.offset.x)
-      // 如果幅度太小（比如接近0），使用默认值或者 config 里的值
-      if (this._cachedMagnitude < 0.1) {
-        this._cachedMagnitude = Math.abs(CAMERA_RIG_CONFIG.follow.offset.x)
-      }
-      this._currentSide = Math.sign(this.config.follow.offset.x) || 1
-    }
-
     // 切换方向
     this._currentSide *= -1
-    const targetX = this._cachedMagnitude * this._currentSide
 
-    // 使用 GSAP 平滑过渡 X 轴偏移
-    gsap.to(this.config.follow.offset, {
-      x: targetX,
+    // 使用 GSAP 平滑过渡 sideFactor
+    gsap.to(this, {
+      _sideFactor: this._currentSide,
       duration: 0.6,
       ease: 'power2.inOut',
       overwrite: true, // 确保覆盖之前的动画
@@ -239,8 +229,7 @@ export default class CameraRig {
     this._currentTargetOffset.lerp(targetLookOffset, lerpSpeed)
 
     // 3. 更新配置中的相机偏移（保持 X 轴的左右切换功能）
-    const currentSide = Math.sign(this.config.follow.offset.x) || 1
-    this.config.follow.offset.x = this._targetOffset.x * currentSide
+    this.config.follow.offset.x = this._targetOffset.x * this._sideFactor
     this.config.follow.offset.y = this._targetOffset.y
     this.config.follow.offset.z = this._targetOffset.z
 

@@ -267,17 +267,40 @@ export class PlayerMovementController {
   }
 
   /**
-   * 跌出世界后的重生处理
+   * 手动移动角色到指定位置 (瞬间传送)
+   * @param {number} x
+   * @param {number} y
+   * @param {number} z
    */
-  _checkRespawn() {
+  setPosition(x, y, z) {
+    this.position.set(x, y, z)
+    this.worldVelocity.set(0, 0, 0)
+    this.isGrounded = false
+    this._syncMeshCustom()
+  }
+
+  /**
+   * 手动触发重生
+   */
+  respawn() {
+    this._updateRespawnPoint()
+    this._checkRespawn(true)
+  }
+
+  /**
+   * 跌出世界后的重生处理
+   * @param {boolean} force - 是否强制重生
+   */
+  _checkRespawn(force = false) {
     const threshold = this.config.respawn?.thresholdY ?? -10
-    if (this.position.y > threshold)
+    if (!force && this.position.y > threshold)
       return
 
     const target = this.config.respawn?.position || { x: 10, y: 10, z: 10 }
     this.position.set(target.x, target.y, target.z)
     this.worldVelocity.set(0, 0, 0)
     this.isGrounded = false
+    this._syncMeshCustom()
   }
 
   /**

@@ -147,6 +147,12 @@ export default class InputManager {
         }
         this.keys.q = isPressed
         break
+      case 'r':
+        if (isPressed && !this.keys.r) {
+          emitter.emit('input:respawn')
+        }
+        this.keys.r = isPressed
+        break
     }
 
     // 发送连续状态更新
