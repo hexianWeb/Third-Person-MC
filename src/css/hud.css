@@ -1,0 +1,439 @@
+/**
+ * Minecraft Style HUD CSS
+ * Based on hud.html prototype
+ */
+
+:root {
+  /* === UI Scale === */
+  --hud-scale: 3.5;
+
+  /* === HUD Textures === */
+  --img-heart-empty: url('/textures/hub/heart_empty.png');
+  --img-heart-full: url('/textures/hub/heart_full.png');
+  --img-heart-half: url('/textures/hub/heart_half.png');
+
+  --img-food-empty: url('/textures/hub/food_empty.png');
+  --img-food-full: url('/textures/hub/food_full.png');
+  --img-food-half: url('/textures/hub/food_half.png');
+
+  --img-xp-bg: url('/textures/hub/experience_bar_background.png');
+  --img-xp-fill: url('/textures/hub/experience_bar_progress.png');
+
+  --img-hotbar-bg: url('/textures/hub/hotbar.png');
+  --img-selector: url('/textures/hub/hotbar_selection.png');
+
+  /* === Colors === */
+  --xp-text-color: #80ff20;
+  --xp-text-shadow: #20400b;
+  --coord-text-color: #ffffff;
+  --coord-text-shadow: #3f3f3f;
+  --chat-text-color: #ffffff;
+  --chat-text-shadow: #3f3f3f;
+  --compass-bg: rgba(0, 0, 0, 0.5);
+  --compass-tick-color: #ffffff;
+  --compass-north-color: #ff4444;
+
+  /* === Animation === */
+  --wave-stagger: 0.15s;
+}
+
+/* Force pixelated rendering for MC style */
+.hud-root,
+.hud-root * {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  box-sizing: border-box;
+}
+
+/* ========================================
+   HUD Root Container
+   ======================================== */
+.hud-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  font-family: 'Courier New', monospace;
+  user-select: none;
+}
+
+/* ========================================
+   Bottom HUD Container
+   ======================================== */
+.bottom-hud {
+  position: absolute;
+  bottom: calc(10px * var(--hud-scale));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+}
+
+/* === Stats Row (Health + Hunger) === */
+.stats-row {
+  gap: 20px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: calc(4px * var(--hud-scale));
+}
+
+/* === Unit (Icon) Base === */
+.unit {
+  width: calc(9px * var(--hud-scale));
+  height: calc(9px * var(--hud-scale));
+  position: relative;
+}
+
+.unit::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+.unit::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  z-index: 1;
+}
+
+/* === Heart Icons === */
+.heart::before {
+  background-image: var(--img-heart-empty);
+}
+.heart.full::after {
+  background-image: var(--img-heart-full);
+}
+.heart.half::after {
+  background-image: var(--img-heart-half);
+}
+.heart.empty::after {
+  display: none;
+}
+
+/* === Food Icons === */
+.food::before {
+  background-image: var(--img-food-empty);
+}
+.food.full::after {
+  background-image: var(--img-food-full);
+}
+.food.half::after {
+  background-image: var(--img-food-half);
+}
+.food.empty::after {
+  display: none;
+}
+
+/* === Health & Food Bars === */
+.health-bar {
+  display: flex;
+  flex-direction: row;
+}
+.food-bar {
+  display: flex;
+  flex-direction: row-reverse;
+}
+
+/* === Experience Bar === */
+.xp-container {
+  position: relative;
+  width: calc(182px * var(--hud-scale));
+  height: calc(5px * var(--hud-scale));
+  margin-bottom: calc(4px * var(--hud-scale));
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.xp-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: var(--img-xp-bg);
+  background-size: 100% 100%;
+  z-index: 0;
+}
+
+.xp-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-image: var(--img-xp-fill);
+  background-size: calc(182px * var(--hud-scale)) 100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  z-index: 1;
+}
+
+.xp-level {
+  position: absolute;
+  z-index: 2;
+  color: var(--xp-text-color);
+  font-size: calc(10px * var(--hud-scale));
+  line-height: 1;
+  font-weight: bold;
+  text-shadow:
+    calc(1px * var(--hud-scale)) calc(1px * var(--hud-scale)) 0 var(--xp-text-shadow),
+    calc(1px * var(--hud-scale)) 0 0 var(--xp-text-shadow),
+    0 calc(1px * var(--hud-scale)) 0 var(--xp-text-shadow),
+    calc(-1px * var(--hud-scale)) calc(1px * var(--hud-scale)) 0 var(--xp-text-shadow),
+    calc(-1px * var(--hud-scale)) 0 0 var(--xp-text-shadow),
+    0 calc(-1px * var(--hud-scale)) 0 var(--xp-text-shadow);
+}
+
+/* === Hotbar === */
+.hotbar-container {
+  position: relative;
+  width: calc(182px * var(--hud-scale));
+  height: calc(22px * var(--hud-scale));
+  background-image: var(--img-hotbar-bg);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.hotbar-selector {
+  position: absolute;
+  width: calc(24px * var(--hud-scale));
+  height: calc(24px * var(--hud-scale));
+  background-image: var(--img-selector);
+  background-size: contain;
+  background-repeat: no-repeat;
+  top: calc(-1px * var(--hud-scale));
+  z-index: 2;
+  pointer-events: none;
+  transition: left 0.05s steps(1);
+}
+
+.hotbar-slots {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding-left: calc(3px * var(--hud-scale));
+  padding-top: calc(3px * var(--hud-scale));
+  gap: calc(2px * var(--hud-scale));
+}
+
+.hotbar-slot {
+  width: calc(16px * var(--hud-scale));
+  height: calc(16px * var(--hud-scale));
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+}
+
+.item-icon {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(calc(2px * var(--hud-scale)) calc(2px * var(--hud-scale)) 0 rgba(0, 0, 0, 0.3));
+}
+
+/* === Jump Animation === */
+@keyframes mc-jump {
+  0%,
+  6%,
+  100% {
+    transform: translateY(0);
+  }
+  3% {
+    transform: translateY(calc(-4px * var(--hud-scale)));
+  }
+}
+
+.unit {
+  animation: mc-jump 6s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+.health-bar .unit:nth-child(1) { animation-delay: calc(0 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(2) { animation-delay: calc(1 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(3) { animation-delay: calc(2 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(4) { animation-delay: calc(3 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(5) { animation-delay: calc(4 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(6) { animation-delay: calc(5 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(7) { animation-delay: calc(6 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(8) { animation-delay: calc(7 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(9) { animation-delay: calc(8 * var(--wave-stagger)); }
+.health-bar .unit:nth-child(10) { animation-delay: calc(9 * var(--wave-stagger)); }
+
+.food-bar .unit:nth-child(10) { animation-delay: calc(0 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(9) { animation-delay: calc(1 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(8) { animation-delay: calc(2 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(7) { animation-delay: calc(3 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(6) { animation-delay: calc(4 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(5) { animation-delay: calc(5 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(4) { animation-delay: calc(6 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(3) { animation-delay: calc(7 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(2) { animation-delay: calc(8 * var(--wave-stagger) + 0.75s); }
+.food-bar .unit:nth-child(1) { animation-delay: calc(9 * var(--wave-stagger) + 0.75s); }
+
+.health-bar:hover .unit,
+.food-bar:hover .unit {
+  animation-duration: 1.5s;
+  animation-iteration-count: infinite;
+}
+
+/* ========================================
+   Top Info Bar
+   ======================================== */
+.top-info-bar {
+  position: absolute;
+  top: calc(5px * var(--hud-scale));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2px * var(--hud-scale));
+}
+
+/* === Coordinate Display === */
+.coord-display {
+  display: flex;
+  gap: calc(15px * var(--hud-scale));
+  font-size: calc(8px * var(--hud-scale));
+  color: var(--coord-text-color);
+  text-shadow:
+    calc(1px * var(--hud-scale)) calc(1px * var(--hud-scale)) 0 var(--coord-text-shadow),
+    calc(-1px * var(--hud-scale)) calc(1px * var(--hud-scale)) 0 var(--coord-text-shadow);
+}
+
+.coord-item {
+  display: flex;
+  align-items: baseline;
+}
+
+.coord-label {
+  margin-right: calc(2px * var(--hud-scale));
+  opacity: 0.8;
+}
+
+.coord-value {
+  font-weight: bold;
+}
+
+/* === Compass Wheel === */
+.compass-container {
+  width: calc(180px * var(--hud-scale));
+  height: calc(16px * var(--hud-scale));
+  background: var(--compass-bg);
+  border-radius: calc(2px * var(--hud-scale));
+  overflow: hidden;
+  position: relative;
+}
+
+.compass-track {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: transform 0.1s ease-out;
+}
+
+.compass-tick {
+  flex-shrink: 0;
+  width: calc(1px * var(--hud-scale));
+  height: calc(6px * var(--hud-scale));
+  background: var(--compass-tick-color);
+  opacity: 0.5;
+}
+
+.compass-tick.major {
+  height: calc(10px * var(--hud-scale));
+  opacity: 0.8;
+}
+
+.compass-direction {
+  flex-shrink: 0;
+  font-size: calc(10px * var(--hud-scale));
+  font-weight: bold;
+  color: var(--compass-tick-color);
+  text-shadow:
+    1px 1px 0 rgba(0, 0, 0, 0.8);
+  padding: 0 calc(4px * var(--hud-scale));
+}
+
+.compass-direction.north {
+  color: var(--compass-north-color);
+}
+
+.compass-pointer {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(2px * var(--hud-scale));
+  height: 100%;
+  background: var(--compass-north-color);
+  z-index: 10;
+}
+
+/* ========================================
+   Chat Box
+   ======================================== */
+.chat-box {
+  position: absolute;
+  bottom: calc(70px * var(--hud-scale));
+  left: calc(10px * var(--hud-scale));
+  width: calc(150px * var(--hud-scale));
+  max-height: calc(80px * var(--hud-scale));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--hud-scale));
+}
+
+.chat-message {
+  font-size: calc(6px * var(--hud-scale));
+  color: var(--chat-text-color);
+  text-shadow:
+    1px 1px 0 var(--chat-text-shadow),
+    -1px 1px 0 var(--chat-text-shadow);
+  padding: calc(2px * var(--hud-scale));
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: calc(1px * var(--hud-scale));
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.chat-message.fading {
+  opacity: 0.3;
+}
+
+.chat-message.system {
+  color: #ffff55;
+}
+
+/* ========================================
+   Top Right Info Panel Stack
+   ======================================== */
+.hud-top-right-stack {
+  position: absolute;
+  top: calc(10px * var(--hud-scale));
+  right: calc(10px * var(--hud-scale));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(4vh * var(--hud-scale));
+  pointer-events: none;
+}

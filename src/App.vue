@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import Crosshair from './components/Crosshair.vue'
+import GameHud from './components/hud/GameHud.vue'
 import UiRoot from './components/menu/UiRoot.vue'
 import MiniMap from './components/MiniMap.vue'
 import Experience from './js/experience.js'
@@ -24,6 +25,8 @@ onBeforeUnmount(() => {
     <canvas ref="threeCanvas" class="three-canvas absolute inset-0 z-0" />
     <!-- Menu System (Loading/MainMenu/Pause/Settings) -->
     <UiRoot />
+    <!-- Minecraft Style HUD (只在 playing 时显示) -->
+    <GameHud />
     <!-- 准星（仅在 Pointer Lock 激活时显示） -->
     <Crosshair />
     <!-- 小地图 -->

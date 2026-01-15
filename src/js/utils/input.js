@@ -58,6 +58,11 @@ export default class InputManager {
   onKeyDown(event) {
     const key = event.key.toLowerCase()
 
+    // 如果焦点在输入框或文本域，忽略游戏控制逻辑 (允许打字)
+    if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
+      return
+    }
+
     // 阻止游戏控制键的默认行为（如空格滚动页面）
     if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'tab'].includes(key)) {
       event.preventDefault()
@@ -78,6 +83,11 @@ export default class InputManager {
   }
 
   onKeyUp(event) {
+    // 如果焦点在输入框，忽略
+    if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
+      return
+    }
+
     const key = event.key.toLowerCase()
     this.updateKey(key, false)
   }

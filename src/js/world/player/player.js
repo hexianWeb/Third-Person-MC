@@ -27,6 +27,11 @@ export default class Player {
     this.config = JSON.parse(JSON.stringify(PLAYER_CONFIG))
     this.targetFacingAngle = this.config.facingAngle // 目标朝向，用于平滑插值
 
+    // FPS Calculation
+    this._fontFrames = 0
+    this._lastTime = performance.now()
+    this._currentFps = 60
+
     // 速度线当前透明度
     this._speedLineOpacity = 0
 
@@ -243,6 +248,24 @@ export default class Player {
 
     // ==================== 速度线控制 ====================
     this.updateSpeedLines(resolvedInput)
+
+    // ==================== HUD 更新 ====================
+
+    // Calculate FPS
+    this._fontFrames++
+    const now = performance.now()
+    if (now >= this._lastTime + 1000) {
+      this._currentFps = Math.round((this._fontFrames * 1000) / (now - this._lastTime))
+      this._fontFrames = 0
+      this._lastTime = now
+    }
+
+    // 发送位置和朝向信息给 Vue HUD 组件
+    emitter.emit('hud:update', {
+      position: this.getPosition(),
+      facingAngle: this.getFacingAngle(),
+      fps: this._currentFps,
+    })
   }
 
   /**
