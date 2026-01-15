@@ -48,13 +48,13 @@ const pages = [
     illustrationLayout: 'comic2x2',
     images: ['3-1.png', '3-2.png', '3-3.png', '3-4.png'],
     body: [
-      'Left click for a light attack.',
-      'Right click for a heavy attack.',
+      'Press Z for a light attack.',
+      'Press X for a heavy attack.',
       'Press C to block and time your defense.',
     ],
     keybinds: [
-      { action: 'Light Attack', key: 'Mouse Left' },
-      { action: 'Heavy Attack', key: 'Mouse Right' },
+      { action: 'Light Attack', key: 'Z' },
+      { action: 'Heavy Attack', key: 'X' },
       { action: 'Block', key: 'C' },
     ],
   },
