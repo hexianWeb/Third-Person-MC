@@ -1,6 +1,8 @@
 # Third-Person-MC（网页第三人称 MC / Web3D Demo）
 
-> 用 **Three.js + Vue 3** 搭建的网页 3D 演示：展示 **MC 风格多世界传送门** 与 **魂类锁定战斗** 的预热体验。  
+中文 | [English](README_EN.md)
+
+> 用 **Three.js + Vue 3** 搭建的网页 3D 演示：展示 **MC 风格多世界传送门** 与 **魂类锁定战斗** 的预热体验。
 > 目标：把 Web3D 做成“可跑、可玩、可继续迭代”的项目，而不只是一个截图 Demo。
 
 - 在线预览：`https://third-person-mc.vercel.app/`
@@ -23,11 +25,11 @@
 ## 视觉预览
 
 ### 开始界面展示
-![开始界面展示](https://github.com/hexianWeb/picx-images-hosting/raw/master/image.webp)
+<img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/image.webp" width="960" alt="开始界面展示" />
 
 | 攻击效果预览 | 地形：多生态拼图 |
 | :--- | :--- |
-| ![攻击效果预览](https://github.com/hexianWeb/picx-images-hosting/raw/master/attack.gif) | ![多生态拼图](https://github.com/hexianWeb/picx-images-hosting/raw/master/多生态拼图.webp) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/attack.gif" width="420" alt="攻击效果预览" /><br/>攻击效果预览 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/多生态拼图.webp" width="420" alt="多生态拼图" /><br/>地形：多生态拼图 |
 
 ## 核心亮点（来自项目与实现现实）
 
@@ -57,35 +59,35 @@
 
 | 平原地形 | 森林地形 |
 | :--- | :--- |
-| ![平原](https://github.com/hexianWeb/picx-images-hosting/raw/master/01.2rvmobho84.gif) | ![森林](https://github.com/hexianWeb/picx-images-hosting/raw/master/05.6f16budguw.gif) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/01.2rvmobho84.gif" width="420" alt="平原" /><br/>平原地形 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/05.6f16budguw.gif" width="420" alt="森林" /><br/>森林地形 |
 
 | 白桦林地形 | 樱花林地形 |
 | :--- | :--- |
-| ![白桦林](https://github.com/hexianWeb/picx-images-hosting/raw/master/06.7lkhkg2dhn.gif) | ![樱花林](https://github.com/hexianWeb/picx-images-hosting/raw/master/08.b9e9easke.gif) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/06.7lkhkg2dhn.gif" width="420" alt="白桦林" /><br/>白桦林地形 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/08.b9e9easke.gif" width="420" alt="樱花林" /><br/>樱花林地形 |
 
 | 沙漠地形 | 冻洋地形 |
 | :--- | :--- |
-| ![沙漠](https://github.com/hexianWeb/picx-images-hosting/raw/master/07.9gx2d2et4h.gif) | ![冻洋](https://github.com/hexianWeb/picx-images-hosting/raw/master/冻洋.webp) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/07.9gx2d2et4h.gif" width="420" alt="沙漠" /><br/>沙漠地形 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/冻洋.webp" width="420" alt="冻洋" /><br/>冻洋地形 |
 
 ### 地形生成思路 (Noise & FBM)
 
 #### 一个 Seed 一个世界 (PRNG)
-![](https://github.com/hexianWeb/picx-images-hosting/raw/master/seed.webp)
+<img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/seed.webp" width="960" alt="一个 Seed 一个世界" />
 
 | 地形振幅调节 (Noise) | 地面细节调节 (FBM) |
 | :--- | :--- |
-| ![振幅](https://github.com/hexianWeb/picx-images-hosting/raw/master/地形振幅.gif) | ![FBM](https://github.com/hexianWeb/picx-images-hosting/raw/master/FBM.gif) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/地形振幅.gif" width="420" alt="振幅" /><br/>地形振幅调节 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/FBM.gif" width="420" alt="FBM" /><br/>地面细节调节 |
 
 ## 相机自适应与 HUD
 
 核心目标：自由旋转视角，相机根据地形自动躲避不穿模。
 
 ### HUD 界面总览
-![HUD 总览](https://github.com/hexianWeb/picx-images-hosting/raw/master/HUD.webp)
+<img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/HUD.webp" width="960" alt="HUD 总览" />
 
 | 相机跟随展示 | 相机越肩调整 |
 | :--- | :--- |
-| ![相机跟随展示](https://github.com/hexianWeb/picx-images-hosting/raw/master/03.6f16budgsi.gif) | ![相机调整](https://github.com/hexianWeb/picx-images-hosting/raw/master/相机调整.gif) |
+| <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/03.6f16budgsi.gif" width="420" alt="相机跟随展示" /><br/>相机跟随展示 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/相机调整.gif" width="420" alt="相机调整" /><br/>相机越肩调整 |
 
 ## 项目技术栈
 
@@ -135,10 +137,10 @@ E:\圖形學\Third-Person-MC\
 ```
 
 ## 素材出处
-- **模型**: 基于 Minecraft 风格自定义建模 ( character.glb )
-- **贴图**: 提取自 Minecraft 游戏资源包，由 [hexianWeb](https://github.com/hexianWeb) 优化。
-- **字体**: Minecraftia-Regular.ttf
-- **音效**: 计划由 Suno AI 生成 ( 命中、环境音 )
+- **模型**: 基于 Minecraft 风格自定义建模 ( character.glb ), 皮肤来自[https://www.minecraftskins.com/](https://www.minecraftskins.com/)
+- **贴图**: 提取自 Minecraft[Mojang/bedrock-samples](Mojang/bedrock-samples) 游戏资源包，由 [hexianWeb](https://github.com/hexianWeb) 优化。
+- **字体**: [Minecraftia-Regular.ttf](https://www.dafont.com/minecraftia.font) & [TakWolf/fusion-pixel-font](https://github.com/TakWolf/fusion-pixel-font)
+- **音效**: 计划由 Suno AI 生成 ( 命中、环境音 **还没生成**)
 
 ## 未完成内容 (TODO)
 - [ ] **一直陪伴玩家的可爱狗**: 实现宠物 AI 逻辑与跟随系统
