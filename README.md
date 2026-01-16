@@ -1,180 +1,207 @@
-[node]: https://nodejs.org/en
-[yarn]: https://yarnpkg.com
-[pnpm]: https://pnpm.io
-[demo]: https://vite-three-js.d1a.app
-[license]: https://github.com/doinel1a/vite-three-js/blob/main/LICENSE
-[code-of-conduct]: https://github.com/doinel1a/vite-three-js/blob/main/CODE_OF_CONDUCT.md
-[issues]: https://github.com/doinel1a/vite-three-js/issues
-[pulls]: https://github.com/doinel1a/vite-three-js/pulls
-[browserslist]: https://browsersl.ist/#q=last+3+versions%2C%3E+0.2%25%2C+not+dead
-[graphviz]: https://www.graphviz.org/download
-[commitlint]: https://github.com/conventional-changelog/commitlint/#what-is-commitlint
-[webpack-three-js]: https://github.com/doinel1a/webpack-three-js
-[react-icon]: https://skillicons.dev/icons?i=react
-[ts-icon]: https://skillicons.dev/icons?i=ts
-[js-icon]: https://skillicons.dev/icons?i=js
-[tailwind-icon]: https://skillicons.dev/icons?i=tailwind
-[chrome-icon]: https://github.com/alrra/browser-logos/blob/main/src/chrome/chrome_64x64.png
-[firefox-icon]: https://github.com/alrra/browser-logos/blob/main/src/firefox/firefox_64x64.png
-[edge-icon]: https://github.com/alrra/browser-logos/blob/main/src/edge/edge_64x64.png
-[opera-icon]: https://github.com/alrra/browser-logos/blob/main/src/opera/opera_64x64.png
-[safari-icon]: https://github.com/alrra/browser-logos/blob/main/src/safari/safari_64x64.png
+# Third-Person-MC（网页第三人称 MC / Web3D Demo）
 
-# Vite Three JS — Template
+> 用 **Three.js + Vue 3** 搭建的网页 3D 演示：展示 **MC 风格多世界传送门** 与 **魂类锁定战斗** 的预热体验。  
+> 目标：把 Web3D 做成“可跑、可玩、可继续迭代”的项目，而不只是一个截图 Demo。
 
-This boilerplate starter template is the ultimate solution to help you getting started on your project in no time, without the hassle of setting up and configuring your environment from scratch each time you start developing. <br />
-It's ideal for front-end engineers who want to build modern, fast and reliable **webgl** web applications with the latest cutting edge technologies such as **Three.JS**, **GLSL**, **JavaScript**, **TailwindCSS**, **Vite**, **ESLint**, **Prettier**, **Husky** and much more!
+- 在线预览：`https://third-person-mc.vercel.app/`
+- Debug 面板：`https://third-person-mc.vercel.app/#debug`
+- 产品需求（PRD，早期版本，可能与实现有偏差）：[`docs/PRD.md`](docs/PRD.md)
 
-**[Demo][demo]** | **[Bug(label: bug)][issues]** | **[Feature(label: enhancement)][issues]**
+## 目录
 
-## :bookmark: Table of contents
+- [视觉预览](#视觉预览)
+- [玩法与按键操作](#玩法与按键操作)
+- [生态地形与地形生成](#生态地形与地形生成)
+- [相机自适应与 HUD](#相机自适应与-hud)
+- [项目技术栈](#项目技术栈)
+- [项目结构](#项目结构)
+- [素材出处](#素材出处)
+- [未完成内容 (TODO)](#未完成内容-todo)
+- [快速开始](#快速开始)
+- [License](#license)
 
-- :computer: [Getting started](#computer-getting-started "Go to 'Getting started' section")
-- :battery: [Features](#battery-features "Go to 'Features' section")
-- :arrows_clockwise: [Versions](#arrows_clockwise-versions "Go to 'Versions' section")
-- :globe_with_meridians: [Browsers support](#globe_with_meridians-browsers-support "Go to 'Browsers support' section")
-- :busts_in_silhouette: [Contribute](#busts_in_silhouette-contribute "Go to 'Contribute' section")
-- :bookmark_tabs: [License](#bookmark_tabs-license "Go to 'License' section")
-- :gem: [Acknowledgements](#gem-acknowledgements "Go to 'Acknowledgements' section")
+## 视觉预览
 
----
+### 开始界面展示
+![开始界面展示](https://github.com/hexianWeb/picx-images-hosting/raw/master/image.webp)
 
-## :computer: Getting started
+| 攻击效果预览 | 地形：多生态拼图 |
+| :--- | :--- |
+| ![攻击效果预览](https://github.com/hexianWeb/picx-images-hosting/raw/master/attack.gif) | ![多生态拼图](https://github.com/hexianWeb/picx-images-hosting/raw/master/多生态拼图.webp) |
 
-### Prerequisites:
+## 核心亮点（来自项目与实现现实）
 
-- JavaScript runtime **[node.js][node]**;
-- **(OPTIONAL)** Alternative package manager:
-  - **[PNPM][pnpm]** `npm install --global pnpm` <br /> or
-  - **[Yarn][yarn]** `npm install --global yarn`
+- **运动系统**：第三人称角色移动与姿态切换（走/跑/跳），强调操作反馈与动画衔接
+- **生态地形**：基于随机数与噪声的程序化地形（项目内有多生态概念：平原/森林/沙漠/冻洋等）
+- **第三人称相机**：针对地形起伏做避障/防穿模的相机跟随思路，提升可玩性与稳定观感
 
-### Start developing:
+> 备注：仓库里还集成了 HUD/菜单 UI、资源加载、Shader 管线等基础设施，详见下方“项目结构”和 PRD。
 
-- Get the repository:
-  - click **"Use this template"** &nbsp; or &nbsp; **"Fork"** button <br /> alternately
-  - **clone** the repository through your terminal: <br />
-    `git clone https://github.com/doinel1a/vite-three-js YOUR-PROJECT-NAME`;
-- Open your terminal or code editor to the path your project is located, and run:
-  | | **NPM** | **PNPM** | **Yarn** |
-  | ------------------------------------------------ | ----------------- | -------------- | -------------- |
-  | To **install** the dependencies | `npm install` | `pnpm install` | `yarn install` |
-  | To **run** the **development server** | `npm run dev` | `pnpm dev` | `yarn dev` |
-  | To **build** your app **for production** | `npm run build` | `pnpm build` | `yarn build` |
-  | To **preview** your **production optimized app** | `npm run preview` | `pnpm preview` | `yarn preview` |
+## 玩法与按键操作
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+> 以“读者打开页面 30 秒内就能上手”为标准。
 
----
+| 操作 | 按键 | 说明 |
+| --- | --- | --- |
+| **移动** | `W / A / S / D` | 八向位移，包含姿态切换 |
+| **普通攻击** | `Z` | 支持连击 Combo |
+| **重攻击** | `X` | 强力打击反馈 |
+| **锁定目标** | `鼠标中键` | (开发中) 魂类锁定逻辑 |
+| **格挡** | `C` | 防御动作 |
+| **互动** | `E / F` | (开发中) 采集或开启传送门 |
+| **关闭弹窗/菜单** | `ESC` | 退出或暂停 |
 
-## :battery: Features
+## 生态地形与地形生成
 
-This repository comes 🔋 packed with:
+项目内地形强调“体素风格 + 程序化生态变化”，并尽量保持稳定帧率。
 
-- **Three.JS**: A JavaScript library built on top of **WebGL** that provides an abstraction layer for rendering interactive 3D and 2D scenes in the web browser;
-- **TailwindCSS**: A utility-first CSS framework that provides predefined classes for common styles and layout patterns, allowing quick styling without writing custom CSS;
-- **SASS**: A CSS preprocessor that adds features such as variables, nesting, and mixins to CSS, making it easier to write and maintain large CSS codebases;
-- **PostCSS**: A tool for transforming CSS with JavaScript plugins, allowing to add new features to CSS and improve the development process;
-- **Playwright**: A library for automating web browser interactions, allowing the writing of end-to-end tests and perform browser automation tasks;
-- **Vite**: A build tool and development server that provides fast and efficient development and production builds for modern web applications;
+| 平原地形 | 森林地形 |
+| :--- | :--- |
+| ![平原](https://github.com/hexianWeb/picx-images-hosting/raw/master/01.2rvmobho84.gif) | ![森林](https://github.com/hexianWeb/picx-images-hosting/raw/master/05.6f16budguw.gif) |
 
-And with tools that enhance the development experience:
+| 白桦林地形 | 樱花林地形 |
+| :--- | :--- |
+| ![白桦林](https://github.com/hexianWeb/picx-images-hosting/raw/master/06.7lkhkg2dhn.gif) | ![樱花林](https://github.com/hexianWeb/picx-images-hosting/raw/master/08.b9e9easke.gif) |
 
-- **ESLint**: A tool for enforcing coding standards and identifying potential errors in the code;
-- **Prettier**: A code formatter that automatically formats code to conform to a consistent style, making it easier to read and maintain;
-- **Husky**: A Git hook manager that allows easy set up and configuration of Git hooks, which are scripts that run at certain points in the Git workflow;
-- **Commitlint**: A tool for enforcing commit message conventions in Git repositories, helping to ensure consistent and informative commit messages;
+| 沙漠地形 | 冻洋地形 |
+| :--- | :--- |
+| ![沙漠](https://github.com/hexianWeb/picx-images-hosting/raw/master/07.9gx2d2et4h.gif) | ![冻洋](https://github.com/hexianWeb/picx-images-hosting/raw/master/冻洋.webp) |
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+### 地形生成思路 (Noise & FBM)
 
----
+#### 一个 Seed 一个世界 (PRNG)
+![](https://github.com/hexianWeb/picx-images-hosting/raw/master/seed.webp)
 
-## :arrows_clockwise: Versions
+| 地形振幅调节 (Noise) | 地面细节调节 (FBM) |
+| :--- | :--- |
+| ![振幅](https://github.com/hexianWeb/picx-images-hosting/raw/master/地形振幅.gif) | ![FBM](https://github.com/hexianWeb/picx-images-hosting/raw/master/FBM.gif) |
 
-This repository comes configured with 2 of the industry standards for development tools: **Webpack** and **Vite**. <br />
-Both tools support **SWC (Speedy Web Compiler)**, a **Rust-based compiler**; Vite is optimized for it out of the box.
+## 相机自适应与 HUD
 
-### Vite (SWC compiler)
+核心目标：自由旋转视角，相机根据地形自动躲避不穿模。
 
-Is a simple and fast solution thanks to it's "zero-config" approach which offers a smoother development experience.
+### HUD 界面总览
+![HUD 总览](https://github.com/hexianWeb/picx-images-hosting/raw/master/HUD.webp)
 
-|                   React - TypeScript                   |                   React - JavaScript                   |     |       Vanilla TypeScript        |     Vanilla JavaScript      |
-| :----------------------------------------------------: | :----------------------------------------------------: | :-: | :-----------------------------: | :-------------------------: |
-| ![React][react-icon] & ![TS][ts-icon] <br /> **Soon!** | ![React][react-icon] & ![JS][js-icon] <br /> **Soon!** |     | ![TS][ts-icon] <br /> **Soon!** | ![JS][js-icon] <br /> **/** |
+| 相机跟随展示 | 相机越肩调整 |
+| :--- | :--- |
+| ![相机跟随展示](https://github.com/hexianWeb/picx-images-hosting/raw/master/03.6f16budgsi.gif) | ![相机调整](https://github.com/hexianWeb/picx-images-hosting/raw/master/相机调整.gif) |
 
-### Webpack (Babel compiler)
+## 项目技术栈
 
-Is more a flexible solution, capable of handling complex configurations.
+### 核心框架
+- **Three.js (v0.172+)**: 核心 3D 渲染引擎
+- **Vue 3**: UI 层开发框架
+- **Vite**: 极速构建工具与开发服务器
+- **Pinia**: 响应式状态管理（UI 与 3D 场景同步）
 
-|                   React - TypeScript                   |                   React - JavaScript                   |     |       Vanilla TypeScript        |                 Vanilla JavaScript                 |
-| :----------------------------------------------------: | :----------------------------------------------------: | :-: | :-----------------------------: | :------------------------------------------------: |
-| ![React][react-icon] & ![TS][ts-icon] <br /> **Soon!** | ![React][react-icon] & ![JS][js-icon] <br /> **Soon!** |     | ![TS][ts-icon] <br /> **Soon!** | ![JS][js-icon] <br /> **[Repo][webpack-three-js]** |
+### 渲染与动画
+- **GLSL (Custom Shaders)**: 自定义着色器实现传送门、地形渲染与后处理
+- **three-custom-shader-material**: 材质增强插件
+- **GSAP**: 高性能补间动画库
+- **InstancedMesh**: 大规模体素与植被渲染优化
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+### 工具与工程化
+- **mitt**: 全局事件总线，处理 UI 与 3D 层实时通信
+- **Tailwind CSS**: 样式工具库
+- **Sass/PostCSS**: 预处理器支持
+- **Playwright**: 端到端测试覆盖
+- **Husky & Commitlint**: 规范化代码提交
 
----
+## 项目结构
 
-## :globe_with_meridians: Browsers support
+```text
+E:\圖形學\Third-Person-MC\
+├── public/                 # 静态资源
+│   ├── models/             # GLB/GLTF 模型 (角色、方块)
+│   ├── textures/           # 材质贴图 (环境、方块、HUD)
+│   └── fonts/              # Minecraft 字体
+├── src/
+│   ├── components/         # Vue UI 组件
+│   │   ├── hud/            # 游戏内 HUD (血条、经验、快捷栏等)
+│   │   ├── menu/           # 主菜单、设置、加载界面
+│   │   └── MiniMap.vue     # 小地图组件
+│   ├── js/                 # 核心逻辑
+│   │   ├── camera/         # 相机控制器与 Rig
+│   │   ├── world/          # 场景元素、玩家逻辑、地形系统
+│   │   │   └── terrain/    # 生态生成、区块管理、AO 计算
+│   │   ├── interaction/    # 射线拾取、方块交互
+│   │   ├── utils/          # 调试、事件、输入解析
+│   │   └── experience.js   # 框架单例入口
+│   ├── shaders/            # 自定义 GLSL 着色器
+│   └── vue/                # Pinia Stores
+├── docs/                   # 产品文档与开发计划
+└── vite.config.js          # 构建配置
+```
 
-The provided configuration ensures **92.3%** coverage for all browsers, in particular of the following:
+## 素材出处
+- **模型**: 基于 Minecraft 风格自定义建模 ( character.glb )
+- **贴图**: 提取自 Minecraft 游戏资源包，由 [hexianWeb](https://github.com/hexianWeb) 优化。
+- **字体**: Minecraftia-Regular.ttf
+- **音效**: 计划由 Suno AI 生成 ( 命中、环境音 )
 
-|            Chrome             |             Firefox              |             Edge             |        Opera         | Safari                       |
-| :---------------------------: | :------------------------------: | :--------------------------: | :------------------: | ---------------------------- |
-| ![Google Chrome][chrome-icon] | ![Mozilla Firefox][firefox-icon] | ![Microsoft Edge][edge-icon] | ![Opera][opera-icon] | ![Apple Safari][safari-icon] |
+## 未完成内容 (TODO)
+- [ ] **一直陪伴玩家的可爱狗**: 实现宠物 AI 逻辑与跟随系统
+- [ ] **更好的 Biome**: 优化生态转换平滑度与更多植被种类
+- [ ] **背包功能**: 实现完整的物品存放与交互 UI
+- [ ] **挖掘特效**: 方块破坏时的粒子效果与动画
+- [ ] **换肤功能**: 实时切换玩家模型贴图
+- [ ] **敌人锁定特效**: 魂类锁定视觉反馈增强
 
-**\*** In order to support a wider percentage of browsers, update the `./.browserslistrc` configuration file:
+## 快速开始
 
-1. `last 3 versions`: browser version;
-2. `> 0.2%`: browser usage statistics;
-3. `not dead`: whether the browser is officially supported;
+### 环境要求
 
-Update the configuration [here][browserslist] and check in real-time the **global browsers support**.
+- Node.js（建议 LTS）
+- 包管理器：推荐 pnpm（仓库包含 `pnpm-lock.yaml`）
 
-**\* The more versions to support, larger JS and CSS bundles size will be.**
+### 安装与运行
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+```bash
+pnpm install
+pnpm dev
+```
 
----
+然后打开终端输出的本地地址（Vite 会以 `--host` 启动）。
 
-## :busts_in_silhouette: Contribute
+## 常用命令（与 `package.json` 对齐）
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create.
-Any contribution is greatly appreciated: big or small, it can be documentation updates, adding new features or something bigger.
-Please check the [**contributing guide**][code-of-conduct] for details on how to help out and keep in mind that all commits must follow the **[conventional commit format][commitlint]**.
+```bash
+# 开发
+pnpm dev
 
-### How to contribute:
+# 构建/预览
+pnpm build
+pnpm preview
 
-1.  **[Get started](#computer-getting-started "Go to 'Getting started' section");**
-2.  **For a new feature:**
-    1.  Create a new branch: `git checkout -b feat/NEW-FEATURE`;
-    2.  Add your changes to the staging area: `git add PATH/TO/FILENAME.EXTENSION`;
-    3.  Commit your changes: `git commit -m "feat: NEW FEATURE"`;
-    4.  Push your new branch: `git push origin feat/NEW-FEATURE`;
-3.  **For a bug fix:**
-    1.  Create a new branch: `git checkout -b fix/BUG-FIX`;
-    2.  Add your changes to the staging area: `git add PATH/TO/FILENAME.EXTENSION`;
-    3.  Commit your changes: `git commit -m "fix: BUG FIX"`;
-    4.  Push your new branch: `git push origin fix/BUG-FIX`;
-4.  **Open a new [pull request][pulls];**
+# 代码检查
+pnpm lint
+pnpm lint:fix
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+# E2E（Playwright）
+pnpm test:chrome
+pnpm test:firefox
+pnpm test:safari
+```
 
----
+## 文档与入口
 
-## :bookmark_tabs: License
+- PRD：[`docs/PRD.md`](docs/PRD.md)
+- 规划与设计：[`docs/plans/`](docs/plans/)
 
-All logos and trademarks are the property of their respective owners.
-Everything else is distributed under the **MIT License**.
-See the [LICENSE][license] file for more informations.
+## 开发约定（与仓库风格保持一致）
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+- Three.js 侧以 `src/js/experience.js` 的 **Experience 单例**为核心入口组织代码
+- UI（Vue）与 3D 场景（Three.js）解耦：状态优先用 Pinia，同步/即时事件用 mitt
+- 新增 3D 组件建议配套 `debugInit` 面板，方便调参和定位问题
 
----
+（更详细规则请看 `.cursor/rules/` 下的规范文件）
 
-## :gem: Acknowledgements
+## 贡献
 
-Special thanks to:
+- 行为准则：[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- 仓库启用 Husky + Commitlint，提交信息建议遵循 Conventional Commits
 
-- [alrra](https://github.com/alrra) for [browser-logos](https://github.com/alrra/browser-logos);
-- [tandpfun](https://github.com/tandpfun) for [skill-icons](https://github.com/tandpfun/skill-icons);
+## License
 
-[Back to :arrow_up:](#vite-three-js--template "Back to 'Table of contents' section")
+MIT，见 [`LICENSE`](LICENSE)。
