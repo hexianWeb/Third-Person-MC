@@ -18,11 +18,13 @@ const ui = useUiStore()
 onMounted(() => {
   emitter.on('core:ready', handleCoreReady)
   emitter.on('ui:escape', handleEscape)
+  window.addEventListener('blur', handleWindowBlur)
 })
 
 onUnmounted(() => {
   emitter.off('core:ready', handleCoreReady)
   emitter.off('ui:escape', handleEscape)
+  window.removeEventListener('blur', handleWindowBlur)
 })
 
 function handleCoreReady() {
@@ -32,6 +34,12 @@ function handleCoreReady() {
 
 function handleEscape() {
   ui.handleEscape()
+}
+
+function handleWindowBlur() {
+  if (ui.screen === 'playing') {
+    ui.toPauseMenu()
+  }
 }
 </script>
 
