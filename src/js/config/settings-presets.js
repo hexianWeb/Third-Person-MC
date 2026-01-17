@@ -145,6 +145,14 @@ export const ENV_DEFAULTS = {
 }
 
 // ========================================
+// Chunk Presets (defaults)
+// ========================================
+export const CHUNK_DEFAULTS = {
+  viewDistance: 1,
+  unloadPadding: 1,
+}
+
+// ========================================
 // Preset names for UI display
 // ========================================
 export const PRESET_NAMES = ['off', 'default', 'cinematic', 'arcade']

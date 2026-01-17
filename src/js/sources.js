@@ -227,4 +227,55 @@ export default [
     type: 'texture',
     path: 'textures/blocks/pink_tulip.png',
   },
+  // ===== 方块破坏纹理（10 阶段）=====
+  {
+    name: 'destroy_stage_0',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_0.png',
+  },
+  {
+    name: 'destroy_stage_1',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_1.png',
+  },
+  {
+    name: 'destroy_stage_2',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_2.png',
+  },
+  {
+    name: 'destroy_stage_3',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_3.png',
+  },
+  {
+    name: 'destroy_stage_4',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_4.png',
+  },
+  {
+    name: 'destroy_stage_5',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_5.png',
+  },
+  {
+    name: 'destroy_stage_6',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_6.png',
+  },
+  {
+    name: 'destroy_stage_7',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_7.png',
+  },
+  {
+    name: 'destroy_stage_8',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_8.png',
+  },
+  {
+    name: 'destroy_stage_9',
+    type: 'texture',
+    path: 'textures/destroy/destroy_stage_9.png',
+  },
 ]

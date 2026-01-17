@@ -173,6 +173,28 @@ function adjustSensitivity(delta) {
             </button>
           </div>
         </div>
+
+        <!-- View Distance -->
+        <McStepSlider
+          :model-value="settings.chunkViewDistance"
+          :min="1"
+          :max="8"
+          :step="1"
+          :decimals="0"
+          label="View Distance"
+          @change="settings.setChunkViewDistance($event)"
+        />
+
+        <!-- Unload Padding -->
+        <McStepSlider
+          :model-value="settings.chunkUnloadPadding"
+          :min="0"
+          :max="4"
+          :step="1"
+          :decimals="0"
+          label="Unload Padding"
+          @change="settings.setChunkUnloadPadding($event)"
+        />
       </div>
 
       <!-- Controls Section -->

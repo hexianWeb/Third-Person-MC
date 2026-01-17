@@ -1,14 +1,14 @@
 <script setup>
 /**
  * McStepSlider - Minecraft-style discrete step slider
- * 
+ *
  * Features:
  * - Discrete steps (not continuous)
  * - Keyboard support (Arrow keys)
  * - @input: fires during drag (for UI preview)
  * - @change: fires on release (for apply to Three.js)
  */
-import { ref, computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, required: true },
@@ -33,17 +33,14 @@ watch(() => props.modelValue, (newVal) => {
   localValue.value = newVal
 })
 
-// Calculate total steps
-const totalSteps = computed(() => Math.round((props.max - props.min) / props.step))
-
 // Current step index
-const currentStepIndex = computed(() => 
-  Math.round((localValue.value - props.min) / props.step)
+const currentStepIndex = computed(() =>
+  Math.round((localValue.value - props.min) / props.step),
 )
 
 // Progress percentage for slider fill
-const progressPercent = computed(() => 
-  ((localValue.value - props.min) / (props.max - props.min)) * 100
+const progressPercent = computed(() =>
+  ((localValue.value - props.min) / (props.max - props.min)) * 100,
 )
 
 // Format display value
@@ -62,7 +59,7 @@ function quantize(value) {
 
 // Handle slider input (during drag)
 function handleInput(event) {
-  const raw = parseFloat(event.target.value)
+  const raw = Number.parseFloat(event.target.value)
   localValue.value = quantize(raw)
   emit('update:modelValue', localValue.value)
   emit('input', localValue.value)
@@ -88,7 +85,8 @@ function handleKeyDown(event) {
   if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
     event.preventDefault()
     stepBy(-1)
-  } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+  }
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
     event.preventDefault()
     stepBy(1)
   }
@@ -100,7 +98,7 @@ function handleKeyDown(event) {
     <span v-if="label" class="slider-label">{{ label }}</span>
     <div class="slider-track-container">
       <div class="slider-track">
-        <div class="slider-fill" :style="{ width: progressPercent + '%' }"></div>
+        <div class="slider-fill" :style="{ width: `${progressPercent}%` }" />
       </div>
       <input
         type="range"
@@ -112,7 +110,7 @@ function handleKeyDown(event) {
         @input="handleInput"
         @change="handleChange"
         @keydown="handleKeyDown"
-      />
+      >
     </div>
     <span class="slider-value">{{ displayValue }}</span>
   </div>

@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { reactive, ref } from 'vue'
 import {
   BOBBING_PRESETS,
+  CHUNK_DEFAULTS,
   ENV_DEFAULTS,
   FOV_PRESETS,
   SPEEDLINES_PRESETS,
@@ -41,6 +42,10 @@ const DEFAULT_SETTINGS = {
   envSunIntensity: 1.75,
   envAmbientIntensity: 0.75,
   envFogDensity: 0.01,
+
+  // Chunks
+  chunkViewDistance: 1,
+  chunkUnloadPadding: 1,
 }
 
 // ========================================
@@ -70,6 +75,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const envSunIntensity = ref(DEFAULT_SETTINGS.envSunIntensity)
   const envAmbientIntensity = ref(DEFAULT_SETTINGS.envAmbientIntensity)
   const envFogDensity = ref(DEFAULT_SETTINGS.envFogDensity)
+
+  // Chunk settings
+  const chunkViewDistance = ref(DEFAULT_SETTINGS.chunkViewDistance)
+  const chunkUnloadPadding = ref(DEFAULT_SETTINGS.chunkUnloadPadding)
 
   // ----------------------------------------
   // Initialize from localStorage
@@ -111,6 +120,10 @@ export const useSettingsStore = defineStore('settings', () => {
           envAmbientIntensity.value = parsed.envAmbientIntensity
         if (parsed.envFogDensity !== undefined)
           envFogDensity.value = parsed.envFogDensity
+        if (parsed.chunkViewDistance !== undefined)
+          chunkViewDistance.value = parsed.chunkViewDistance
+        if (parsed.chunkUnloadPadding !== undefined)
+          chunkUnloadPadding.value = parsed.chunkUnloadPadding
       }
     }
     catch {
@@ -135,6 +148,8 @@ export const useSettingsStore = defineStore('settings', () => {
         envSunIntensity: envSunIntensity.value,
         envAmbientIntensity: envAmbientIntensity.value,
         envFogDensity: envFogDensity.value,
+        chunkViewDistance: chunkViewDistance.value,
+        chunkUnloadPadding: chunkUnloadPadding.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
     }
@@ -241,6 +256,21 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // ----------------------------------------
+  // Actions - Chunk settings
+  // ----------------------------------------
+  function setChunkViewDistance(value) {
+    chunkViewDistance.value = Math.round(value)
+    emitter.emit('settings:chunks-changed', { viewDistance: chunkViewDistance.value })
+    saveSettings()
+  }
+
+  function setChunkUnloadPadding(value) {
+    chunkUnloadPadding.value = Math.round(value)
+    emitter.emit('settings:chunks-changed', { unloadPadding: chunkUnloadPadding.value })
+    saveSettings()
+  }
+
+  // ----------------------------------------
   // Actions - Apply all environment at once
   // ----------------------------------------
   function applyAllEnvironment() {
@@ -274,6 +304,10 @@ export const useSettingsStore = defineStore('settings', () => {
     envAmbientIntensity.value = ENV_DEFAULTS.ambientIntensity
     envFogDensity.value = ENV_DEFAULTS.fogDensity
 
+    // Reset chunks
+    chunkViewDistance.value = CHUNK_DEFAULTS.viewDistance
+    chunkUnloadPadding.value = CHUNK_DEFAULTS.unloadPadding
+
     // Emit events for all settings
     emitter.emit('shadow:quality-changed', shadowQuality.value)
     emitter.emit('settings:mouse-sensitivity-changed', mouseSensitivity.value)
@@ -285,6 +319,10 @@ export const useSettingsStore = defineStore('settings', () => {
       speedLines: { ...speedLines },
     })
     applyAllEnvironment()
+    emitter.emit('settings:chunks-changed', {
+      viewDistance: chunkViewDistance.value,
+      unloadPadding: chunkUnloadPadding.value,
+    })
 
     saveSettings()
   }
@@ -304,6 +342,10 @@ export const useSettingsStore = defineStore('settings', () => {
       speedLines: { ...speedLines },
     })
     applyAllEnvironment()
+    emitter.emit('settings:chunks-changed', {
+      viewDistance: chunkViewDistance.value,
+      unloadPadding: chunkUnloadPadding.value,
+    })
   }, 100)
 
   // ----------------------------------------
@@ -332,6 +374,10 @@ export const useSettingsStore = defineStore('settings', () => {
     envAmbientIntensity,
     envFogDensity,
 
+    // State - Chunks
+    chunkViewDistance,
+    chunkUnloadPadding,
+
     // Actions - Basic
     setShadowQuality,
     setMouseSensitivity,
@@ -351,6 +397,10 @@ export const useSettingsStore = defineStore('settings', () => {
     setEnvAmbientIntensity,
     setEnvFogDensity,
     applyAllEnvironment,
+
+    // Actions - Chunks
+    setChunkViewDistance,
+    setChunkUnloadPadding,
 
     // Utils
     resetToDefaults,

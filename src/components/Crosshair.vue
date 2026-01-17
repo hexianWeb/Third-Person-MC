@@ -9,10 +9,15 @@ import emitter from '../js/utils/event-bus.js'
  * - 固定在视口正中心
  * - 简洁的十字线设计
  * - 仅在 Pointer Lock 激活时显示
+ * - 显示挖掘进度条
  */
 
 const isVisible = ref(false)
 const isPressed = ref(false)
+
+// Mining progress state
+const isMining = ref(false)
+const miningProgress = ref(0)
 
 // 监听 Pointer Lock 状态变化
 function onPointerLocked() {
@@ -36,11 +41,37 @@ function onMouseUp(data) {
   }
 }
 
+// Mining event handlers
+function onMiningStart() {
+  isMining.value = true
+  miningProgress.value = 0
+}
+
+function onMiningProgress(data) {
+  isMining.value = true
+  miningProgress.value = data.progress
+}
+
+function onMiningCancel() {
+  isMining.value = false
+  miningProgress.value = 0
+}
+
+function onMiningComplete() {
+  isMining.value = false
+  miningProgress.value = 0
+}
+
 onMounted(() => {
   emitter.on('pointer:locked', onPointerLocked)
   emitter.on('pointer:unlocked', onPointerUnlocked)
   emitter.on('input:mouse_down', onMouseDown)
   emitter.on('input:mouse_up', onMouseUp)
+  // Mining events
+  emitter.on('game:mining-start', onMiningStart)
+  emitter.on('game:mining-progress', onMiningProgress)
+  emitter.on('game:mining-cancel', onMiningCancel)
+  emitter.on('game:mining-complete', onMiningComplete)
 })
 
 onUnmounted(() => {
@@ -48,6 +79,11 @@ onUnmounted(() => {
   emitter.off('pointer:unlocked', onPointerUnlocked)
   emitter.off('input:mouse_down', onMouseDown)
   emitter.off('input:mouse_up', onMouseUp)
+  // Mining events
+  emitter.off('game:mining-start', onMiningStart)
+  emitter.off('game:mining-progress', onMiningProgress)
+  emitter.off('game:mining-cancel', onMiningCancel)
+  emitter.off('game:mining-complete', onMiningComplete)
 })
 </script>
 
@@ -69,6 +105,15 @@ onUnmounted(() => {
         <div class="corner bottom-left" />
         <div class="corner bottom-right" />
       </div>
+
+      <!-- 挖掘进度条 -->
+      <Transition name="progress-fade">
+        <div v-if="isMining" class="mining-progress-container">
+          <div class="mining-progress-bar">
+            <div class="mining-progress-fill" :style="{ width: `${miningProgress * 100}%` }" />
+          </div>
+        </div>
+      </Transition>
     </div>
   </Transition>
 </template>
@@ -183,6 +228,44 @@ onUnmounted(() => {
 
 .fade-enter-from,
 .fade-leave-to {
+  opacity: 0;
+}
+
+/* 挖掘进度条 */
+.mining-progress-container {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  pointer-events: none;
+}
+
+.mining-progress-bar {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.mining-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+  transition: width 0.05s linear;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+}
+
+/* 进度条淡入淡出动画 */
+.progress-fade-enter-active,
+.progress-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.progress-fade-enter-from,
+.progress-fade-leave-to {
   opacity: 0;
 }
 </style>

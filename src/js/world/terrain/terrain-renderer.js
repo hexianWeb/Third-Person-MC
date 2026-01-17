@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { SHADOW_CONFIG, SHADOW_QUALITY, TREE_BLOCK_IDS } from '../../config/shadow-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event-bus.js'
+
 import { ANIMATION_DEFAULTS, blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
@@ -56,6 +57,28 @@ export default class TerrainRenderer {
     }
     this._statsBinding = null
 
+    // ===== Mining System: Load crack textures =====
+    this._crackTextures = []
+    for (let i = 0; i <= 9; i++) {
+      const textureName = `destroy_stage_${i}`
+      const texture = this.resources.items[textureName]
+      if (texture) {
+        texture.minFilter = THREE.NearestFilter
+        texture.magFilter = THREE.NearestFilter
+        texture.wrapS = THREE.ClampToEdgeWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+        this._crackTextures.push(texture)
+      }
+    }
+
+    // Mining shader uniforms (shared across all block materials in this chunk)
+    this._miningUniforms = {
+      uCrackTexture: { value: this._crackTextures[0] || null },
+      uMiningProgress: { value: 0.0 },
+      uTargetInstanceId: { value: -1.0 },
+      uIsBeingMined: { value: false },
+    }
+
     // 事件绑定
     this._handleDataReady = this._handleDataReady.bind(this)
     if (this._listenDataReady) {
@@ -66,6 +89,13 @@ export default class TerrainRenderer {
     this._currentShadowQuality = SHADOW_CONFIG.quality
     this._handleShadowQuality = this._handleShadowQuality.bind(this)
     emitter.on('shadow:quality-changed', this._handleShadowQuality)
+
+    // Mining event listeners
+    this._handleMiningProgress = this._handleMiningProgress.bind(this)
+    this._handleMiningCancel = this._handleMiningCancel.bind(this)
+    emitter.on('game:mining-progress', this._handleMiningProgress)
+    emitter.on('game:mining-cancel', this._handleMiningCancel)
+    emitter.on('game:mining-complete', this._handleMiningCancel)
 
     // 若容器已有数据，立即绘制
     this._rebuildFromContainer()
@@ -106,6 +136,45 @@ export default class TerrainRenderer {
         mesh.castShadow = true
       }
     })
+  }
+
+  /**
+   * Handle mining progress update event
+   */
+  _handleMiningProgress(payload) {
+    const { progress, target } = payload
+    if (!target)
+      return
+
+    // Check if target is in current chunk
+    const chunkKey = `${target.chunkX},${target.chunkZ}`
+    if (this.group?.userData?.chunkKey !== chunkKey) {
+      // Not current chunk, reset mining state
+      if (this._miningUniforms.uIsBeingMined.value) {
+        this._handleMiningCancel()
+      }
+      return
+    }
+
+    // Update uniforms
+    this._miningUniforms.uMiningProgress.value = progress
+    this._miningUniforms.uTargetInstanceId.value = target.instanceId
+    this._miningUniforms.uIsBeingMined.value = true
+
+    // Update crack texture based on progress (0-9 stages)
+    const stage = Math.min(Math.floor(progress * 10), 9)
+    if (this._crackTextures[stage]) {
+      this._miningUniforms.uCrackTexture.value = this._crackTextures[stage]
+    }
+  }
+
+  /**
+   * Handle mining cancel/complete event
+   */
+  _handleMiningCancel() {
+    this._miningUniforms.uIsBeingMined.value = false
+    this._miningUniforms.uMiningProgress.value = 0
+    this._miningUniforms.uTargetInstanceId.value = -1
   }
 
   /**
@@ -478,6 +547,9 @@ export default class TerrainRenderer {
       emitter.off('terrain:data-ready', this._handleDataReady)
     }
     emitter.off('shadow:quality-changed', this._handleShadowQuality)
+    emitter.off('game:mining-progress', this._handleMiningProgress)
+    emitter.off('game:mining-cancel', this._handleMiningCancel)
+    emitter.off('game:mining-complete', this._handleMiningCancel)
     this._disposeChildren()
     this.scene.remove(this.group)
   }

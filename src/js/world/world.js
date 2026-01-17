@@ -4,13 +4,18 @@ import {
   CHUNK_BASIC_CONFIG,
   TERRAIN_PARAMS,
 } from '../config/chunk-config.js'
+import { INTERACTION_CONFIG } from '../config/interaction-config.js'
 import Experience from '../experience.js'
+import BlockBreakParticles from '../interaction/block-break-particles.js'
+import BlockInteractionManager from '../interaction/block-interaction-manager.js'
+import BlockMiningController from '../interaction/block-mining-controller.js'
+import BlockMiningOverlay from '../interaction/block-mining-overlay.js'
 import BlockRaycaster from '../interaction/block-raycaster.js'
 import BlockSelectionHelper from '../interaction/block-selection-helper.js'
 import emitter from '../utils/event-bus.js'
 import Environment from './environment.js'
 import Player from './player/player.js'
-import { blocks } from './terrain/blocks-config.js'
+
 import ChunkManager from './terrain/chunk-manager.js'
 
 export default class World {
@@ -58,47 +63,48 @@ export default class World {
       // 注意：此模块仅用于“指向提示/后续交互”，不会直接改动地形数据
       this.blockRaycaster = new BlockRaycaster({
         chunkManager: this.chunkManager,
-        maxDistance: 10,
+        maxDistance: INTERACTION_CONFIG.raycast.maxDistance,
         useMouse: false, // 默认屏幕中心（PointerLock/FPS 交互）
       })
       this.blockSelectionHelper = new BlockSelectionHelper({
         enabled: true,
       })
 
-      // 默认编辑模式
-      this.blockEditMode = 'remove'
-
-      // 监听模式切换
-      emitter.on('input:toggle_block_edit_mode', () => {
-        this.blockEditMode = this.blockEditMode === 'remove' ? 'add' : 'remove'
-        // console.log('Edit Mode:', this.blockEditMode)
-        emitter.emit('game:block_edit_mode_changed', { mode: this.blockEditMode })
+      // Block mining controller (handles progressive mining with VFX)
+      this.blockMiningController = new BlockMiningController({
+        enabled: true,
+        miningDuration: INTERACTION_CONFIG.mining.duration,
       })
 
-      // ===== 交互事件绑定：删除/新增方块 =====
-      emitter.on('input:mouse_down', (event) => {
-        // 0 为左键
-        if (event.button === 0 && this.blockRaycaster?.current) {
-          const { worldBlock, face } = this.blockRaycaster.current
+      // Block mining overlay (displays crack texture on target block)
+      this.blockMiningOverlay = new BlockMiningOverlay()
 
-          if (this.blockEditMode === 'remove') {
-            this.chunkManager.removeBlockWorld(worldBlock.x, worldBlock.y, worldBlock.z)
-          }
-          else if (this.blockEditMode === 'add') {
-            // 根据法线计算相邻格子
-            if (face && face.normal) {
-              const nx = Math.round(face.normal.x)
-              const ny = Math.round(face.normal.y)
-              const nz = Math.round(face.normal.z)
+      // ===== 交互管理器 (Build/Destroy Mode) =====
+      this.blockInteractionManager = new BlockInteractionManager({
+        chunkManager: this.chunkManager,
+        blockRaycaster: this.blockRaycaster,
+        blockMiningController: this.blockMiningController,
+      })
 
-              const targetX = worldBlock.x + nx
-              const targetY = worldBlock.y + ny
-              const targetZ = worldBlock.z + nz
+      // ===== 方块破碎粒子效果 =====
+      this.blockBreakParticles = new BlockBreakParticles()
 
-              // 默认放置草方块
-              this.chunkManager.addBlockWorld(targetX, targetY, targetZ, blocks.stone.id)
-            }
-          }
+      // ===== Settings Listeners =====
+      emitter.on('settings:chunks-changed', (data) => {
+        if (!this.chunkManager)
+          return
+
+        if (data.viewDistance !== undefined) {
+          this.chunkManager.viewDistance = data.viewDistance
+        }
+        if (data.unloadPadding !== undefined) {
+          this.chunkManager.unloadPadding = data.unloadPadding
+        }
+
+        // Trigger a streaming update to apply new distance rules immediately
+        if (this.player) {
+          const pos = this.player.getPosition()
+          this.chunkManager.updateStreaming({ x: pos.x, z: pos.z }, true)
         }
       })
     })
@@ -116,6 +122,10 @@ export default class World {
     if (this.chunkManager)
       this.chunkManager.update()
 
+    // Update mining controller
+    if (this.blockMiningController)
+      this.blockMiningController.update()
+
     if (this.player)
       this.player.update()
     if (this.floor)
@@ -130,6 +140,10 @@ export default class World {
     // 更新辅助框位置
     if (this.blockSelectionHelper)
       this.blockSelectionHelper.update()
+
+    // 更新粒子系统
+    if (this.blockBreakParticles)
+      this.blockBreakParticles.update()
   }
 
   /**
@@ -163,6 +177,10 @@ export default class World {
 
   destroy() {
     // Destroy child components
+    this.blockMiningOverlay?.dispose()
+    this.blockInteractionManager?.destroy()
+    this.blockMiningController?.destroy()
+    this.blockBreakParticles?.destroy()
     this.blockSelectionHelper?.dispose()
     this.blockRaycaster?.destroy()
     this.environment?.destroy()
