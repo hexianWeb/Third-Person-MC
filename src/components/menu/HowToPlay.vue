@@ -5,9 +5,11 @@
  * - 后续图片生成完成后，再替换占位符为 <img>
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUiStore } from '../../vue/uiStore.js'
 
 const ui = useUiStore()
+const { t } = useI18n()
 
 // 说明：此处文案与键位来自计划书（极简指令风 / 纯英文）
 const pages = [
@@ -80,6 +82,8 @@ const pages = [
       'Sprint to reposition and commit when it’s safe.',
       'Sneak (V) for tighter control when you need it.',
       'Press Esc anytime to return to the menu.',
+      'Press R to respawn if stuck.',
+      'Settings can adjust view distance.',
     ],
     keybinds: [
       { action: 'Open Menu', key: 'Esc' },
@@ -93,9 +97,9 @@ const currentIndex = ref(0)
 const currentPage = computed(() => pages[currentIndex.value])
 
 const progressLabel = computed(() => `${currentIndex.value + 1} / ${pages.length}`)
-const backLabel = computed(() => (currentIndex.value === 0 ? 'Main Menu' : 'Back'))
+const backLabel = computed(() => (currentIndex.value === 0 ? t('howto.mainMenu') : t('howto.prev')))
 const nextLabel = computed(() =>
-  currentIndex.value === pages.length - 1 ? 'Done' : 'Next',
+  currentIndex.value === pages.length - 1 ? t('howto.done') : t('howto.next'),
 )
 
 function goBack() {
@@ -142,7 +146,7 @@ onUnmounted(() => {
     <header class="howto__header">
       <div class="howto__headerLeft">
         <div class="howto__title mc-text">
-          How to Play
+          {{ $t('howto.title') }}
         </div>
       </div>
       <div class="howto__headerRight">
@@ -181,7 +185,7 @@ onUnmounted(() => {
       <!-- 按键表（可选但推荐） -->
       <div v-if="currentPage.keybinds?.length" class="howto__keybinds">
         <div class="howto__keybindsTitle mc-text">
-          Controls
+          {{ $t('howto.controls') }}
         </div>
         <div class="howto__keybindGrid">
           <div

@@ -20,6 +20,9 @@ import emitter from '../js/utils/event-bus.js'
 const STORAGE_KEY = 'mc-game-settings'
 
 const DEFAULT_SETTINGS = {
+  // General
+  language: 'en', // 'en' | 'zh'
+
   // Graphics
   shadowQuality: 'high', // 'low' | 'medium' | 'high'
 
@@ -44,7 +47,7 @@ const DEFAULT_SETTINGS = {
   envFogDensity: 0.01,
 
   // Chunks
-  chunkViewDistance: 1,
+  chunkViewDistance: 2,
   chunkUnloadPadding: 1,
 }
 
@@ -55,6 +58,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // ----------------------------------------
   // State - Load from localStorage or use defaults
   // ----------------------------------------
+  const language = ref(DEFAULT_SETTINGS.language)
   const shadowQuality = ref(DEFAULT_SETTINGS.shadowQuality)
   const mouseSensitivity = ref(DEFAULT_SETTINGS.mouseSensitivity)
   const masterVolume = ref(DEFAULT_SETTINGS.masterVolume)
@@ -88,6 +92,8 @@ export const useSettingsStore = defineStore('settings', () => {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
+        if (parsed.language)
+          language.value = parsed.language
         if (parsed.shadowQuality)
           shadowQuality.value = parsed.shadowQuality
         if (parsed.mouseSensitivity)
@@ -137,6 +143,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function saveSettings() {
     try {
       const settings = {
+        language: language.value,
         shadowQuality: shadowQuality.value,
         mouseSensitivity: mouseSensitivity.value,
         masterVolume: masterVolume.value,
@@ -161,6 +168,14 @@ export const useSettingsStore = defineStore('settings', () => {
   // ----------------------------------------
   // Actions - Basic settings
   // ----------------------------------------
+  function setLanguage(lang, i18n) {
+    language.value = lang
+    if (i18n) {
+      i18n.global.locale.value = lang
+    }
+    saveSettings()
+  }
+
   function setShadowQuality(quality) {
     shadowQuality.value = quality
     emitter.emit('shadow:quality-changed', quality)
@@ -353,6 +368,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // ----------------------------------------
   return {
     // State - Basic
+    language,
     shadowQuality,
     mouseSensitivity,
     masterVolume,
@@ -379,6 +395,7 @@ export const useSettingsStore = defineStore('settings', () => {
     chunkUnloadPadding,
 
     // Actions - Basic
+    setLanguage,
     setShadowQuality,
     setMouseSensitivity,
     setMasterVolume,

@@ -1,0 +1,50 @@
+{
+  "menu": {
+    "title": "Minecraft",
+    "createWorld": "Create World",
+    "newWorld": "New World",
+    "continue": "Continue",
+    "settings": "Settings",
+    "howToPlay": "How to Play",
+    "credits": "Credits",
+    "back": "Back",
+    "randomSeed": "Random Seed",
+    "create": "Create",
+    "seedPlaceholder": "Leave empty for random",
+    "seedLabel": "World Seed (optional)",
+    "advanced": "Advanced",
+    "worldType": "World Type",
+    "warningOverwrite": "Creating a new world will overwrite your current world.",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
+  "settings": {
+    "title": "Settings",
+    "camera": "Camera",
+    "world": "World",
+    "visual": "Visual Effects",
+    "environment": "Environment",
+    "graphics": "Graphics",
+    "controls": "Controls",
+    "reset": "Reset Defaults",
+    "done": "Done",
+    "cameraStyle": "Camera Style",
+    "viewDistance": "View Distance",
+    "unloadPadding": "Unload Padding",
+    "speedLines": "Speed Lines",
+    "sky": "Sky",
+    "sun": "Sun",
+    "ambient": "Ambient",
+    "fog": "Fog",
+    "shadowQuality": "Shadow Quality",
+    "sensitivity": "Mouse Sensitivity"
+  },
+  "howto": {
+    "title": "How to Play",
+    "controls": "Controls",
+    "prev": "Back",
+    "next": "Next",
+    "done": "Done",
+    "mainMenu": "Main Menu"
+  }
+}

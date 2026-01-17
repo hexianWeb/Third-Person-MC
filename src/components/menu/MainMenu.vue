@@ -4,11 +4,21 @@
  * Includes Advanced panel for WorldGen settings
  */
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { WORLDGEN_PRESET_IDS, WORLDGEN_PRESETS } from '../../js/config/worldgen-presets.js'
+import { useSettingsStore } from '../../vue/settingsStore.js'
 import { useUiStore } from '../../vue/uiStore.js'
 import McStepSlider from './ui/McStepSlider.vue'
 
 const ui = useUiStore()
+const settings = useSettingsStore()
+const { locale } = useI18n()
+
+// Toggle Language
+function toggleLanguage() {
+  const newLang = locale.value === 'en' ? 'zh' : 'en'
+  settings.setLanguage(newLang, { global: { locale } })
+}
 
 // Confirm dialog state
 const showConfirmDialog = ref(false)
@@ -69,38 +79,43 @@ function cancelOverwrite() {
       <span class="tagline">{{ randomTagline }}</span>
     </div>
 
+    <!-- Language Switcher -->
+    <button class="lang-btn" title="Switch Language" @click="toggleLanguage">
+      <img src="https://i.ibb.co/99187Lk/lang.png" alt="Language" class="lang-icon">
+    </button>
+
     <!-- Root View -->
     <div v-if="ui.mainMenuView === 'root'" class="mc-menu">
       <!-- No world exists -->
       <template v-if="!ui.world.hasWorld">
         <button class="mc-button" @click="ui.enterWorldSetup({ mode: 'create' })">
-          <span class="title">Create World</span>
+          <span class="title">{{ $t('menu.createWorld') }}</span>
         </button>
         <button class="mc-button" @click="ui.toSettings('mainMenu')">
-          <span class="title">Settings</span>
+          <span class="title">{{ $t('menu.settings') }}</span>
         </button>
         <button class="mc-button" @click="ui.toHowToPlay()">
-          <span class="title">How to Play</span>
+          <span class="title">{{ $t('menu.howToPlay') }}</span>
         </button>
       </template>
 
       <!-- World exists -->
       <template v-else>
         <button class="mc-button" @click="ui.continueWorld()">
-          <span class="title">Continue</span>
+          <span class="title">{{ $t('menu.continue') }}</span>
         </button>
         <button class="mc-button" @click="ui.enterWorldSetup({ mode: 'newWorld' })">
-          <span class="title">New World</span>
+          <span class="title">{{ $t('menu.newWorld') }}</span>
         </button>
         <button class="mc-button" @click="ui.toSettings('mainMenu')">
-          <span class="title">Settings</span>
+          <span class="title">{{ $t('menu.settings') }}</span>
         </button>
         <div class="mc-menu double">
           <button class="mc-button half" @click="ui.toHowToPlay()">
-            <span class="title">How to Play</span>
+            <span class="title">{{ $t('menu.howToPlay') }}</span>
           </button>
           <button class="mc-button half disabled">
-            <span class="title">Credits</span>
+            <span class="title">{{ $t('menu.credits') }}</span>
           </button>
         </div>
       </template>
@@ -109,18 +124,18 @@ function cancelOverwrite() {
     <!-- World Setup View -->
     <div v-else-if="ui.mainMenuView === 'worldSetup'" class="mc-menu world-setup">
       <h2 class="menu-title">
-        {{ ui.pendingNewWorld ? 'New World' : 'Create World' }}
+        {{ ui.pendingNewWorld ? $t('menu.newWorld') : $t('menu.createWorld') }}
       </h2>
 
       <!-- Seed Input -->
       <div class="seed-input-group">
-        <label class="seed-label">World Seed (optional)</label>
+        <label class="seed-label">{{ $t('menu.seedLabel') }}</label>
         <input
           type="text"
           class="mc-input"
           inputmode="numeric"
           pattern="\d*"
-          placeholder="Leave empty for random"
+          :placeholder="$t('menu.seedPlaceholder')"
           :value="ui.seedDraft"
           @input="ui.setSeedDraft($event.target.value)"
         >
@@ -138,7 +153,7 @@ function cancelOverwrite() {
       <!-- Advanced Collapsible -->
       <button class="mc-button advanced-toggle" @click="ui.toggleAdvanced()">
         <span class="title mc-text " style="font-size: 25px;">
-          Advanced {{ ui.advancedExpanded ? '▾' : '▸' }}
+          {{ $t('menu.advanced') }} {{ ui.advancedExpanded ? '▾' : '▸' }}
         </span>
       </button>
 
@@ -153,7 +168,7 @@ function cancelOverwrite() {
         <!-- World Type Preset -->
         <div class="setting-section">
           <h4 class="section-label">
-            World Type
+            {{ $t('menu.worldType') }}
           </h4>
           <div class="preset-row">
             <button
@@ -205,17 +220,32 @@ function cancelOverwrite() {
             label="Max Height"
           />
         </div>
+
+        <!-- Render Settings -->
+        <div class="setting-section">
+          <h4 class="section-label">
+            Render
+          </h4>
+          <McStepSlider
+            v-model="ui.worldGenDraft.viewDistance"
+            :min="1"
+            :max="8"
+            :step="1"
+            :decimals="0"
+            :label="$t('settings.viewDistance')"
+          />
+        </div>
       </div>
 
       <!-- Buttons -->
       <button class="mc-button" @click="ui.randomizeSeed()">
-        <span class="title">Random Seed</span>
+        <span class="title">{{ $t('menu.randomSeed') }}</span>
       </button>
       <button class="mc-button" @click="handleCreate">
-        <span class="title">Create</span>
+        <span class="title">{{ $t('menu.create') }}</span>
       </button>
       <button class="mc-button" @click="ui.backToMainRoot()">
-        <span class="title">Back</span>
+        <span class="title">{{ $t('menu.back') }}</span>
       </button>
     </div>
 
@@ -227,7 +257,7 @@ function cancelOverwrite() {
             Warning
           </h3>
           <p class="dialog-body">
-            Creating a new world will overwrite your current world.
+            {{ $t('menu.warningOverwrite') }}
             <br><br>
             New Seed: <strong>{{ ui.seedDraft || 'Random' }}</strong>
             <br>
@@ -235,10 +265,10 @@ function cancelOverwrite() {
           </p>
           <div class="mc-menu double">
             <button class="mc-button half" @click="cancelOverwrite">
-              <span class="title">Cancel</span>
+              <span class="title">{{ $t('menu.cancel') }}</span>
             </button>
             <button class="mc-button half" @click="confirmOverwrite">
-              <span class="title">Confirm</span>
+              <span class="title">{{ $t('menu.confirm') }}</span>
             </button>
           </div>
         </div>
@@ -297,6 +327,28 @@ function cancelOverwrite() {
   }
 }
 
+.lang-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  transition: transform 0.2s;
+  z-index: 100;
+}
+
+.lang-btn:hover {
+  transform: scale(1.1);
+}
+
+.lang-icon {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.5));
+}
 .menu-title {
   color: #fff;
   font-size: 24px;

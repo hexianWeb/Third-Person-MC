@@ -10,6 +10,7 @@ import {
   WORLDGEN_PRESETS,
 } from '../js/config/worldgen-presets.js'
 import emitter from '../js/utils/event-bus.js'
+import { useSettingsStore } from './settingsStore.js'
 
 // ========================================
 // Constants
@@ -21,6 +22,8 @@ const SEED_REGEX = /^\d+$/
 // UI Store Definition
 // ========================================
 export const useUiStore = defineStore('ui', () => {
+  const settingsStore = useSettingsStore()
+
   // ----------------------------------------
   // State
   // ----------------------------------------
@@ -58,6 +61,7 @@ export const useUiStore = defineStore('ui', () => {
     magnitude: DEFAULT_WORLDGEN_DRAFT.magnitude,
     treeMinHeight: DEFAULT_WORLDGEN_DRAFT.treeMinHeight,
     treeMaxHeight: DEFAULT_WORLDGEN_DRAFT.treeMaxHeight,
+    viewDistance: 2,
   })
 
   /** Whether Advanced panel is expanded */
@@ -255,6 +259,7 @@ export const useUiStore = defineStore('ui', () => {
     worldGenDraft.magnitude = preset.terrain.magnitude
     worldGenDraft.treeMinHeight = preset.trees.minHeight
     worldGenDraft.treeMaxHeight = preset.trees.maxHeight
+    // Keep current viewDistance or reset to 2? Let's keep it manual or default 2
   }
 
   /**
@@ -265,6 +270,7 @@ export const useUiStore = defineStore('ui', () => {
     worldGenDraft.magnitude = DEFAULT_WORLDGEN_DRAFT.magnitude
     worldGenDraft.treeMinHeight = DEFAULT_WORLDGEN_DRAFT.treeMinHeight
     worldGenDraft.treeMaxHeight = DEFAULT_WORLDGEN_DRAFT.treeMaxHeight
+    worldGenDraft.viewDistance = 2
   }
 
   /**
@@ -295,6 +301,9 @@ export const useUiStore = defineStore('ui', () => {
       treeMaxHeight: worldGenDraft.treeMaxHeight,
     })
 
+    // Apply view distance
+    settingsStore.setChunkViewDistance(worldGenDraft.viewDistance)
+
     toPlaying()
     emitter.emit('game:create_world', { seed, terrain, trees })
   }
@@ -316,6 +325,9 @@ export const useUiStore = defineStore('ui', () => {
       treeMinHeight: worldGenDraft.treeMinHeight,
       treeMaxHeight: worldGenDraft.treeMaxHeight,
     })
+
+    // Apply view distance
+    settingsStore.setChunkViewDistance(worldGenDraft.viewDistance)
 
     toPlaying()
     emitter.emit('game:reset_world', { seed, terrain, trees })

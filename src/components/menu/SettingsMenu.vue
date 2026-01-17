@@ -46,19 +46,19 @@ function adjustSensitivity(delta) {
 <template>
   <div class="settings-menu">
     <h2 class="menu-title">
-      Settings
+      {{ $t('settings.title') }}
     </h2>
 
     <div class="settings-content">
       <!-- Camera Section -->
       <div class="settings-section">
         <h3 class="section-title">
-          Camera
+          {{ $t('settings.camera') }}
         </h3>
 
         <!-- Camera Preset -->
         <div class="setting-row">
-          <span class="setting-label">Camera Style</span>
+          <span class="setting-label">{{ $t('settings.cameraStyle') }}</span>
           <div class="setting-control">
             <button
               v-for="opt in presetOptions"
@@ -73,15 +73,44 @@ function adjustSensitivity(delta) {
         </div>
       </div>
 
+      <!-- World Section -->
+      <div class="settings-section">
+        <h3 class="section-title">
+          {{ $t('settings.world') }}
+        </h3>
+
+        <!-- View Distance -->
+        <McStepSlider
+          :model-value="settings.chunkViewDistance"
+          :min="1"
+          :max="8"
+          :step="1"
+          :decimals="0"
+          :label="$t('settings.viewDistance')"
+          @change="settings.setChunkViewDistance($event)"
+        />
+
+        <!-- Unload Padding -->
+        <McStepSlider
+          :model-value="settings.chunkUnloadPadding"
+          :min="0"
+          :max="4"
+          :step="1"
+          :decimals="0"
+          :label="$t('settings.unloadPadding')"
+          @change="settings.setChunkUnloadPadding($event)"
+        />
+      </div>
+
       <!-- Visual Section -->
       <div class="settings-section">
         <h3 class="section-title">
-          Visual Effects
+          {{ $t('settings.visual') }}
         </h3>
 
         <!-- SpeedLines Preset -->
         <div class="setting-row">
-          <span class="setting-label">Speed Lines</span>
+          <span class="setting-label">{{ $t('settings.speedLines') }}</span>
           <div class="setting-control">
             <button
               v-for="opt in presetOptions"
@@ -99,12 +128,12 @@ function adjustSensitivity(delta) {
       <!-- Environment Section -->
       <div class="settings-section">
         <h3 class="section-title">
-          Environment
+          {{ $t('settings.environment') }}
         </h3>
 
         <!-- Sky Mode -->
         <div class="setting-row">
-          <span class="setting-label">Sky</span>
+          <span class="setting-label">{{ $t('settings.sky') }}</span>
           <div class="setting-control">
             <button
               v-for="opt in skyModeOptions"
@@ -125,7 +154,7 @@ function adjustSensitivity(delta) {
           :max="5"
           :step="0.25"
           :decimals="2"
-          label="Sun"
+          :label="$t('settings.sun')"
           @change="settings.setEnvSunIntensity($event)"
         />
 
@@ -136,7 +165,7 @@ function adjustSensitivity(delta) {
           :max="3"
           :step="0.25"
           :decimals="2"
-          label="Ambient"
+          :label="$t('settings.ambient')"
           @change="settings.setEnvAmbientIntensity($event)"
         />
 
@@ -147,7 +176,7 @@ function adjustSensitivity(delta) {
           :max="0.05"
           :step="0.005"
           :decimals="3"
-          label="Fog"
+          :label="$t('settings.fog')"
           @change="settings.setEnvFogDensity($event)"
         />
       </div>
@@ -155,12 +184,12 @@ function adjustSensitivity(delta) {
       <!-- Graphics Section -->
       <div class="settings-section">
         <h3 class="section-title">
-          Graphics
+          {{ $t('settings.graphics') }}
         </h3>
 
         <!-- Shadow Quality -->
         <div class="setting-row">
-          <span class="setting-label">Shadow Quality</span>
+          <span class="setting-label">{{ $t('settings.shadowQuality') }}</span>
           <div class="setting-control">
             <button
               v-for="opt in shadowOptions"
@@ -173,39 +202,17 @@ function adjustSensitivity(delta) {
             </button>
           </div>
         </div>
-
-        <!-- View Distance -->
-        <McStepSlider
-          :model-value="settings.chunkViewDistance"
-          :min="1"
-          :max="8"
-          :step="1"
-          :decimals="0"
-          label="View Distance"
-          @change="settings.setChunkViewDistance($event)"
-        />
-
-        <!-- Unload Padding -->
-        <McStepSlider
-          :model-value="settings.chunkUnloadPadding"
-          :min="0"
-          :max="4"
-          :step="1"
-          :decimals="0"
-          label="Unload Padding"
-          @change="settings.setChunkUnloadPadding($event)"
-        />
       </div>
 
       <!-- Controls Section -->
       <div class="settings-section">
         <h3 class="section-title">
-          Controls
+          {{ $t('settings.controls') }}
         </h3>
 
         <!-- Mouse Sensitivity -->
         <div class="setting-row">
-          <span class="setting-label">Mouse Sensitivity</span>
+          <span class="setting-label">{{ $t('settings.sensitivity') }}</span>
           <div class="setting-control slider-control">
             <button class="adjust-btn" @click="adjustSensitivity(-0.005)">
               -
@@ -222,10 +229,10 @@ function adjustSensitivity(delta) {
     <!-- Buttons -->
     <div class="mc-menu">
       <button class="mc-button" @click="settings.resetToDefaults()">
-        <span class="title">Reset Defaults</span>
+        <span class="title">{{ $t('settings.reset') }}</span>
       </button>
       <button class="mc-button" @click="ui.exitSettings()">
-        <span class="title">Done</span>
+        <span class="title">{{ $t('settings.done') }}</span>
       </button>
     </div>
   </div>
