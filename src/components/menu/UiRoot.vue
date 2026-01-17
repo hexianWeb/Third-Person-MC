@@ -4,6 +4,7 @@
  * Manages screen transitions and overlay rendering
  */
 import { onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import emitter from '../../js/utils/event-bus.js'
 import { useUiStore } from '../../vue/uiStore.js'
 import HowToPlay from './HowToPlay.vue'
@@ -13,6 +14,7 @@ import PauseMenu from './PauseMenu.vue'
 import SettingsMenu from './SettingsMenu.vue'
 
 const ui = useUiStore()
+const { locale } = useI18n()
 
 // Listen for core:ready to transition from loading to mainMenu
 onMounted(() => {
@@ -52,6 +54,7 @@ function handleWindowBlur() {
       :class="{
         loading: ui.screen === 'loading',
         dark: ui.screen !== 'loading',
+        [`lang-${locale}`]: true,
       }"
     >
       <!-- Loading Screen -->

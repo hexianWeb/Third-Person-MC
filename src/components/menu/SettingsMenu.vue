@@ -4,12 +4,19 @@
  * Supports preset switching and step sliders
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../../vue/settingsStore.js'
 import { useUiStore } from '../../vue/uiStore.js'
 import McStepSlider from './ui/McStepSlider.vue'
 
 const ui = useUiStore()
 const settings = useSettingsStore()
+const { locale } = useI18n()
+
+// Toggle language
+function toggleLanguage() {
+  locale.value = locale.value === 'en' ? 'zh' : 'en'
+}
 
 // Shadow quality options
 const shadowOptions = [
@@ -47,6 +54,9 @@ function adjustSensitivity(delta) {
   <div class="settings-menu">
     <h2 class="menu-title">
       {{ $t('settings.title') }}
+      <button class="lang-switch-btn" @click="toggleLanguage">
+        {{ locale.toUpperCase() }}
+      </button>
     </h2>
 
     <div class="settings-content">
@@ -251,6 +261,24 @@ function adjustSensitivity(delta) {
   color: #fff;
   font-size: 28px;
   text-shadow: 2px 2px #000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lang-switch-btn {
+  background: none;
+  border: 2px solid #aaa;
+  color: #aaa;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.lang-switch-btn:hover {
+  border-color: #fff;
+  color: #fff;
 }
 
 .settings-content {
