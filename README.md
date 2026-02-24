@@ -31,7 +31,7 @@
 | :--- | :--- |
 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/attack.gif" width="420" alt="攻击效果预览" /><br/>攻击效果预览 | <img src="https://github.com/hexianWeb/picx-images-hosting/raw/master/多生态拼图.webp" width="420" alt="多生态拼图" /><br/>地形：多生态拼图 |
 
-## 核心亮点（来自项目与实现现实）
+## 核心亮点（来自项目实现）
 
 - **运动系统**：第三人称角色移动与姿态切换（走/跑/跳），强调操作反馈与动画衔接
 - **生态地形**：基于随机数与噪声的程序化地形（项目内有多生态概念：平原/森林/沙漠/冻洋等）
@@ -142,7 +142,7 @@ E:\圖形學\Third-Person-MC\
   - **Steve & Alex**: 由 [hibiki_ekko](https://www.planetminecraft.com/member/hibiki_ekko/) 创作，来源 [Planet Minecraft](https://www.planetminecraft.com/member/hibiki_ekko/)
   - **Classic (Player)**: 由 [holland0519](https://www.minecraftskins.com/profile/5521971/holland0519) 创作，来源 [Minecraft Skins](https://www.minecraftskins.com/profile/5521971/holland0519)
   - 特别感谢 **hibiki_ekko** 和 **holland0519** 为项目提供的精美皮肤资源！
-- **贴图**: 提取自 Minecraft[Mojang/bedrock-samples](Mojang/bedrock-samples) 游戏资源包，由 [hexianWeb](https://github.com/hexianWeb) 优化。
+- **贴图**: 提取自 Minecraft [Mojang/bedrock-samples](https://github.com/Mojang/bedrock-samples) 游戏资源包，由 [hexianWeb](https://github.com/hexianWeb) 优化。
 - **字体**: [Minecraftia-Regular.ttf](https://www.dafont.com/minecraftia.font) & [TakWolf/fusion-pixel-font](https://github.com/TakWolf/fusion-pixel-font)
 - **音效**: 计划由 Suno AI 生成 ( 命中、环境音 **还没生成**)
 
