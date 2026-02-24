@@ -113,6 +113,28 @@ export default class PlantRenderer {
   }
 
   /**
+   * 移除指定位置的植物实例
+   * @param {number} x - 局部 X 坐标
+   * @param {number} y - Y 坐标
+   * @param {number} z - 局部 Z 坐标
+   * @param {Array} plantData - 植物数据数组引用（会被修改）
+   * @returns {boolean} 是否成功移除
+   */
+  removePlantAt(x, y, z, plantData) {
+    // 查找匹配的植物
+    const index = plantData.findIndex((p) => p.x === x && p.y === y && p.z === z)
+    if (index === -1)
+      return false
+
+    // 从数组中移除
+    plantData.splice(index, 1)
+
+    // 重建植物 mesh
+    this.build(plantData)
+    return true
+  }
+
+  /**
    * 每帧更新：更新动画材质的时间 uniform
    */
   update() {

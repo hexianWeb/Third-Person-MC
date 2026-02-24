@@ -300,6 +300,15 @@ export default class ChunkManager {
       }
     }
 
+    // 5. 检查并移除该方块上方的植物（如果存在）
+    const plantY = y + 1
+    if (plantY < this.chunkHeight && chunk.plantRenderer && chunk.generator) {
+      // 检查上方位置是否有植物
+      const plantLocalX = localX
+      const plantLocalZ = localZ
+      chunk.plantRenderer.removePlantAt(plantLocalX, plantY, plantLocalZ, chunk.generator.plantData)
+    }
+
     // 记录修改（0 表示删除）
     this.persistence.recordModification(x, y, z, blocks.empty.id, this.chunkWidth)
     this._scheduleSave()
