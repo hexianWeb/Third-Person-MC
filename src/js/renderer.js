@@ -374,7 +374,9 @@ export default class Renderer {
    * @param {Player} player
    */
   initPlayerPreview(player) {
-    this.playerPreview = new PlayerPreviewCamera()
+    if (!this.playerPreview) {
+      this.playerPreview = new PlayerPreviewCamera()
+    }
     this.playerPreview.setPlayer(player)
   }
 
@@ -392,14 +394,12 @@ export default class Renderer {
     // 获取预览配置
     const size = preview.config.size
     const margin = preview.config.margin
-    const pixelRatio = this.sizes.pixelRatio
-
-    // 计算实际像素位置（考虑 pixelRatio）
-    // WebGL viewport 使用左下角为原点
-    const x = Math.floor(margin.left * pixelRatio)
-    const y = Math.floor(margin.bottom * pixelRatio)
-    const width = Math.floor(size * pixelRatio)
-    const height = Math.floor(size * pixelRatio)
+    // WebGL viewport/scissor 这里使用 CSS 像素，three 内部会按 pixelRatio 换算
+    // 避免在浏览器缩放（DPR 改变）时发生二次缩放导致画面无法铺满
+    const x = Math.floor(margin.left)
+    const y = Math.floor(margin.bottom)
+    const width = Math.floor(size)
+    const height = Math.floor(size)
 
     // 保存当前状态
     const currentSceneBackground = this.scene.background
@@ -419,7 +419,7 @@ export default class Renderer {
 
     // 恢复状态
     this.instance.setScissorTest(false)
-    this.instance.setViewport(0, 0, this.sizes.width * pixelRatio, this.sizes.height * pixelRatio)
+    this.instance.setViewport(0, 0, this.sizes.width, this.sizes.height)
 
     this.scene.background = currentSceneBackground
   }

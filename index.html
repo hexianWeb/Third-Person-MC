@@ -79,19 +79,72 @@
     <meta name="theme-color" content="#000" />
     <meta name="mobile-web-app-capable" content="yes" />
 
+    <style>
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #111827;
+      }
+
+      #loading-screen .loading-panel {
+        width: 16rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      #loading-screen .loading-text {
+        text-align: center;
+      }
+
+      #loading-screen .loading-title {
+        margin: 0 0 0.5rem;
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      #loading-screen .loading-percentage {
+        margin: 0;
+        color: #9ca3af;
+      }
+
+      #loading-screen .loading-track {
+        position: relative;
+        height: 0.5rem;
+        background: #374151;
+        border-radius: 9999px;
+        overflow: hidden;
+      }
+
+      #loading-bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 100%;
+        background: #3b82f6;
+        transition: width 0.3s ease-out;
+      }
+    </style>
+
     <script defer src="/_vercel/insights/script.js"></script>
   </head>
   <body>
     <div id="app"></div>
     <!-- Loading 全屏 进度 -->
-    <div id="loading-screen" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gray-900">
-      <div class="w-64 space-y-4">
-        <div class="text-center">
-          <h2 class="text-xl font-semibold text-white mb-2">Loading Resources</h2>
-          <p id="loading-percentage" class="text-gray-400">0%</p>
+    <div id="loading-screen">
+      <div class="loading-panel">
+        <div class="loading-text">
+          <h2 class="loading-title">Loading Resources</h2>
+          <p id="loading-percentage" class="loading-percentage">0%</p>
         </div>
-        <div class="relative h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div id="loading-bar" class="absolute left-0 top-0 h-full w-0 bg-blue-500 transition-all duration-300 ease-out"></div>
+        <div class="loading-track">
+          <div id="loading-bar"></div>
         </div>
       </div>
     </div>
