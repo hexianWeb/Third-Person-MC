@@ -39,6 +39,8 @@ export default class PlantRenderer {
     this._tempObject = new THREE.Object3D()
     this._plantMeshes = new Map() // plantId -> InstancedMesh
     this._animatedMaterials = []
+    // 位置到实例索引的映射：'x,y,z' -> { plantId, instanceIndex }
+    this._positionToInstance = new Map()
   }
 
   /**
@@ -50,6 +52,9 @@ export default class PlantRenderer {
 
     if (!plantData || plantData.length === 0)
       return
+
+    // 清空位置映射
+    this._positionToInstance.clear()
 
     // 按植物类型分组
     const positionsByPlant = new Map()
@@ -101,6 +106,10 @@ export default class PlantRenderer {
         )
         this._tempObject.updateMatrix()
         mesh.setMatrixAt(index, this._tempObject.matrix)
+
+        // 记录位置到实例的映射
+        const key = `${pos.x},${pos.y},${pos.z}`
+        this._positionToInstance.set(key, { plantId, instanceIndex: index })
       })
 
       mesh.instanceMatrix.needsUpdate = true
@@ -110,6 +119,46 @@ export default class PlantRenderer {
 
     // 应用整体缩放
     this.group.scale.setScalar(this.params.scale)
+  }
+
+  /**
+   * 移除指定位置的植物实例（高效版本：只隐藏实例，不重建 mesh）
+   * @param {number} x - 局部 X 坐标
+   * @param {number} y - Y 坐标
+   * @param {number} z - 局部 Z 坐标
+   * @param {Array} plantData - 植物数据数组引用（会被修改）
+   * @returns {boolean} 是否成功移除
+   */
+  removePlantAt(x, y, z, plantData) {
+    const key = `${x},${y},${z}`
+    const instance = this._positionToInstance.get(key)
+
+    if (!instance)
+      return false
+
+    const { plantId, instanceIndex } = instance
+    const mesh = this._plantMeshes.get(plantId)
+
+    if (!mesh)
+      return false
+
+    // 方法 1：将实例缩放为 0（推荐，最快）
+    this._tempObject.position.set(x, (y - 0.5) * this.params.heightScale, z)
+    this._tempObject.scale.set(0, 0, 0) // 缩放为 0，完全隐藏
+    this._tempObject.updateMatrix()
+    mesh.setMatrixAt(instanceIndex, this._tempObject.matrix)
+    mesh.instanceMatrix.needsUpdate = true
+
+    // 从映射中移除
+    this._positionToInstance.delete(key)
+
+    // 从数据源中移除（保持数据一致性）
+    const dataIndex = plantData.findIndex((p) => p.x === x && p.y === y && p.z === z)
+    if (dataIndex !== -1) {
+      plantData.splice(dataIndex, 1)
+    }
+
+    return true
   }
 
   /**
