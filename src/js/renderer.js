@@ -1,13 +1,27 @@
+import { bloom } from 'three/addons/tsl/display/BloomNode.js'
+import { pass } from 'three/tsl'
 import * as THREE from 'three/webgpu'
 
 import { SHADOW_CONFIG, SHADOW_QUALITY } from './config/shadow-config.js'
 import Experience from './experience.js'
+import { createGazeNode } from './postprocessing/gaze-node.js'
+import { createSpeedLinesNode } from './postprocessing/speed-lines-node.js'
 import emitter from './utils/event/event-bus.js'
 import PlayerPreviewCamera from './world/player/player-preview-camera.js'
 
+/** settings → 速度线 TSL uniform 字段映射 */
+const SPEEDLINE_UNIFORM_MAP = {
+  density: 'uDensity',
+  speed: 'uSpeed',
+  thickness: 'uThickness',
+  minRadius: 'uMinRadius',
+  maxRadius: 'uMaxRadius',
+  randomness: 'uRandomness',
+}
+
 /**
- * Phase 1 PoC：WebGPURenderer 直渲（无 EffectComposer）
- * 后处理（Bloom / Speed Lines / Gaze）留待 Phase 2 TSL 迁移
+ * Phase 2：WebGPURenderer + TSL RenderPipeline
+ * 管线：scene pass → bloom → speed lines → gaze（tone/output 由 RenderPipeline 处理）
  */
 export default class Renderer {
   constructor() {
@@ -24,7 +38,14 @@ export default class Renderer {
     this.backendName = 'pending'
     this._initPromise = null
 
-    // 后期处理配置保留（供 Settings / Player / Enemy 写入；Phase 1 不生效）
+    // TSL 后处理管线引用
+    this.renderPipeline = null
+    this.scenePass = null
+    this.bloomPass = null
+    this.speedLineUniforms = null
+    this.gazeUniforms = null
+
+    // 后期处理配置（Settings / Player / Enemy / Debug 共用）
     this.postProcessConfig = {
       bloom: {
         enabled: true,
@@ -49,9 +70,10 @@ export default class Renderer {
       },
     }
 
-    // 兼容 enemy-manager 等对 gazePass.uniforms 的写入（Phase 1 stub）
+    // 兼容 enemy-manager：gazePass.uniforms.uIntensity.value = ...
+    // 管线建好后会指向真实 TSL UniformNode
     this.gazePass = {
-      enabled: false,
+      enabled: true,
       uniforms: {
         uIntensity: { value: this.postProcessConfig.gaze.intensity },
       },
@@ -60,24 +82,42 @@ export default class Renderer {
     this.setInstance()
     this._initPromise = this._init()
 
-    if (this.debug.active) {
-      this.debugInit()
-    }
-
     this.camera.attachRenderer(this)
     this._setupSettingsListeners()
   }
 
-  /** 监听设置 UI 的后期处理变更（Phase 1 仅同步配置，不驱动 pass） */
+  /** 监听设置 UI 的后期处理变更，同步到 TSL uniforms */
   _setupSettingsListeners() {
     emitter.on('settings:postprocess-changed', ({ speedLines, gaze }) => {
       if (speedLines) {
-        Object.assign(this.postProcessConfig.speedLines, speedLines)
+        if (speedLines.enabled !== undefined) {
+          this.postProcessConfig.speedLines.enabled = speedLines.enabled
+          if (this.speedLineUniforms)
+            this.speedLineUniforms.uEnabled.value = speedLines.enabled ? 1 : 0
+        }
+
+        if (speedLines.color && this.speedLineUniforms) {
+          this.postProcessConfig.speedLines.color = speedLines.color
+          const { r, g, b } = speedLines.color
+          this.speedLineUniforms.uColor.value.setRGB(r / 255, g / 255, b / 255)
+        }
+
+        for (const [key, uniformName] of Object.entries(SPEEDLINE_UNIFORM_MAP)) {
+          if (speedLines[key] !== undefined) {
+            this.postProcessConfig.speedLines[key] = speedLines[key]
+            if (this.speedLineUniforms)
+              this.speedLineUniforms[uniformName].value = speedLines[key]
+          }
+        }
       }
 
       if (gaze) {
-        if (gaze.enabled !== undefined)
+        if (gaze.enabled !== undefined) {
           this.postProcessConfig.gaze.enabled = gaze.enabled
+          this.gazePass.enabled = gaze.enabled
+          if (this.gazeUniforms)
+            this.gazeUniforms.uEnabled.value = gaze.enabled ? 1 : 0
+        }
         if (gaze.intensity !== undefined) {
           this.postProcessConfig.gaze.intensity = gaze.intensity
           this.gazePass.uniforms.uIntensity.value = gaze.intensity
@@ -112,22 +152,28 @@ export default class Renderer {
   }
 
   /**
-   * 异步初始化 WebGPU 设备
+   * 异步初始化 WebGPU 设备，并搭建 TSL 后处理管线
    */
   async _init() {
     try {
       await this.instance.init()
       const isWebGPU = this.instance.backend?.isWebGPUBackend === true
       this.backendName = isWebGPU ? 'webgpu' : 'webgl'
-      console.info(`[Renderer] backend=${this.backendName}`)
+      console.debug(`[Renderer] backend=${this.backendName}`)
 
       // 用户确认：100% WebGPU-only，不接受自动落到 WebGL 后端
       if (!isWebGPU) {
         this.ready = false
-        throw new Error('[Renderer] WebGPU-only PoC: WebGPU backend unavailable (got WebGL)')
+        throw new Error('[Renderer] WebGPU-only: WebGPU backend unavailable (got WebGL)')
       }
 
+      this._setupPostProcessing()
       this.ready = true
+
+      // 调试面板需在 TSL uniforms 就绪后创建，才能正确绑定 bloom / 速度线 / 凝视
+      if (this.debug.active) {
+        this.debugInit()
+      }
     }
     catch (error) {
       console.error('[Renderer] WebGPU init failed:', error)
@@ -139,11 +185,62 @@ export default class Renderer {
   }
 
   /**
-   * 调试面板：显示后端 + 阴影质量；后处理面板标注 Phase 1 停用
+   * 搭建 TSL 后处理：pass → bloom → speed lines → gaze
+   * tone mapping / 色彩空间由 RenderPipeline.outputColorTransform 处理（对齐原 OutputPass）
+   */
+  _setupPostProcessing() {
+    const cfg = this.postProcessConfig
+
+    this.renderPipeline = new THREE.RenderPipeline(this.instance)
+    this.scenePass = pass(this.scene, this.camera.instance)
+    const scenePassColor = this.scenePass.getTextureNode('output')
+
+    // Bloom（默认半分辨率，BloomNode._resolutionScale = 0.5）
+    this.bloomPass = bloom(
+      scenePassColor,
+      cfg.bloom.strength,
+      cfg.bloom.radius,
+      cfg.bloom.threshold,
+    )
+    if (!cfg.bloom.enabled)
+      this.bloomPass.strength.value = 0
+
+    const bloomed = scenePassColor.add(this.bloomPass)
+
+    // Speed Lines
+    const speedLines = createSpeedLinesNode(bloomed, cfg.speedLines)
+    this.speedLineUniforms = speedLines.uniforms
+
+    // Gaze
+    const gaze = createGazeNode(speedLines.node, cfg.gaze)
+    this.gazeUniforms = gaze.uniforms
+    // 对外兼容：enemy-manager 直接写 uniforms.uIntensity.value
+    this.gazePass = {
+      enabled: cfg.gaze.enabled,
+      uniforms: {
+        uIntensity: this.gazeUniforms.uIntensity,
+      },
+    }
+
+    this.renderPipeline.outputNode = gaze.node
+  }
+
+  /**
+   * 将 bloom.enabled 映射到 strength（关闭时 strength=0，避免重建管线）
+   */
+  _syncBloomEnabled() {
+    if (!this.bloomPass)
+      return
+    const { enabled, strength } = this.postProcessConfig.bloom
+    this.bloomPass.strength.value = enabled ? strength : 0
+  }
+
+  /**
+   * 调试面板：后端状态 + 后处理参数 + 阴影质量
    */
   debugInit() {
     const rendererFolder = this.debug.ui.addFolder({
-      title: 'Renderer (WebGPU PoC)',
+      title: 'Renderer (WebGPU)',
       expanded: true,
     })
 
@@ -158,26 +255,171 @@ export default class Renderer {
     })
 
     const postProcessFolder = this.debug.ui.addFolder({
-      title: 'Post Processing (Phase 1 关闭)',
+      title: 'Post Processing',
       expanded: false,
     })
 
-    postProcessFolder.addBinding(this.postProcessConfig.speedLines, 'opacity', {
-      label: '速度线透明度(仅配置)',
+    // ===== Bloom =====
+    const bloomFolder = postProcessFolder.addFolder({
+      title: 'Bloom 辉光',
+      expanded: true,
+    })
+
+    bloomFolder.addBinding(this.postProcessConfig.bloom, 'enabled', {
+      label: '启用',
+    }).on('change', () => {
+      this._syncBloomEnabled()
+    })
+
+    bloomFolder.addBinding(this.postProcessConfig.bloom, 'strength', {
+      label: '强度',
+      min: 0,
+      max: 3,
+      step: 0.01,
+    }).on('change', (ev) => {
+      this.postProcessConfig.bloom.strength = ev.value
+      this._syncBloomEnabled()
+    })
+
+    bloomFolder.addBinding(this.postProcessConfig.bloom, 'radius', {
+      label: '半径',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.bloomPass)
+        this.bloomPass.radius.value = ev.value
+    })
+
+    bloomFolder.addBinding(this.postProcessConfig.bloom, 'threshold', {
+      label: '阈值',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.bloomPass)
+        this.bloomPass.threshold.value = ev.value
+    })
+
+    // ===== Speed Lines =====
+    const speedLinesFolder = postProcessFolder.addFolder({
+      title: 'Speed Lines 速度线',
+      expanded: true,
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'enabled', {
+      label: '启用',
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uEnabled.value = ev.value ? 1 : 0
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'color', {
+      label: '颜色',
+      view: 'color',
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms) {
+        this.speedLineUniforms.uColor.value.setRGB(
+          ev.value.r / 255,
+          ev.value.g / 255,
+          ev.value.b / 255,
+        )
+      }
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'density', {
+      label: '密度',
+      min: 10,
+      max: 100,
+      step: 1,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uDensity.value = ev.value
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'speed', {
+      label: '脉冲速度',
+      min: 0.5,
+      max: 10,
+      step: 0.1,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uSpeed.value = ev.value
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'thickness', {
+      label: '三角形宽度',
+      min: 0.01,
+      max: 0.5,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uThickness.value = ev.value
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'minRadius', {
+      label: '尖端半径',
+      min: 0.1,
+      max: 0.8,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uMinRadius.value = ev.value
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'maxRadius', {
+      label: '起始半径',
+      min: 0.8,
+      max: 2.0,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uMaxRadius.value = ev.value
+    })
+
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'randomness', {
+      label: '随机性',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev) => {
+      if (this.speedLineUniforms)
+        this.speedLineUniforms.uRandomness.value = ev.value
+    })
+
+    // 当前透明度只读，由 Player 冲刺驱动
+    speedLinesFolder.addBinding(this.postProcessConfig.speedLines, 'opacity', {
+      label: '当前透明度',
       min: 0,
       max: 1,
       step: 0.01,
       readonly: true,
     })
 
-    postProcessFolder.addBinding(this.gazePass.uniforms.uIntensity, 'value', {
-      label: '凝视强度(仅配置)',
+    // ===== Gaze =====
+    const gazeFolder = postProcessFolder.addFolder({
+      title: 'Gaze 凝视恐惧',
+      expanded: true,
+    })
+
+    gazeFolder.addBinding(this.postProcessConfig.gaze, 'enabled', {
+      label: '启用',
+    }).on('change', (ev) => {
+      this.gazePass.enabled = ev.value
+      if (this.gazeUniforms)
+        this.gazeUniforms.uEnabled.value = ev.value ? 1 : 0
+    })
+
+    gazeFolder.addBinding(this.gazePass.uniforms.uIntensity, 'value', {
+      label: '强度',
       min: 0,
       max: 1,
       step: 0.01,
-      readonly: true,
+    }).on('change', (ev) => {
+      this.postProcessConfig.gaze.intensity = ev.value
     })
 
+    // ===== 阴影质量 =====
     const shadowFolder = this.debug.ui.addFolder({
       title: 'Shadow Quality 阴影质量',
       expanded: true,
@@ -210,21 +452,37 @@ export default class Renderer {
   }
 
   /**
-   * 设置速度线透明度（Phase 1 仅写配置，视觉效果待 Phase 2）
+   * 设置速度线透明度（由 Player 冲刺驱动）
    * @param {number} opacity - 透明度值 (0-1)
    */
   setSpeedLineOpacity(opacity) {
     this.postProcessConfig.speedLines.opacity = opacity
+    if (this.speedLineUniforms)
+      this.speedLineUniforms.uOpacity.value = opacity
   }
 
   update() {
-    if (!this.ready)
+    if (!this.ready || !this.renderPipeline)
       return
 
-    // 同步 stub，供调试面板只读显示
-    this.postProcessConfig.gaze.intensity = this.gazePass.uniforms.uIntensity.value
+    const elapsedSec = this.experience.time.elapsed * 0.001
 
-    this.instance.render(this.scene, this.camera.instance)
+    if (this.speedLineUniforms)
+      this.speedLineUniforms.uTime.value = elapsedSec
+
+    if (this.gazeUniforms) {
+      this.gazeUniforms.uTime.value = elapsedSec
+      // 与 gazePass.uniforms 同步（对外写入可能只改 intensity）
+      this.postProcessConfig.gaze.intensity = this.gazePass.uniforms.uIntensity.value
+      this.gazeUniforms.uEnabled.value = (
+        this.postProcessConfig.gaze.enabled
+        && this.gazePass.uniforms.uIntensity.value > 0.005
+      )
+        ? 1
+        : 0
+    }
+
+    this.renderPipeline.render()
     this._renderPlayerPreview()
   }
 
@@ -268,14 +526,19 @@ export default class Renderer {
   }
 
   /**
-   * 相机切换回调（Phase 1 直渲无需更新 RenderPass）
-   * @param {THREE.Camera} _cameraInstance
+   * 相机切换时更新 scenePass 相机引用
+   * @param {THREE.Camera} cameraInstance
    */
-  onCameraSwitched(_cameraInstance) {
-    // Phase 2 TSL pass 再重建相机引用
+  onCameraSwitched(cameraInstance) {
+    if (this.scenePass)
+      this.scenePass.camera = cameraInstance
   }
 
   destroy() {
+    if (this.renderPipeline) {
+      this.renderPipeline.dispose()
+      this.renderPipeline = null
+    }
     if (this.instance) {
       this.instance.dispose()
       this.instance.domElement = null

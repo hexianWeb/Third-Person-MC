@@ -25,7 +25,7 @@
 | B | 材质策略 | **全面上 TSL/NodeMaterial**（不保留 ShaderMaterial 主路径） |
 | C | 范围 | GlassWall / Grid **排除**；后处理与材质全量迁移分后续 PR |
 | D | three 版本 | **允许**升到 latest（PoC 已升至 `0.185.1`） |
-| E | 交付节奏 | **本轮只做 Phase 1 PoC** |
+| E | 交付节奏 | Phase 1 PoC ✅ → **Phase 2 后处理 ✅**（本轮）；Phase 3+ 后续 |
 
 ---
 
@@ -265,9 +265,25 @@ git commit -m "feat(renderer): PoC WebGPURenderer with async init, postprocess o
 
 ---
 
-## Phase 2: 后处理迁移（阻塞自定义特效）
+## Phase 2: 后处理迁移（阻塞自定义特效） — ✅ Done (2026-07-14)
 
-### Task 2.1: TSL scene pass + bloom
+**验证：** `pnpm build` 通过（exit 0，~22s）。运行时需 Chrome + WebGPU。
+
+**实现摘要：**
+- `RenderPipeline` + `pass` + `bloom`（`three/addons/tsl/display/BloomNode.js`，r185）
+- Speed Lines / Gaze 为 TSL `Fn` 节点（`src/js/postprocessing/*`），GLSL 文件暂留作参考（Phase 5 再归档）
+- 兼容保留：`setSpeedLineOpacity`、`gazePass.uniforms.uIntensity`、`settings:postprocess-changed`、Debug 面板
+- `onCameraSwitched`：更新 `scenePass.camera`
+- 无 EffectComposer / ShaderPass 残留；SkinPreview 仍独立 WebGL（Phase 4）
+
+**目视确认（`pnpm dev`）：**
+1. 控制台 `[Renderer] backend=webgpu`
+2. Bloom：抬高 Debug → Post Processing → Bloom 强度，观察亮处辉光
+3. 速度线：冲刺（或 Debug 拉 opacity / Settings 视觉预设）
+4. 凝视：被怪追，或 Debug → Gaze 强度 > 0.05
+5. 第三人称 ↔ 鸟瞰切换后画面仍正确
+
+### Task 2.1: TSL scene pass + bloom — ✅
 
 **Files:**
 - Modify: `src/js/renderer.js`
@@ -296,15 +312,11 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 
 **Step 4:** `pnpm dev` — bloom 可见；无速度线/凝视可接受。
 
-**Step 5: Commit**
-
-```bash
-git commit -m "feat(renderer): replace EffectComposer with TSL bloom pipeline"
-```
+**Step 5: Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 2.2: Speed Lines → TSL（原 speed-lines 专项）
+### Task 2.2: Speed Lines → TSL（原 speed-lines 专项） — ✅
 
 **Files:**
 - Create: `src/js/postprocessing/speed-lines-node.js`
@@ -319,15 +331,11 @@ git commit -m "feat(renderer): replace EffectComposer with TSL bloom pipeline"
 
 **Step 4:** 冲刺时视觉对比 WebGL 旧效果（截图）。
 
-**Step 5: Commit**
-
-```bash
-git commit -m "feat(postprocessing): migrate speed lines to TSL node"
-```
+**Step 5: Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 2.3: Gaze → TSL
+### Task 2.3: Gaze → TSL — ✅
 
 **Files:**
 - Create: `src/js/postprocessing/gaze-node.js`
@@ -336,21 +344,17 @@ git commit -m "feat(postprocessing): migrate speed lines to TSL node"
 
 **Step 1–5:** 同 Speed Lines；保留低强度 skip 逻辑。
 
-```bash
-git commit -m "feat(postprocessing): migrate gaze effect to TSL node"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 2.4: 移除 EffectComposer 残留
+### Task 2.4: 移除 EffectComposer 残留 — ✅
 
 **Files:** `src/js/renderer.js`
 
-删除 jsm postprocessing imports、composer dispose、GLSL speedlines/gaze imports。
+删除 jsm postprocessing imports、composer dispose、GLSL speedlines/gaze imports（GLSL 源文件保留至 Phase 5 归档）。
 
-```bash
-git commit -m "refactor(renderer): remove legacy EffectComposer passes"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
@@ -538,4 +542,4 @@ Plan complete and saved to `docs/plans/2026-07-14-webgpu-renderer-migration.md`.
 1. **Subagent-Driven（本会话）** — 每 Task 新子代理，Task 间人工 review  
 2. **Parallel Session（独立会话）** — 新开会话用 executing-plans，按检查点批量执行  
 
-**第 8 节已确认；Phase 1 PoC 已实现（见上文勾选）。下一切入点：Phase 2.1 TSL bloom pipeline。**
+**第 8 节已确认；Phase 1+2 已实现（见上文勾选）。下一切入点：Phase 3.1 地形 CSM → NodeMaterial TSL AO/Wind。**
