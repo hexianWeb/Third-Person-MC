@@ -37,6 +37,7 @@ export default class Experience {
     this.time = new Time()
     this.scene = new THREE.Scene()
     this.camera = new Camera()
+    // WebGPURenderer 异步 init；render 侧靠 renderer.ready 门闩防竞态
     this.renderer = new Renderer()
     this.resources = new Resources(sources)
     this.iMouse = new IMouse()
@@ -92,7 +93,7 @@ export default class Experience {
       this.world.update()
     }
 
-    // Always render (for static scene display)
+    // Renderer 在 ready===false 时内部 no-op，避免 WebGPU 未 init 就 render
     this.renderer.update()
     this.stats.update()
     this.iMouse.update()

@@ -1,13 +1,14 @@
 import * as THREE from 'three'
 
-import selectionFragmentShader from '../../shaders/selection/fragment.glsl'
-import selectionVertexShader from '../../shaders/selection/vertex.glsl'
 import Experience from '../experience.js'
 
 /**
  * BlockSelectionHelper
  * - 用于高亮当前“被交互的方块”（hover/选中）
  * - 仅负责可视化，不负责射线检测
+ *
+ * Phase 1 PoC 临时妥协：ShaderMaterial 边框在 WebGPU 不可用，
+ * 降级为半透明线框 MeshBasicMaterial。TODO(Phase 3): TSL 边框着色器。
  */
 export default class BlockSelectionHelper {
   constructor(options = {}) {
@@ -25,15 +26,11 @@ export default class BlockSelectionHelper {
 
     this.geometry = new THREE.BoxGeometry(1.01, 1.01, 1.01)
 
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        uColor: { value: new THREE.Color(this.params.color) },
-        uOpacity: { value: this.params.opacity },
-        uThickness: { value: this.params.thickness },
-      },
-      vertexShader: selectionVertexShader,
-      fragmentShader: selectionFragmentShader,
+    this.material = new THREE.MeshBasicMaterial({
+      color: this.params.color,
+      opacity: this.params.opacity,
       transparent: true,
+      wireframe: true,
       depthTest: !this.params.visibleThroughWalls,
       depthWrite: false,
     })
@@ -127,23 +124,21 @@ export default class BlockSelectionHelper {
       max: 1,
       step: 0.05,
     }).on('change', () => {
-      this.material.uniforms.uOpacity.value = this.params.opacity
+      this.material.opacity = this.params.opacity
     })
 
     this.debugFolder.addBinding(this.params, 'thickness', {
-      label: '边框厚度',
+      label: '边框厚度(Phase1无效)',
       min: 0.01,
       max: 0.2,
       step: 0.01,
-    }).on('change', () => {
-      this.material.uniforms.uThickness.value = this.params.thickness
     })
 
     this.debugFolder.addBinding(this.params, 'color', {
       label: '颜色',
       view: 'color',
     }).on('change', () => {
-      this.material.uniforms.uColor.value.set(this.params.color)
+      this.material.color.set(this.params.color)
     })
   }
 

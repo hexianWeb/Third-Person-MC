@@ -1,12 +1,13 @@
-import skyFragmentShader from '@/shaders/sky/fragment.glsl'
-import skyVertexShader from '@/shaders/sky/vertex.glsl'
 import * as THREE from 'three'
 
 import Experience from '../experience.js'
 
 /**
  * SkyDome - 天空球组件
- * 使用双贴图混合实现平滑的天空过渡
+ *
+ * Phase 1 PoC 临时妥协：ShaderMaterial 双贴图混合在 WebGPU 不可用，
+ * 降级为 MeshBasicMaterial 单贴图（setTextures 取 current，忽略 mix）。
+ * TODO(Phase 3): MeshBasicNodeMaterial + TSL mix(textureA, textureB, factor)
  */
 export default class SkyDome {
   constructor() {
@@ -14,33 +15,29 @@ export default class SkyDome {
     this.scene = this.experience.scene
     this.resources = this.experience.resources
 
-    // 创建天空球几何体（完整球体）
     this.geometry = new THREE.SphereGeometry(
-      150, // 半径
-      64, // 水平分段
-      32, // 垂直分段
-      0, // phiStart
-      Math.PI * 2, // phiLength (完整圆)
-      0, // thetaStart
-      Math.PI, // thetaLength (完整球)
+      150,
+      64,
+      32,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI,
     )
 
-    // 创建混合着色器材质
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        textureA: { value: null },
-        textureB: { value: null },
-        mixFactor: { value: 0.0 },
-      },
-      vertexShader: skyVertexShader,
-      fragmentShader: skyFragmentShader,
-      side: THREE.BackSide, // 从内部观看
-      depthWrite: false, // 不写入深度缓冲
+    this.material = new THREE.MeshBasicMaterial({
+      map: null,
+      side: THREE.BackSide,
+      depthWrite: false,
     })
 
-    // 创建网格
+    // 兼容旧 API 的占位（Phase 3 恢复真正混合）
+    this._mixFactor = 0
+    this._textureA = null
+    this._textureB = null
+
     this.mesh = new THREE.Mesh(this.geometry, this.material)
-    this.mesh.renderOrder = -1000 // 最先渲染
+    this.mesh.renderOrder = -1000
     this.scene.add(this.mesh)
   }
 
@@ -50,16 +47,19 @@ export default class SkyDome {
    * @param {THREE.Texture} next - 下一时段贴图
    */
   setTextures(current, next) {
-    this.material.uniforms.textureA.value = current
-    this.material.uniforms.textureB.value = next
+    this._textureA = current
+    this._textureB = next
+    // Phase 1：仅显示 current
+    this.material.map = current
+    this.material.needsUpdate = true
   }
 
   /**
-   * 设置混合因子
+   * 设置混合因子（Phase 1 无视觉效果）
    * @param {number} factor - 0-1 的混合比例
    */
   setMixFactor(factor) {
-    this.material.uniforms.mixFactor.value = factor
+    this._mixFactor = factor
   }
 
   /**

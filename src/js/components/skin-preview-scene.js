@@ -2,6 +2,9 @@
  * 皮肤预览场景
  * 独立的 3D 渲染器，用于皮肤选择界面的角色预览
  * 不依赖 Experience 单例，可独立运行
+ *
+ * TODO(Phase 4): 迁移为 WebGPURenderer + await init()；
+ * Phase 1 仍用独立 WebGLRenderer（第二 canvas），不阻塞主场景 PoC。
  */
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -21,7 +24,7 @@ export default class SkinPreviewScene {
     // 创建透视相机
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
 
-    // 创建渲染器（透明背景 + 抗锯齿）
+    // Phase 1：保留独立 WebGLRenderer（与主场景 WebGPU 分离）
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,

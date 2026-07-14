@@ -34,7 +34,8 @@ export default class Resources {
     }
 
     this.setLoaders()
-    this.startLoading()
+    // WebGPURenderer 需 await init 后 hasFeature 才可用；延迟 KTX2 detectSupport + 资源加载
+    this._bootstrapLoading()
   }
 
   setLoaders() {
@@ -56,11 +57,26 @@ export default class Resources {
     dracoLoader.setDecoderPath(this.options.dracoDecoderPath)
     this.loaders.gltfLoader.setDRACOLoader(dracoLoader)
 
-    // Set up KTX2Loader
-    this.loaders.ktx2Loader
-      .setTranscoderPath(this.options.ktx2TranscoderPath)
-      .detectSupport(this.renderer.instance)
+    // KTX2：只设路径与挂载；detectSupport 必须在 renderer.init() 之后（见 _bootstrapLoading）
+    this.loaders.ktx2Loader.setTranscoderPath(this.options.ktx2TranscoderPath)
     this.loaders.gltfLoader.setKTX2Loader(this.loaders.ktx2Loader)
+  }
+
+  /**
+   * 等待 WebGPU backend 就绪后再 detectSupport，避免 hasFeature 在 init 前抛错
+   */
+  async _bootstrapLoading() {
+    try {
+      if (this.renderer?.whenReady) {
+        await this.renderer.whenReady()
+      }
+      this.loaders.ktx2Loader.detectSupport(this.renderer.instance)
+    }
+    catch (error) {
+      console.error('[Resources] Renderer not ready; KTX2 detectSupport skipped:', error)
+    }
+
+    this.startLoading()
   }
 
   startLoading() {

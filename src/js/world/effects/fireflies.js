@@ -1,14 +1,9 @@
-import fireflyFragment from '@/shaders/fireflies/fragment.glsl'
-
-import fireflyVertex from '@/shaders/fireflies/vertex.glsl'
 /**
  * Fireflies - Night-time pixel-style firefly particle system (chunk-based)
  *
- * 本次使用了 vtj-component-model, vtj-shader-development, vtj-performance:
- * - GPU-driven via THREE.Points + ShaderMaterial (zero CPU per-particle cost)
- * - Cell-based streaming: fireflies load/unload in grid cells as player moves
- *   (similar to terrain chunk streaming, avoids visible synchronized movement)
- * - Night visibility controlled by uOpacity uniform synced with DayCycle
+ * Phase 1 PoC 临时妥协：ShaderMaterial 在 WebGPU 不可用，
+ * 降级为 PointsMaterial（无呼吸动画 / 自定义尺寸衰减）。
+ * TODO(Phase 3): PointsNodeMaterial + TSL。
  */
 import * as THREE from 'three'
 import Experience from '../../experience.js'
@@ -48,16 +43,12 @@ export default class Fireflies {
   // ===== Material (shared across all cells) =====
 
   _createMaterial() {
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uSize: { value: this.params.size },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-        uOpacity: { value: 0 }, // start invisible (day time)
-      },
-      vertexShader: fireflyVertex,
-      fragmentShader: fireflyFragment,
+    this.material = new THREE.PointsMaterial({
+      color: this.params.glowColor,
+      size: this.params.size,
+      sizeAttenuation: true,
       transparent: true,
+      opacity: 0,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     })
@@ -203,11 +194,9 @@ export default class Fireflies {
     if (!this.material)
       return
 
-    // Update shader uniforms
-    this.material.uniforms.uTime.value = this.time.elapsed * 0.001
-    this.material.uniforms.uOpacity.value = this._getNightFactor()
+    this.material.opacity = this._getNightFactor()
+    this.material.visible = this.material.opacity > 0.01
 
-    // Stream cells based on player position
     const player = this.experience.world?.player
     if (player) {
       this._updateStreaming(player.getPosition())
@@ -215,9 +204,7 @@ export default class Fireflies {
   }
 
   resize() {
-    if (this.material) {
-      this.material.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2)
-    }
+    // PointsMaterial 无需按 pixelRatio 更新 uniform
   }
 
   debugInit() {
@@ -260,12 +247,14 @@ export default class Fireflies {
       max: 0.5,
       step: 0.01,
     }).on('change', (ev) => {
-      this.material.uniforms.uSize.value = ev.value
+      this.material.size = ev.value
     })
 
     this.debugFolder.addBinding(this.params, 'glowColor', {
       label: 'Glow Color',
       view: 'color',
+    }).on('change', (ev) => {
+      this.material.color.set(ev.value)
     })
   }
 

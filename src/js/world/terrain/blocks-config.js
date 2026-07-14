@@ -2,15 +2,18 @@
  * 方块与矿产元数据配置
  * 仅声明 id / 名称 / 纹理键 / 稀有度，不直接持有纹理实例
  * 渲染阶段统一使用共享几何体：new THREE.BoxGeometry(1, 1, 1)
+ *
+ * Phase 1 PoC 临时妥协：CSM / AO / Wind GLSL 在 WebGPU 不可用，
+ * 降级为标准 MeshPhongMaterial / MeshLambertMaterial（无 AO、无风动）。
+ * TODO(Phase 3): 恢复为 NodeMaterial + TSL AO/Wind。
  */
 import * as THREE from 'three'
-import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
 
-import aoFragmentShader from '../../../shaders/blocks/ao.frag.glsl'
-// 导入 AO 着色器
-import aoVertexShader from '../../../shaders/blocks/ao.vert.glsl'
-// 导入动画着色器
-import windVertexShader from '../../../shaders/blocks/wind.vert.glsl'
+// Phase 3 迁移时恢复：
+// import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
+// import aoFragmentShader from '../../../shaders/blocks/ao.frag.glsl'
+// import aoVertexShader from '../../../shaders/blocks/ao.vert.glsl'
+// import windVertexShader from '../../../shaders/blocks/wind.vert.glsl'
 
 // 方块 ID 常量，便于在代码中保持一致引用
 export const BLOCK_IDS = {
@@ -72,16 +75,6 @@ export const ANIMATION_DEFAULTS = {
   // 预留其他动画类型
   // pulse: { frequency: 1.0, intensity: 0.1 },
   // wave: { speed: 1.0, amplitude: 0.05 },
-}
-
-/**
- * 动画着色器映射表
- * 根据 animationType 获取对应的着色器代码
- */
-const ANIMATION_SHADERS = {
-  wind: windVertexShader,
-  // pulse: pulseVertexShader, // 预留
-  // wave: waveVertexShader,   // 预留
 }
 
 /**
@@ -326,90 +319,20 @@ export function createMaterials(blockType, textureItems) {
   }
 
   /**
-   * 构建动画材质的 uniforms 和着色器
-   * @param {object} blockType 方块配置
-   * @returns {{ uniforms: object, vertexShader: string } | null} 动画配置对象，无动画时返回 null
+   * Phase 1：标准材质占位（无 CSM / AO / Wind）
+   * @param {THREE.Texture} tex
+   * @param {object} options
    */
-  const buildAnimationConfig = (blockType) => {
-    if (!blockType.animated || !blockType.animationType)
-      return null
-
-    const animationType = blockType.animationType
-    const shaderCode = ANIMATION_SHADERS[animationType]
-
-    if (!shaderCode) {
-      console.warn(`Unknown animation type: ${animationType}`)
-      return null
-    }
-
-    // 合并默认参数和自定义参数
-    const defaults = ANIMATION_DEFAULTS[animationType] || {}
-    const params = { ...defaults, ...blockType.animationParams }
-
-    // 构建 uniforms 对象
-    const uniforms = {
-      uTime: { value: 0 },
-    }
-
-    // 根据动画类型添加特定 uniforms
-    if (animationType === 'wind') {
-      uniforms.uWindSpeed = { value: params.windSpeed }
-      uniforms.uSwayAmplitude = { value: params.swayAmplitude }
-      uniforms.uPhaseScale = { value: params.phaseScale }
-    }
-    // 预留其他动画类型的 uniforms 配置
-    // else if (animationType === 'pulse') { ... }
-
-    return {
-      uniforms,
-      vertexShader: shaderCode,
-    }
-  }
-
-  // 使用 custom shader 包装的标准材质，便于后续扩展
   const makeCustomMaterial = (tex, options = {}) => {
-    // 获取动画配置（如果有）
-    const animConfig = buildAnimationConfig(blockType)
-
-    // 基础材质配置
-    const materialConfig = {
-      baseMaterial: THREE.MeshPhongMaterial,
+    const material = new THREE.MeshPhongMaterial({
       map: tex,
       flatShading: true,
-      // 合并额外的材质参数，如 alphaTest, transparent 等
       ...options,
-    }
+    })
 
-    // 始终注入 AO 着色器（非透明方块）
-    // 透明方块（如树叶）不使用 AO，避免视觉问题
-    const useAO = !blockType.transparent
-
-    if (useAO) {
-      // 合并 AO 顶点着色器
-      let vertexShader = aoVertexShader
-
-      // 如果同时有动画，需要合并着色器
-      if (animConfig) {
-        // 动画材质：AO + 动画
-        // TODO: 合并两个顶点着色器（当前先使用动画着色器，后续迭代）
-        vertexShader = animConfig.vertexShader
-        materialConfig.uniforms = animConfig.uniforms
-      }
-
-      materialConfig.vertexShader = vertexShader
-      materialConfig.fragmentShader = aoFragmentShader
-    }
-    else if (animConfig) {
-      // 仅动画（透明方块如树叶）
-      materialConfig.uniforms = animConfig.uniforms
-      materialConfig.vertexShader = animConfig.vertexShader
-    }
-
-    const material = new CustomShaderMaterial(materialConfig)
-
-    // 标记是否为动画材质，供渲染器追踪
-    material._isAnimated = !!animConfig
-    material._animationType = blockType.animationType || null
+    // 保留标记位，避免依赖方仍读 _isAnimated 时报错
+    material._isAnimated = false
+    material._animationType = null
 
     return material
   }
@@ -720,38 +643,20 @@ export function createPlantMaterials(plantType, textureItems) {
   tex.minFilter = THREE.NearestFilter
   tex.colorSpace = THREE.SRGBColorSpace
 
-  const materialConfig = {
-    baseMaterial: THREE.MeshLambertMaterial,
+  // Phase 1：无风动 CSM，使用标准 Lambert（Phase 3 迁 TSL）
+  const material = new THREE.MeshLambertMaterial({
     map: tex,
     flatShading: true,
     alphaTest: plantType.alphaTest ?? 0.5,
     transparent: plantType.transparent ?? true,
     side: THREE.DoubleSide,
-    // 草类使用绿色自发光，其余使用白色
     emissive: new THREE.Color(plantType.mixColor !== undefined ? '#83CE54' : '#FFFFFF'),
     emissiveMap: tex,
     emissiveIntensity: 0.6,
-    // 草类使用指定的混色，其余使用白色
     color: new THREE.Color(plantType.mixColor !== undefined ? plantType.mixColor : '#FFFFFF'),
-  }
-
-  // 动画配置
-  if (plantType.animated && plantType.animationType) {
-    const defaults = ANIMATION_DEFAULTS[plantType.animationType] || {}
-    const params = { ...defaults, ...plantType.animationParams }
-
-    materialConfig.uniforms = {
-      uTime: { value: 0 },
-      uWindSpeed: { value: params.windSpeed ?? 2.0 },
-      uSwayAmplitude: { value: params.swayAmplitude ?? 0.3 },
-      uPhaseScale: { value: params.phaseScale ?? 2.0 },
-    }
-    materialConfig.vertexShader = windVertexShader
-  }
-
-  const material = new CustomShaderMaterial(materialConfig)
-  material._isAnimated = !!plantType.animated
-  material._animationType = plantType.animationType || null
+  })
+  material._isAnimated = false
+  material._animationType = null
 
   return material
 }
