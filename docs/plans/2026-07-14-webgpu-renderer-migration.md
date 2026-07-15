@@ -25,7 +25,7 @@
 | B | 材质策略 | **全面上 TSL/NodeMaterial**（不保留 ShaderMaterial 主路径） |
 | C | 范围 | GlassWall / Grid **排除**；后处理与材质全量迁移分后续 PR |
 | D | three 版本 | **允许**升到 latest（PoC 已升至 `0.185.1`） |
-| E | 交付节奏 | Phase 1 PoC ✅ → **Phase 2 后处理 ✅**（本轮）；Phase 3+ 后续 |
+| E | 交付节奏 | Phase 1 PoC ✅ → Phase 2 后处理 ✅ → **Phase 3 材质 ✅**（本轮）；Phase 4+ 后续 |
 
 ---
 
@@ -358,63 +358,65 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 
 ---
 
-## Phase 3: 在用材质迁移
+## Phase 3: 在用材质迁移 — ✅ Done (2026-07-14)
 
-### Task 3.1: 地形 CSM → MeshStandard/Phong NodeMaterial + TSL AO/Wind
+**验证：** `pnpm build` 通过（exit 0，~17s）。运行时需 Chrome + WebGPU。
+
+**实现摘要：**
+- 地形：`MeshPhongNodeMaterial` + `attribute('aAo')` AO；叶子/植物风动 `positionNode`（`MeshLambertNodeMaterial`）
+- 风动相位：用 `instanceIndex` 近似原 `instanceMatrix` 平移相位（空间相关风波略有差异，可接受）
+- 天空：`MeshBasicNodeMaterial` + `mix(uniformTexture A/B, factor)`
+- 萤火虫：WebGPU Points 仅 1px → 改为 `Sprite` + `PointsNodeMaterial`（漫游/呼吸/方形辉光）
+- 选中框：`MeshBasicNodeMaterial.fragmentNode` 边框 + `Discard`
+- GlassWall / Grid：**未做**（按确认排除）
+- SkinPreview：仍独立 WebGL（Phase 4）
+- GLSL 源文件与 `three-custom-shader-material` 依赖：**暂留**，Phase 5 清理
+
+**目视确认（`pnpm dev`）：**
+1. 不透明方块墙角/顶面有 AO 明暗
+2. 树叶/草在风中摇摆（Debug → 风动参数可调）
+3. 日夜加速时天空双贴图平滑过渡
+4. 夜间萤火虫可见、呼吸闪烁
+5. 准星指向方块时边框高亮，thickness/opacity Debug 有效
+
+### Task 3.1: 地形 CSM → MeshPhong/Lambert NodeMaterial + TSL AO/Wind — ✅
 
 **Files:**
 - Modify: `src/js/world/terrain/blocks-config.js`
 - Reference: `src/shaders/blocks/ao.*.glsl`, `wind.vert.glsl`
 
-**阻塞说明：** 这是全量 WebGPU 路径最大风险点；建议独立 PR。
-
-**Step 1:** 先迁移无风动的不透明方块 AO（`colorNode` 乘 AO attribute）。
-
-**Step 2:** 再迁透明叶子风动（`positionNode`）。
-
-**Step 3:** 验证 InstancedMesh + 多材质草方块六面。
-
-**Step 4:** 确认 `plant-renderer` 材质路径一并覆盖。
-
-```bash
-git commit -m "feat(terrain): replace CSM with NodeMaterial TSL AO/wind"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 3.2: SkyDome → MeshBasicNodeMaterial
+### Task 3.2: SkyDome → MeshBasicNodeMaterial — ✅
 
 **Files:** `src/js/world/sky-dome.js`
 
 日夜双贴图 `mix(textureA, textureB, factor)`。
 
-```bash
-git commit -m "feat(sky): migrate SkyDome to TSL node material"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 3.3: Fireflies → PointsNodeMaterial
+### Task 3.3: Fireflies → PointsNodeMaterial — ✅
 
 **Files:** `src/js/world/effects/fireflies.js`
 
-```bash
-git commit -m "feat(fireflies): migrate to PointsNodeMaterial + TSL"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
 
-### Task 3.4: BlockSelectionHelper → NodeMaterial
+### Task 3.4: BlockSelectionHelper → NodeMaterial — ✅
 
 **Files:** `src/js/interaction/block-selection-helper.js`
 
-边框高亮 shader → TSL；保持 depthTest / opacity API。
+边框高亮 shader → TSL；保持 depthTest / opacity / thickness API。
 
-```bash
-git commit -m "feat(selection): migrate block highlight shader to TSL"
-```
+**Step Commit** — ⏭ 用户要求本轮不 commit
 
 ---
+
 
 ## Phase 4: 边缘与阴影
 
@@ -542,4 +544,4 @@ Plan complete and saved to `docs/plans/2026-07-14-webgpu-renderer-migration.md`.
 1. **Subagent-Driven（本会话）** — 每 Task 新子代理，Task 间人工 review  
 2. **Parallel Session（独立会话）** — 新开会话用 executing-plans，按检查点批量执行  
 
-**第 8 节已确认；Phase 1+2 已实现（见上文勾选）。下一切入点：Phase 3.1 地形 CSM → NodeMaterial TSL AO/Wind。**
+**第 8 节已确认；Phase 1–3 已实现（见上文勾选）。下一切入点：Phase 4.1 SkinPreview → WebGPURenderer（或 Phase 5 清理 CSM/GLSL）。**

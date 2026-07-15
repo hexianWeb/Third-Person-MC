@@ -1,12 +1,31 @@
 /**
  * Fireflies - Night-time pixel-style firefly particle system (chunk-based)
  *
- * Phase 1 PoC 临时妥协：ShaderMaterial 在 WebGPU 不可用，
- * 降级为 PointsMaterial（无呼吸动画 / 自定义尺寸衰减）。
- * TODO(Phase 3): PointsNodeMaterial + TSL。
+ * Phase 3：WebGPU 点图元仅支持 1px，故用 Sprite + PointsNodeMaterial（官方推荐）
+ * 逻辑转译自 shaders/fireflies/*（GLSL 留作对照，Phase 5 归档）
  */
-import * as THREE from 'three'
+import {
+  Fn,
+  abs,
+  cos,
+  float,
+  fract,
+  instancedBufferAttribute,
+  max,
+  sin,
+  smoothstep,
+  uniform,
+  uv,
+  vec3,
+} from 'three/tsl'
+import * as THREE from 'three/webgpu'
 import Experience from '../../experience.js'
+
+/** 呼吸曲线：三角波 + smoothstep（对齐 GLSL breathe） */
+const breathe = Fn(([t]) => {
+  const tri = float(1).sub(abs(float(2).mul(fract(t)).sub(1)))
+  return tri.mul(tri).mul(float(3).sub(tri.mul(2)))
+})
 
 export default class Fireflies {
   constructor(options = {}) {
@@ -27,31 +46,75 @@ export default class Fireflies {
       glowColor: '#f6f644',
     }
 
-    // Cell map: "cx,cz" -> { points, geometry }
+    // Cell map: "cx,cz" -> { sprite, material, geometry attrs }
     this._cells = new Map()
     this._lastPlayerCellX = null
     this._lastPlayerCellZ = null
 
-    // Shared material (all cells use the same shader)
-    this._createMaterial()
+    // 跨 cell 共享的 TSL uniforms（一处写入，全部材质同步）
+    this._createSharedUniforms()
 
     if (this.debug.active) {
       this.debugInit()
     }
   }
 
-  // ===== Material (shared across all cells) =====
+  // ===== Shared uniforms =====
 
-  _createMaterial() {
-    this.material = new THREE.PointsMaterial({
-      color: this.params.glowColor,
-      size: this.params.size,
-      sizeAttenuation: true,
+  _createSharedUniforms() {
+    this.uTime = uniform(0)
+    this.uOpacity = uniform(0)
+    this.uSize = uniform(this.params.size)
+    this.uBreathSpeed = uniform(this.params.breathSpeed)
+    this.uGlowColor = uniform(new THREE.Color(this.params.glowColor))
+  }
+
+  /**
+   * 每 cell 一份材质：positionNode 绑定该 cell 的 InstancedBufferAttribute
+   * @param {THREE.InstancedBufferAttribute} positionsAttr
+   * @param {THREE.InstancedBufferAttribute} randomsAttr
+   */
+  _createCellMaterial(positionsAttr, randomsAttr) {
+    const basePos = instancedBufferAttribute(positionsAttr)
+    const aRandom = instancedBufferAttribute(randomsAttr)
+
+    const seed = aRandom.mul(6.2831)
+    const t = this.uTime
+
+    // 三层正弦漫游（对齐 fireflies/vertex.glsl）
+    const offsetX = sin(t.mul(0.3).add(seed)).mul(2.0)
+      .add(cos(t.mul(0.7).add(seed.mul(2.1))).mul(0.8))
+      .add(sin(t.mul(2.3).add(seed.mul(4.1))).mul(0.15))
+    const offsetY = sin(t.mul(0.2).add(seed.mul(1.3))).mul(1.5)
+      .add(sin(t.mul(0.5).add(seed.mul(1.7))).mul(0.6))
+      .add(cos(t.mul(1.9).add(seed.mul(3.3))).mul(0.10))
+    const offsetZ = cos(t.mul(0.25).add(seed.mul(0.7))).mul(2.0)
+      .add(sin(t.mul(0.6).add(seed.mul(2.5))).mul(0.8))
+      .add(sin(t.mul(2.1).add(seed.mul(5.0))).mul(0.15))
+
+    const material = new THREE.PointsNodeMaterial({
       transparent: true,
-      opacity: 0,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
     })
+
+    material.positionNode = basePos.add(vec3(offsetX, offsetY, offsetZ))
+    material.sizeNode = this.uSize
+
+    // 方形软边辉光 + 呼吸（对齐 fragment.glsl）
+    const phase = aRandom.mul(6.2831)
+    const breathT = breathe(this.uTime.mul(this.uBreathSpeed).add(phase))
+    material.colorNode = this.uGlowColor.mul(breathT)
+
+    material.opacityNode = Fn(() => {
+      const center = uv().sub(0.5)
+      const dist = max(abs(center.x), abs(center.y))
+      const glow = float(1).sub(smoothstep(float(0.25), float(0.5), dist))
+      return glow.mul(breathT).mul(this.uOpacity)
+    })()
+
+    return material
   }
 
   // ===== Cell Management (streaming) =====
@@ -74,7 +137,7 @@ export default class Fireflies {
   }
 
   /**
-   * Create a cell's Points mesh at grid position (cx, cz)
+   * Create a cell's Sprite (instanced) at grid position (cx, cz)
    */
   _createCell(cx, cz) {
     const { countPerCell, cellSize, spawnHeight } = this.params
@@ -83,7 +146,6 @@ export default class Fireflies {
     const cellSeed = ((cx * 73856093) ^ (cz * 19349663)) & 0x7FFFFFFF
     const rand = this._seededRandom(cellSeed || 1)
 
-    const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(countPerCell * 3)
     const randoms = new Float32Array(countPerCell)
 
@@ -101,14 +163,17 @@ export default class Fireflies {
       randoms[i] = rand()
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geometry.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 1))
+    const positionsAttr = new THREE.InstancedBufferAttribute(positions, 3)
+    const randomsAttr = new THREE.InstancedBufferAttribute(randoms, 1)
+    const material = this._createCellMaterial(positionsAttr, randomsAttr)
 
-    const points = new THREE.Points(geometry, this.material)
-    points.frustumCulled = false
+    // WebGPU：用 Sprite.count 做实例点精灵（Points 仅 1px）
+    const sprite = new THREE.Sprite(material)
+    sprite.count = countPerCell
+    sprite.frustumCulled = false
 
-    this.scene.add(points)
-    this._cells.set(this._cellKey(cx, cz), { points, geometry })
+    this.scene.add(sprite)
+    this._cells.set(this._cellKey(cx, cz), { sprite, material, positionsAttr, randomsAttr })
   }
 
   /**
@@ -119,8 +184,8 @@ export default class Fireflies {
     if (!cell)
       return
 
-    this.scene.remove(cell.points)
-    cell.geometry.dispose()
+    this.scene.remove(cell.sprite)
+    cell.material.dispose()
     this._cells.delete(key)
   }
 
@@ -191,11 +256,15 @@ export default class Fireflies {
   // ===== Lifecycle =====
 
   update() {
-    if (!this.material)
-      return
+    const night = this._getNightFactor()
+    this.uOpacity.value = night
+    this.uTime.value = this.time.elapsed * 0.001
 
-    this.material.opacity = this._getNightFactor()
-    this.material.visible = this.material.opacity > 0.01
+    // 夜间不可见时仍可卸载/加载，但跳过无意义更新也可接受
+    const visible = night > 0.01
+    for (const cell of this._cells.values()) {
+      cell.sprite.visible = visible
+    }
 
     const player = this.experience.world?.player
     if (player) {
@@ -204,7 +273,7 @@ export default class Fireflies {
   }
 
   resize() {
-    // PointsMaterial 无需按 pixelRatio 更新 uniform
+    // PointsNodeMaterial 使用内建 screenDPR / size attenuation，无需手动改 pixelRatio
   }
 
   debugInit() {
@@ -247,14 +316,14 @@ export default class Fireflies {
       max: 0.5,
       step: 0.01,
     }).on('change', (ev) => {
-      this.material.size = ev.value
+      this.uSize.value = ev.value
     })
 
     this.debugFolder.addBinding(this.params, 'glowColor', {
       label: 'Glow Color',
       view: 'color',
     }).on('change', (ev) => {
-      this.material.color.set(ev.value)
+      this.uGlowColor.value.set(ev.value)
     })
   }
 
@@ -276,7 +345,5 @@ export default class Fireflies {
       this._removeCell(key)
     }
     this._cells.clear()
-    this.material?.dispose()
-    this.material = null
   }
 }

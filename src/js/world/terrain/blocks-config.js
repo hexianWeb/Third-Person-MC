@@ -3,17 +3,24 @@
  * 仅声明 id / 名称 / 纹理键 / 稀有度，不直接持有纹理实例
  * 渲染阶段统一使用共享几何体：new THREE.BoxGeometry(1, 1, 1)
  *
- * Phase 1 PoC 临时妥协：CSM / AO / Wind GLSL 在 WebGPU 不可用，
- * 降级为标准 MeshPhongMaterial / MeshLambertMaterial（无 AO、无风动）。
- * TODO(Phase 3): 恢复为 NodeMaterial + TSL AO/Wind。
+ * Phase 3：CSM → Mesh*NodeMaterial + TSL（AO / 风动）
+ * 参考：shaders/blocks/ao.*.glsl、wind.vert.glsl（GLSL 留作对照，Phase 5 归档）
  */
-import * as THREE from 'three'
-
-// Phase 3 迁移时恢复：
-// import CustomShaderMaterial from 'three-custom-shader-material/vanilla'
-// import aoFragmentShader from '../../../shaders/blocks/ao.frag.glsl'
-// import aoVertexShader from '../../../shaders/blocks/ao.vert.glsl'
-// import windVertexShader from '../../../shaders/blocks/wind.vert.glsl'
+import {
+  attribute,
+  clamp,
+  float,
+  fract,
+  instanceIndex,
+  mix,
+  positionGeometry,
+  positionLocal,
+  sin,
+  texture,
+  uniform,
+  vec3,
+} from 'three/tsl'
+import * as THREE from 'three/webgpu'
 
 // 方块 ID 常量，便于在代码中保持一致引用
 export const BLOCK_IDS = {
@@ -299,6 +306,59 @@ export const resources = [
 ]
 
 /**
+ * 构建风动 TSL uniforms（供 Debug / update 写入 .value）
+ * @param {object} params - windSpeed / swayAmplitude / phaseScale
+ */
+function createWindUniforms(params) {
+  return {
+    uTime: uniform(0),
+    uWindSpeed: uniform(params.windSpeed ?? 2.0),
+    uSwayAmplitude: uniform(params.swayAmplitude ?? 0.7),
+    uPhaseScale: uniform(params.phaseScale ?? 2.0),
+  }
+}
+
+/**
+ * 风动 positionNode（转译自 wind.vert.glsl）
+ * 相位用 instanceIndex 近似原 instanceMatrix 平移（空间波略有差异，见计划备注）
+ *
+ * 高度权重必须用 positionGeometry（原始顶点属性），不能用 positionLocal：
+ * WebGPU NodeMaterial 会先对 InstancedMesh 应用 instanceMatrix 再写 positionNode，
+ * 此时 positionLocal.y 已是世界高度，clamp(0,1) 恒为 1 → 整株平移。
+ *
+ * @param {ReturnType<typeof createWindUniforms>} uniforms
+ * @param {import('three/tsl').Node} [heightNode]
+ */
+function createWindPositionNode(uniforms, heightNode = positionGeometry.y) {
+  const { uTime, uWindSpeed, uSwayAmplitude, uPhaseScale } = uniforms
+
+  // 每实例相位：替代原 (instancePos.x * 0.7 + instancePos.z * 1.3) * phaseScale
+  const phase = float(instanceIndex).mul(0.618).mul(uPhaseScale)
+
+  // 与旧 GLSL `clamp(position.y, 0, 1)` 一致：position 是局部顶点，非实例变换后坐标
+  const heightFactor = clamp(heightNode, 0.0, 1.0)
+  const heightSq = heightFactor.mul(heightFactor)
+
+  const baseWave = sin(uTime.mul(uWindSpeed).add(phase))
+  const detailWave = sin(uTime.mul(uWindSpeed).mul(2.7).add(phase.mul(1.9)))
+  const sway = baseWave.mul(0.7).add(detailWave.mul(0.3))
+
+  const instanceRand = fract(sin(float(instanceIndex).mul(78.233)).mul(43758.5453))
+  const amplitude = uSwayAmplitude.mul(mix(float(0.7), float(1.3), instanceRand))
+
+  // normalize(vec2(0.8, 0.6))
+  const len = float(Math.hypot(0.8, 0.6))
+  const dirX = float(0.8).div(len)
+  const dirZ = float(0.6).div(len)
+
+  const displaceX = dirX.mul(sway).mul(amplitude).mul(heightSq)
+  const displaceZ = dirZ.mul(sway).mul(amplitude).mul(heightSq)
+
+  // positionLocal 此时已含 instance 变换，在其上叠加局部位移
+  return positionLocal.add(vec3(displaceX, float(0), displaceZ))
+}
+
+/**
  * 根据方块类型和资源纹理，生成材质（草方块返回 6 面材质数组）
  * @param {object} blockType 方块配置
  * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
@@ -319,20 +379,58 @@ export function createMaterials(blockType, textureItems) {
   }
 
   /**
-   * Phase 1：标准材质占位（无 CSM / AO / Wind）
+   * 构建风动配置（uniforms + 是否启用）
+   * @returns {{ uniforms: object } | null} Animation config or null when animation is disabled.
+   */
+  const buildAnimationConfig = () => {
+    if (!blockType.animated || !blockType.animationType)
+      return null
+
+    if (blockType.animationType !== 'wind') {
+      console.warn(`Unknown animation type: ${blockType.animationType}`)
+      return null
+    }
+
+    const defaults = ANIMATION_DEFAULTS.wind || {}
+    const params = { ...defaults, ...blockType.animationParams }
+    return { uniforms: createWindUniforms(params) }
+  }
+
+  /**
+   * MeshPhongNodeMaterial + TSL AO / 风动
    * @param {THREE.Texture} tex
    * @param {object} options
    */
   const makeCustomMaterial = (tex, options = {}) => {
-    const material = new THREE.MeshPhongMaterial({
-      map: tex,
+    const animConfig = buildAnimationConfig()
+    // 透明方块（如树叶）不做 AO，与原 CSM 行为一致
+    const useAO = !blockType.transparent
+
+    const material = new THREE.MeshPhongNodeMaterial({
       flatShading: true,
       ...options,
     })
 
-    // 保留标记位，避免依赖方仍读 _isAnimated 时报错
-    material._isAnimated = false
-    material._animationType = null
+    if (useAO) {
+      // aAo: 0=无遮蔽(亮), 1=最大遮蔽(暗) → vAO = 1 - aAo
+      const aAo = attribute('aAo', 'float')
+      const vAO = float(1).sub(aAo)
+      const aoFactor = mix(float(0.5), float(1.0), vAO)
+      // 等价原 CSM：csm_DiffuseColor.rgb *= aoFactor
+      material.colorNode = texture(tex).mul(aoFactor)
+    }
+    else {
+      material.map = tex
+    }
+
+    if (animConfig) {
+      material.positionNode = createWindPositionNode(animConfig.uniforms)
+      // 兼容 terrain-renderer update / Debug 对 uniforms.u*.value 的写入
+      material.uniforms = animConfig.uniforms
+    }
+
+    material._isAnimated = !!animConfig
+    material._animationType = blockType.animationType || null
 
     return material
   }
@@ -622,11 +720,18 @@ export const sharedCrossPlaneGeometry = (() => {
   geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
 
+  const windHeights = new Float32Array(vertices.length / 3)
+  for (let i = 0; i < windHeights.length; i++) {
+    windHeights[i] = THREE.MathUtils.clamp(vertices[i * 3 + 1], 0, 1)
+  }
+
+  geometry.setAttribute('aPlantWindHeight', new THREE.BufferAttribute(windHeights, 1))
+
   return geometry
 })()
 
 /**
- * 创建植物材质
+ * 创建植物材质（MeshLambertNodeMaterial + 可选风动）
  * @param {object} plantType 植物配置
  * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
  * @returns {THREE.Material|null} 生成的材质，缺失纹理时返回 null
@@ -643,8 +748,7 @@ export function createPlantMaterials(plantType, textureItems) {
   tex.minFilter = THREE.NearestFilter
   tex.colorSpace = THREE.SRGBColorSpace
 
-  // Phase 1：无风动 CSM，使用标准 Lambert（Phase 3 迁 TSL）
-  const material = new THREE.MeshLambertMaterial({
+  const material = new THREE.MeshLambertNodeMaterial({
     map: tex,
     flatShading: true,
     alphaTest: plantType.alphaTest ?? 0.5,
@@ -655,8 +759,21 @@ export function createPlantMaterials(plantType, textureItems) {
     emissiveIntensity: 0.6,
     color: new THREE.Color(plantType.mixColor !== undefined ? plantType.mixColor : '#FFFFFF'),
   })
-  material._isAnimated = false
-  material._animationType = null
+
+  if (plantType.animated && plantType.animationType === 'wind') {
+    const defaults = ANIMATION_DEFAULTS.wind || {}
+    const params = { ...defaults, ...plantType.animationParams }
+    const windUniforms = createWindUniforms(params)
+    const plantWindHeight = attribute('aPlantWindHeight', 'float')
+    material.positionNode = createWindPositionNode(windUniforms, plantWindHeight)
+    material.uniforms = windUniforms
+    material._isAnimated = true
+    material._animationType = 'wind'
+  }
+  else {
+    material._isAnimated = false
+    material._animationType = null
+  }
 
   return material
 }

@@ -1,4 +1,14 @@
-import * as THREE from 'three'
+import {
+  Discard,
+  Fn,
+  If,
+  float,
+  min,
+  uniform,
+  uv,
+  vec4,
+} from 'three/tsl'
+import * as THREE from 'three/webgpu'
 
 import Experience from '../experience.js'
 
@@ -7,8 +17,7 @@ import Experience from '../experience.js'
  * - 用于高亮当前“被交互的方块”（hover/选中）
  * - 仅负责可视化，不负责射线检测
  *
- * Phase 1 PoC 临时妥协：ShaderMaterial 边框在 WebGPU 不可用，
- * 降级为半透明线框 MeshBasicMaterial。TODO(Phase 3): TSL 边框着色器。
+ * Phase 3：MeshBasicNodeMaterial + TSL 边框（转译自 shaders/selection/*）
  */
 export default class BlockSelectionHelper {
   constructor(options = {}) {
@@ -26,32 +35,35 @@ export default class BlockSelectionHelper {
 
     this.geometry = new THREE.BoxGeometry(1.01, 1.01, 1.01)
 
-    this.material = new THREE.MeshBasicMaterial({
-      color: this.params.color,
-      opacity: this.params.opacity,
+    this.uColor = uniform(new THREE.Color(this.params.color))
+    this.uOpacity = uniform(this.params.opacity)
+    this.uThickness = uniform(this.params.thickness)
+
+    this.material = new THREE.MeshBasicNodeMaterial({
       transparent: true,
-      wireframe: true,
       depthTest: !this.params.visibleThroughWalls,
       depthWrite: false,
+      side: THREE.DoubleSide,
     })
+
+    // 片元：仅保留 UV 边缘带，内部 discard（对齐原 selection fragment）
+    this.material.fragmentNode = Fn(() => {
+      const edgeX = min(uv().x, float(1).sub(uv().x))
+      const edgeY = min(uv().y, float(1).sub(uv().y))
+      If(
+        edgeX.greaterThanEqual(this.uThickness).and(edgeY.greaterThanEqual(this.uThickness)),
+        () => {
+          Discard()
+        },
+      )
+      return vec4(this.uColor, this.uOpacity)
+    })()
 
     this.object = new THREE.Mesh(this.geometry, this.material)
     this.object.renderOrder = 0
 
     this.object.visible = false
     this.scene.add(this.object)
-
-    // 移除旧的事件监听 (改为 update 轮询)
-    /*
-    emitter.on('game:block-hover', (info) => {
-      if (!this.params.enabled)
-        return
-      this.setTarget(info)
-    })
-    emitter.on('game:block-hover-clear', () => {
-      this.clear()
-    })
-    */
 
     if (this.debug.active) {
       this.debugInit()
@@ -124,21 +136,23 @@ export default class BlockSelectionHelper {
       max: 1,
       step: 0.05,
     }).on('change', () => {
-      this.material.opacity = this.params.opacity
+      this.uOpacity.value = this.params.opacity
     })
 
     this.debugFolder.addBinding(this.params, 'thickness', {
-      label: '边框厚度(Phase1无效)',
+      label: '边框厚度',
       min: 0.01,
       max: 0.2,
       step: 0.01,
+    }).on('change', () => {
+      this.uThickness.value = this.params.thickness
     })
 
     this.debugFolder.addBinding(this.params, 'color', {
       label: '颜色',
       view: 'color',
     }).on('change', () => {
-      this.material.color.set(this.params.color)
+      this.uColor.value.set(this.params.color)
     })
   }
 

@@ -1,13 +1,17 @@
-import * as THREE from 'three'
+import {
+  mix,
+  uniform,
+  uniformTexture,
+} from 'three/tsl'
+import * as THREE from 'three/webgpu'
 
 import Experience from '../experience.js'
 
 /**
  * SkyDome - 天空球组件
  *
- * Phase 1 PoC 临时妥协：ShaderMaterial 双贴图混合在 WebGPU 不可用，
- * 降级为 MeshBasicMaterial 单贴图（setTextures 取 current，忽略 mix）。
- * TODO(Phase 3): MeshBasicNodeMaterial + TSL mix(textureA, textureB, factor)
+ * Phase 3：MeshBasicNodeMaterial + TSL mix(textureA, textureB, factor)
+ * 参考：shaders/sky/*（GLSL 留作对照，Phase 5 归档）
  */
 export default class SkyDome {
   constructor() {
@@ -25,16 +29,19 @@ export default class SkyDome {
       Math.PI,
     )
 
-    this.material = new THREE.MeshBasicMaterial({
-      map: null,
+    // 占位 1x1 纹理，避免 init 时 sampler 为空
+    this._placeholder = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1)
+    this._placeholder.needsUpdate = true
+
+    this.uTextureA = uniformTexture(this._placeholder)
+    this.uTextureB = uniformTexture(this._placeholder)
+    this.uMixFactor = uniform(0)
+
+    this.material = new THREE.MeshBasicNodeMaterial({
       side: THREE.BackSide,
       depthWrite: false,
     })
-
-    // 兼容旧 API 的占位（Phase 3 恢复真正混合）
-    this._mixFactor = 0
-    this._textureA = null
-    this._textureB = null
+    this.material.colorNode = mix(this.uTextureA, this.uTextureB, this.uMixFactor)
 
     this.mesh = new THREE.Mesh(this.geometry, this.material)
     this.mesh.renderOrder = -1000
@@ -47,19 +54,16 @@ export default class SkyDome {
    * @param {THREE.Texture} next - 下一时段贴图
    */
   setTextures(current, next) {
-    this._textureA = current
-    this._textureB = next
-    // Phase 1：仅显示 current
-    this.material.map = current
-    this.material.needsUpdate = true
+    this.uTextureA.value = current || this._placeholder
+    this.uTextureB.value = next || current || this._placeholder
   }
 
   /**
-   * 设置混合因子（Phase 1 无视觉效果）
+   * 设置混合因子（0–1）
    * @param {number} factor - 0-1 的混合比例
    */
   setMixFactor(factor) {
-    this._mixFactor = factor
+    this.uMixFactor.value = factor
   }
 
   /**
@@ -79,5 +83,6 @@ export default class SkyDome {
     this.scene.remove(this.mesh)
     this.geometry.dispose()
     this.material.dispose()
+    this._placeholder.dispose()
   }
 }
