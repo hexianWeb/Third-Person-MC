@@ -1,6 +1,7 @@
 <script setup>
 import { useSkinStore } from '@pinia/skinStore.js'
 import { useUiStore } from '@pinia/uiStore.js'
+import { mountSkinPreview } from '@three/components/skin-preview-lifecycle.js'
 import SkinPreviewScene from '@three/components/skin-preview-scene.js'
 import { ANIMATION_BUTTONS, SKIN_LIST } from '@three/config/skin-config.js'
 /**
@@ -23,6 +24,7 @@ const previewScene = ref(null)
 
 // 当前播放的动画 ID
 const currentAnim = ref('idle')
+let isUnmounted = false
 
 // ----------------------------------------
 // 动画播放
@@ -101,34 +103,43 @@ function updateCanvasSize() {
 // 生命周期
 // ----------------------------------------
 
-onMounted(() => {
-  // 初始化预览场景
-  if (previewCanvas.value) {
-    previewScene.value = new SkinPreviewScene(previewCanvas.value)
-
-    // 初始化尺寸
-    updateCanvasSize()
-
-    // 监听窗口大小变化
-    window.addEventListener('resize', updateCanvasSize)
-  }
-
+onMounted(async () => {
   // 初始化皮肤预览状态
   skinStore.initPreview()
 
-  // 加载当前预览皮肤模型
-  const skin = SKIN_LIST.find(s => s.id === skinStore.previewSkinId)
-  if (skin && previewScene.value) {
-    previewScene.value.loadModel(skin.modelPath)
+  if (!previewCanvas.value)
+    return
+
+  try {
+    const preview = await mountSkinPreview({
+      createPreview: () => SkinPreviewScene.create(previewCanvas.value),
+      isUnmounted: () => isUnmounted,
+    })
+    if (!preview)
+      return
+
+    previewScene.value = preview
+    updateCanvasSize()
+    window.addEventListener('resize', updateCanvasSize)
+
+    const skin = SKIN_LIST.find(s => s.id === skinStore.previewSkinId)
+    if (skin)
+      await preview.loadModel(skin.modelPath)
+  }
+  catch (error) {
+    console.error('[SkinSelector] Failed to initialize WebGPU preview:', error)
   }
 })
 
 onUnmounted(() => {
+  isUnmounted = true
+
   // 移除窗口事件监听
   window.removeEventListener('resize', updateCanvasSize)
 
   // 清理预览场景资源
   previewScene.value?.dispose()
+  previewScene.value = null
 })
 
 // ----------------------------------------
