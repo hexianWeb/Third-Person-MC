@@ -1,5 +1,5 @@
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
-import { pass } from 'three/tsl'
+import { mix, pass, vec4 } from 'three/tsl'
 import * as THREE from 'three/webgpu'
 
 import { SHADOW_CONFIG, SHADOW_QUALITY } from './config/shadow-config.js'
@@ -8,10 +8,7 @@ import { createGazeNode } from './postprocessing/gaze-node.js'
 import { createSpeedLinesNode } from './postprocessing/speed-lines-node.js'
 import emitter from './utils/event/event-bus.js'
 import PlayerPreviewCamera from './world/player/player-preview-camera.js'
-import {
-  calculatePlayerPreviewRect,
-  renderPlayerPreviewFrame,
-} from './world/player/player-preview-rendering.js'
+import { calculatePlayerPreviewRect } from './world/player/player-preview-rendering.js'
 
 /** settings → 速度线 TSL uniform 字段映射 */
 const SPEEDLINE_UNIFORM_MAP = {
@@ -48,6 +45,12 @@ export default class Renderer {
     this.bloomPass = null
     this.speedLineUniforms = null
     this.gazeUniforms = null
+
+    // 玩家预览 pass（管线内合成，禁止在 renderPipeline.render() 之后手动 renderer.render()）
+    this.previewPass = null
+    this._outputNode = null
+    this._outputNodeWithPreview = null
+    this._previewComposited = false
 
     // 后期处理配置（Settings / Player / Enemy / Debug 共用）
     this.postProcessConfig = {
@@ -226,7 +229,9 @@ export default class Renderer {
       },
     }
 
-    this.renderPipeline.outputNode = gaze.node
+    // 保留基础输出节点，玩家预览启用时会在其上合成预览 pass
+    this._outputNode = gaze.node
+    this.renderPipeline.outputNode = this._outputNode
   }
 
   /**
@@ -486,8 +491,8 @@ export default class Renderer {
         : 0
     }
 
+    this._syncPlayerPreview()
     this.renderPipeline.render()
-    this._renderPlayerPreview()
   }
 
   /**
@@ -500,26 +505,55 @@ export default class Renderer {
   }
 
   /**
-   * 渲染玩家预览（Viewport + setScissor）
+   * 构建玩家预览 pass 并生成带预览的合成输出节点
+   * 预览 RT 每帧被清成透明黑（clearColor alpha=0），按预览像素的 alpha 叠加到主画面上，
+   * 因此背景透出主场景且不会累积历史帧（拖影）
    */
-  _renderPlayerPreview() {
-    if (!this.playerPreview?.enabled)
+  _buildPreviewPass() {
+    this.previewPass = pass(this.scene, this.playerPreview.getCamera())
+
+    const previewColor = this.previewPass.getTextureNode('output')
+    this._outputNodeWithPreview = vec4(
+      mix(this._outputNode.rgb, previewColor.rgb, previewColor.a),
+      this._outputNode.a,
+    )
+  }
+
+  /**
+   * 每帧同步玩家预览状态：更新预览相机、设置 pass 级 viewport、按需切换管线输出节点
+   * 必须在 renderPipeline.render() 之前调用（WebGPURenderer 不支持管线渲染后再手动 render）
+   */
+  _syncPlayerPreview() {
+    let rect = null
+
+    if (this.playerPreview?.enabled) {
+      if (!this.previewPass)
+        this._buildPreviewPass()
+      rect = calculatePlayerPreviewRect(this.sizes, this.playerPreview.config)
+    }
+
+    const active = !!(rect && rect.width > 0 && rect.height > 0)
+
+    // 启用状态变化时切换输出节点并触发管线重建
+    if (active !== this._previewComposited) {
+      this._previewComposited = active
+      this.renderPipeline.outputNode = active ? this._outputNodeWithPreview : this._outputNode
+      this.renderPipeline.needsUpdate = true
+    }
+
+    if (!active)
       return
 
-    const preview = this.playerPreview
-    preview.update()
+    this.playerPreview.update()
 
-    const rect = calculatePlayerPreviewRect(this.sizes, preview.config)
-    if (rect.width === 0 || rect.height === 0)
-      return
-
-    renderPlayerPreviewFrame({
-      renderer: this.instance,
-      scene: this.scene,
-      camera: preview.getCamera(),
-      rect,
-      canvasSize: this.sizes,
-    })
+    // PassNode 的 RT 为物理像素尺寸（drawing buffer size），viewport 需乘以 pixelRatio
+    const pr = this.sizes.pixelRatio
+    this.previewPass.setViewport(
+      Math.round(rect.x * pr),
+      Math.round(rect.y * pr),
+      Math.round(rect.width * pr),
+      Math.round(rect.height * pr),
+    )
   }
 
   /**
@@ -532,6 +566,10 @@ export default class Renderer {
   }
 
   destroy() {
+    if (this.previewPass) {
+      this.previewPass.dispose()
+      this.previewPass = null
+    }
     if (this.renderPipeline) {
       this.renderPipeline.dispose()
       this.renderPipeline = null
