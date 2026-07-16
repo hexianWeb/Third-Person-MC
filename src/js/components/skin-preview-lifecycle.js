@@ -3,7 +3,7 @@
  * @param {object} options - 生命周期依赖
  * @param {() => Promise<import('./skin-preview-scene.js').default>} options.createPreview
  * @param {() => boolean} options.isUnmounted
- * @returns {Promise<import('./skin-preview-scene.js').default|null>}
+ * @returns {Promise<import('./skin-preview-scene.js').default|null>} 仍挂载时返回预览，否则返回 null
  */
 export async function mountSkinPreview({ createPreview, isUnmounted }) {
   const preview = await createPreview()

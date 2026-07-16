@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+// eslint-disable-next-line test/no-import-node-test -- Playwright 1.49 runner hangs under the available Node 24 runtime.
 import test from 'node:test'
 
 import { initializeSkinPreviewRenderer } from '../src/js/components/skin-preview-scene.js'

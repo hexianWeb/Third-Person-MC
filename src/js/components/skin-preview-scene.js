@@ -11,7 +11,7 @@ import * as THREE from 'three/webgpu'
 /**
  * 初始化皮肤预览渲染器并强制验证 WebGPU 后端。
  * @param {THREE.WebGPURenderer} renderer - 待初始化的渲染器
- * @returns {Promise<void>}
+ * @returns {Promise<void>} WebGPU 后端初始化完成后兑现
  */
 export async function initializeSkinPreviewRenderer(renderer) {
   await renderer.init()
@@ -23,7 +23,7 @@ export default class SkinPreviewScene {
   /**
    * 异步创建完成初始化的皮肤预览场景。
    * @param {HTMLCanvasElement} canvas - 渲染目标画布
-   * @returns {Promise<SkinPreviewScene>}
+   * @returns {Promise<SkinPreviewScene>} 完成初始化的预览场景
    */
   static async create(canvas) {
     const preview = new SkinPreviewScene(canvas)
@@ -87,7 +87,6 @@ export default class SkinPreviewScene {
     // 事件处理函数引用（用于移除监听）
     this._onMouseMove = null
     this._onMouseUp = null
-
   }
 
   /**

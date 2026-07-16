@@ -35,7 +35,7 @@ export const TREE_BLOCK_IDS = new Set([
  * 判断指定阴影质量下地形方块是否投射阴影。
  * @param {string} quality - 阴影质量等级
  * @param {number} blockId - 方块 ID
- * @returns {boolean}
+ * @returns {boolean} 是否投射阴影
  */
 export function shouldTerrainCastShadow(quality, blockId) {
   if (quality === SHADOW_QUALITY.LOW)

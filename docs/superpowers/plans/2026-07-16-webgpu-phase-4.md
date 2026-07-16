@@ -6,7 +6,7 @@
 
 **Architecture:** `SkinPreviewScene.create(canvas)` owns asynchronous WebGPU initialization and only starts scene behavior after a WebGPU backend is confirmed. A small lifecycle helper keeps Vue unmount races testable, while shared shadow-policy functions make LOW/MEDIUM/HIGH behavior deterministic and independently testable.
 
-**Tech Stack:** JavaScript ES modules, Three.js `0.185.1` (`three/webgpu`), Vue 3 Composition API, Playwright test runner, Vite 5, pnpm.
+**Tech Stack:** JavaScript ES modules, Three.js `0.185.1` (`three/webgpu`), Vue 3 Composition API, Node.js test runner, Vite 5, pnpm.
 
 ## Global Constraints
 
@@ -32,7 +32,8 @@
 - [ ] **Step 1: Write failing renderer-initialization tests**
 
 ```javascript
-import { expect, test } from '@playwright/test'
+import assert from 'node:assert/strict'
+import test from 'node:test'
 
 import { initializeSkinPreviewRenderer } from '../src/js/components/skin-preview-scene.js'
 
@@ -46,11 +47,11 @@ test('waits for WebGPU renderer initialization', async () => {
   let settled = false
   const initializing = initializeSkinPreviewRenderer(renderer).then(() => { settled = true })
   await Promise.resolve()
-  expect(settled).toBe(false)
+  assert.equal(settled, false)
 
   finishInit()
   await initializing
-  expect(settled).toBe(true)
+  assert.equal(settled, true)
 })
 
 test('rejects a non-WebGPU backend', async () => {
@@ -59,13 +60,16 @@ test('rejects a non-WebGPU backend', async () => {
     init: async () => {},
   }
 
-  await expect(initializeSkinPreviewRenderer(renderer)).rejects.toThrow('WebGPU backend unavailable')
+  await assert.rejects(
+    initializeSkinPreviewRenderer(renderer),
+    /WebGPU backend unavailable/,
+  )
 })
 ```
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `pnpm exec playwright test tests/skin-preview-renderer-init.test.js --project=chromium`
+Run: `node --test tests/skin-preview-renderer-init.test.js`
 
 Expected: FAIL because `initializeSkinPreviewRenderer` is not exported.
 
@@ -151,7 +155,7 @@ End cleanup with `this.renderer?.dispose()` and remove `forceContextLoss()`.
 Run:
 
 ```bash
-pnpm exec playwright test tests/skin-preview-renderer-init.test.js --project=chromium
+node --test tests/skin-preview-renderer-init.test.js
 node --check src/js/components/skin-preview-scene.js
 ```
 
@@ -180,7 +184,8 @@ git commit -m "feat(skin-preview): migrate renderer to WebGPU"
 - [ ] **Step 1: Write the failing unmount-race tests**
 
 ```javascript
-import { expect, test } from '@playwright/test'
+import assert from 'node:assert/strict'
+import test from 'node:test'
 
 import { mountSkinPreview } from '../src/js/components/skin-preview-lifecycle.js'
 
@@ -190,7 +195,7 @@ test('returns the initialized preview while mounted', async () => {
     createPreview: async () => preview,
     isUnmounted: () => false,
   })
-  expect(result).toBe(preview)
+  assert.equal(result, preview)
 })
 
 test('disposes a preview that resolves after unmount', async () => {
@@ -200,14 +205,14 @@ test('disposes a preview that resolves after unmount', async () => {
     createPreview: async () => preview,
     isUnmounted: () => true,
   })
-  expect(result).toBeNull()
-  expect(disposed).toBe(1)
+  assert.equal(result, null)
+  assert.equal(disposed, 1)
 })
 ```
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `pnpm exec playwright test tests/skin-preview-lifecycle.test.js --project=chromium`
+Run: `node --test tests/skin-preview-lifecycle.test.js`
 
 Expected: FAIL because `skin-preview-lifecycle.js` does not exist.
 
@@ -267,7 +272,7 @@ Remove the old synchronous construction and duplicate initial model load.
 
 - [ ] **Step 5: Run focused tests**
 
-Run: `pnpm exec playwright test tests/skin-preview-lifecycle.test.js --project=chromium`
+Run: `node --test tests/skin-preview-lifecycle.test.js`
 
 Expected: 2 tests pass.
 
@@ -294,7 +299,8 @@ git commit -m "fix(skin-preview): handle async mount lifecycle"
 - [ ] **Step 1: Write the failing policy tests**
 
 ```javascript
-import { expect, test } from '@playwright/test'
+import assert from 'node:assert/strict'
+import test from 'node:test'
 
 import {
   SHADOW_QUALITY,
@@ -302,22 +308,22 @@ import {
 } from '../src/js/config/shadow-config.js'
 
 test('LOW disables terrain shadows', () => {
-  expect(shouldTerrainCastShadow(SHADOW_QUALITY.LOW, 6)).toBe(false)
+  assert.equal(shouldTerrainCastShadow(SHADOW_QUALITY.LOW, 6), false)
 })
 
 test('MEDIUM enables only configured tree shadows', () => {
-  expect(shouldTerrainCastShadow(SHADOW_QUALITY.MEDIUM, 6)).toBe(true)
-  expect(shouldTerrainCastShadow(SHADOW_QUALITY.MEDIUM, 1)).toBe(false)
+  assert.equal(shouldTerrainCastShadow(SHADOW_QUALITY.MEDIUM, 6), true)
+  assert.equal(shouldTerrainCastShadow(SHADOW_QUALITY.MEDIUM, 1), false)
 })
 
 test('HIGH enables all terrain shadows', () => {
-  expect(shouldTerrainCastShadow(SHADOW_QUALITY.HIGH, 1)).toBe(true)
+  assert.equal(shouldTerrainCastShadow(SHADOW_QUALITY.HIGH, 1), true)
 })
 ```
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `pnpm exec playwright test tests/shadow-quality.test.js --project=chromium`
+Run: `node --test tests/shadow-quality.test.js`
 
 Expected: FAIL because `shouldTerrainCastShadow` is not exported.
 
@@ -345,7 +351,7 @@ Do not change player shadow behavior or bias values.
 
 - [ ] **Step 4: Run focused shadow tests**
 
-Run: `pnpm exec playwright test tests/shadow-quality.test.js --project=chromium`
+Run: `node --test tests/shadow-quality.test.js`
 
 Expected: 3 tests pass.
 
@@ -379,7 +385,7 @@ Expected: exit 0 with no lockfile changes.
 Run:
 
 ```bash
-pnpm exec playwright test tests/skin-preview-renderer-init.test.js tests/skin-preview-lifecycle.test.js tests/shadow-quality.test.js tests/plant-wind-height.test.js --project=chromium
+node --test tests/skin-preview-renderer-init.test.js tests/skin-preview-lifecycle.test.js tests/shadow-quality.test.js
 pnpm lint
 pnpm build
 ```
