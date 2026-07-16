@@ -418,9 +418,9 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 ---
 
 
-## Phase 4: 边缘与阴影
+## Phase 4: 边缘与阴影 — 🟡 Implemented, awaiting manual WebGPU verification (2026-07-16)
 
-### Task 4.1: SkinPreviewScene → WebGPURenderer
+### Task 4.1: SkinPreviewScene → WebGPURenderer — 🟡 Implemented
 
 **Files:**
 - Modify: `src/js/components/skin-preview-scene.js`
@@ -430,13 +430,19 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 git commit -m "feat(skin-preview): migrate secondary renderer to WebGPU"
 ```
 
+**实现记录：** `SkinPreviewScene.create(canvas)` 等待 `WebGPURenderer.init()` 并拒绝非 WebGPU backend；
+Vue 调用方已处理初始化期间卸载的竞态；移除 `forceContextLoss()`。待手工确认模型渲染、动画、旋转、换肤、缩放与重复开关。
+
 ---
 
-### Task 4.2: 阴影三级质量回归
+### Task 4.2: 阴影三级质量回归 — 🟡 Automated policy verified
 
 **Files:** `src/js/world/environment.js`, `shadow-config.js`（仅必要时调 bias）
 
 在 WebGPU 下测 LOW/MED/HIGH；必要时调 `bias` / `normalBias`。
+
+**自动验证：** LOW 禁用地形阴影；MEDIUM 仅树木方块；HIGH 全部地形，3 个策略测试通过。
+现有 `bias=-0.0005`、`normalBias=0.05` 未修改，待手工 WebGPU 画面确认无 acne / peter-panning / 移动阴影抖动。
 
 ```bash
 git commit -m "fix(shadow): tune bias for WebGPU if needed"
@@ -444,7 +450,7 @@ git commit -m "fix(shadow): tune bias for WebGPU if needed"
 
 ---
 
-### Task 4.3:（可选）vite alias `three` → `three/webgpu`
+### Task 4.3:（可选）vite alias `three` → `three/webgpu` — ⏭ Skipped by scope
 
 **Files:** `vite.config.js`
 
