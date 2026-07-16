@@ -8,6 +8,10 @@ import { createGazeNode } from './postprocessing/gaze-node.js'
 import { createSpeedLinesNode } from './postprocessing/speed-lines-node.js'
 import emitter from './utils/event/event-bus.js'
 import PlayerPreviewCamera from './world/player/player-preview-camera.js'
+import {
+  calculatePlayerPreviewRect,
+  renderPlayerPreviewFrame,
+} from './world/player/player-preview-rendering.js'
 
 /** settings → 速度线 TSL uniform 字段映射 */
 const SPEEDLINE_UNIFORM_MAP = {
@@ -505,24 +509,17 @@ export default class Renderer {
     const preview = this.playerPreview
     preview.update()
 
-    const { size, margin } = preview.config
-    const pixelRatio = this.sizes.pixelRatio
-    const x = Math.floor(margin.left * pixelRatio)
-    const y = Math.floor(margin.bottom * pixelRatio)
-    const wh = Math.floor(size * pixelRatio)
+    const rect = calculatePlayerPreviewRect(this.sizes, preview.config)
+    if (rect.width === 0 || rect.height === 0)
+      return
 
-    const savedBackground = this.scene.background
-    this.scene.background = null
-
-    this.instance.setScissorTest(true)
-    this.instance.setScissor(x, y, wh, wh)
-    this.instance.setViewport(x, y, wh, wh)
-    this.instance.clear(false, true, false)
-    this.instance.render(this.scene, preview.getCamera())
-
-    this.instance.setScissorTest(false)
-    this.instance.setViewport(0, 0, this.sizes.width * pixelRatio, this.sizes.height * pixelRatio)
-    this.scene.background = savedBackground
+    renderPlayerPreviewFrame({
+      renderer: this.instance,
+      scene: this.scene,
+      camera: preview.getCamera(),
+      rect,
+      canvasSize: this.sizes,
+    })
   }
 
   /**
