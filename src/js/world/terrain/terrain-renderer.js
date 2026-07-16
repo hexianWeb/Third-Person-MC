@@ -3,7 +3,7 @@
  * 读取 TerrainContainer 中的数据，按方块 id 分组实例化，支持遮挡剔除
  */
 import * as THREE from 'three'
-import { SHADOW_CONFIG, SHADOW_QUALITY, TREE_BLOCK_IDS } from '../../config/shadow-config.js'
+import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 
@@ -124,17 +124,7 @@ export default class TerrainRenderer {
     const quality = this._currentShadowQuality
 
     this._blockMeshes.forEach((mesh, blockId) => {
-      if (quality === SHADOW_QUALITY.LOW) {
-        mesh.castShadow = false
-      }
-      else if (quality === SHADOW_QUALITY.MEDIUM) {
-        // Only tree blocks cast shadows
-        mesh.castShadow = TREE_BLOCK_IDS.has(blockId)
-      }
-      else {
-        // HIGH quality: all blocks cast shadows
-        mesh.castShadow = true
-      }
+      mesh.castShadow = shouldTerrainCastShadow(quality, blockId)
     })
   }
 
