@@ -3,13 +3,40 @@
  * 独立的 3D 渲染器，用于皮肤选择界面的角色预览
  * 不依赖 Experience 单例，可独立运行
  *
- * TODO(Phase 4): 迁移为 WebGPURenderer + await init()；
- * Phase 1 仍用独立 WebGLRenderer（第二 canvas），不阻塞主场景 PoC。
+ * Phase 4：独立 WebGPURenderer，通过 create() 等待异步初始化。
  */
-import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import * as THREE from 'three/webgpu'
+
+/**
+ * 初始化皮肤预览渲染器并强制验证 WebGPU 后端。
+ * @param {THREE.WebGPURenderer} renderer - 待初始化的渲染器
+ * @returns {Promise<void>}
+ */
+export async function initializeSkinPreviewRenderer(renderer) {
+  await renderer.init()
+  if (renderer.backend?.isWebGPUBackend !== true)
+    throw new Error('[SkinPreview] WebGPU backend unavailable')
+}
 
 export default class SkinPreviewScene {
+  /**
+   * 异步创建完成初始化的皮肤预览场景。
+   * @param {HTMLCanvasElement} canvas - 渲染目标画布
+   * @returns {Promise<SkinPreviewScene>}
+   */
+  static async create(canvas) {
+    const preview = new SkinPreviewScene(canvas)
+    try {
+      await preview._init()
+      return preview
+    }
+    catch (error) {
+      preview.dispose()
+      throw error
+    }
+  }
+
   /**
    * 创建皮肤预览场景
    * @param {HTMLCanvasElement} canvas - 渲染目标画布
@@ -24,12 +51,13 @@ export default class SkinPreviewScene {
     // 创建透视相机
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
 
-    // Phase 1：保留独立 WebGLRenderer（与主场景 WebGPU 分离）
-    this.renderer = new THREE.WebGLRenderer({
+    this.renderer = new THREE.WebGPURenderer({
       canvas,
       alpha: true,
       antialias: true,
     })
+    this._disposed = false
+    this._initialized = false
 
     // GLTF 加载器
     this.loader = new GLTFLoader()
@@ -60,12 +88,23 @@ export default class SkinPreviewScene {
     this._onMouseMove = null
     this._onMouseUp = null
 
-    // 初始化场景
+  }
+
+  /**
+   * 等待 WebGPU 就绪后再安装交互并启动渲染循环。
+   * @returns {Promise<void>}
+   */
+  async _init() {
+    await initializeSkinPreviewRenderer(this.renderer)
+    if (this._disposed)
+      return
+
     this._setupScene()
     this._setupLights()
     this._setupBackground()
     this._setupShadow()
     this._setupDragControls()
+    this._initialized = true
     this._startRenderLoop()
   }
 
@@ -375,6 +414,9 @@ export default class SkinPreviewScene {
    */
   _startRenderLoop() {
     const animate = () => {
+      if (this._disposed)
+        return
+
       this.animationFrameId = requestAnimationFrame(animate)
 
       const delta = this.clock.getDelta()
@@ -459,6 +501,10 @@ export default class SkinPreviewScene {
    * 在 Vue 组件卸载时调用
    */
   dispose() {
+    if (this._disposed)
+      return
+    this._disposed = true
+
     // 停止渲染循环
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId)
@@ -513,8 +559,7 @@ export default class SkinPreviewScene {
     this.scene.clear()
 
     // 释放渲染器
-    this.renderer.dispose()
-    this.renderer.forceContextLoss()
+    this.renderer?.dispose()
 
     // 清空引用
     this.animations = []
