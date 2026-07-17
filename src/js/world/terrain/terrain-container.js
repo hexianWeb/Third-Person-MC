@@ -144,6 +144,15 @@ export default class TerrainContainer {
   }
 
   /**
+   * 清除已填充方块的渲染实例索引，同时保留方块数据。
+   */
+  clearInstanceIds() {
+    this.forEachFilled((block) => {
+      block.instanceId = null
+    })
+  }
+
+  /**
    * 遮挡判定：六个方向都非空气则视为被遮挡
    */
   isBlockObscured(x, y, z) {
