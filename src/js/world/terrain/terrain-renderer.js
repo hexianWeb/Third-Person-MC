@@ -1,546 +1,333 @@
 /**
- * 地形渲染器（按方块类型分组 InstancedMesh）
- * 读取 TerrainContainer 中的数据，按方块 id 分组实例化，支持遮挡剔除
+ * 固定容量的方块渲染层。
+ * 渲染层只管理传入父节点中的网格，不拥有全局场景或事件订阅。
  */
 import * as THREE from 'three'
+
+import { BLOCK_INSTANCE_CAPACITY } from '../../config/chunk-render-capacity.js'
 import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-config.js'
-import Experience from '../../experience.js'
-import emitter from '../../utils/event/event-bus.js'
+import { blocks, getSharedBlockMaterials, resources as resourceBlocks, sharedGeometry } from './blocks-config.js'
+import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
 
-import { ANIMATION_DEFAULTS, blocks, clearSharedMaterialCache, getSharedBlockMaterials, resources, sharedGeometry } from './blocks-config.js'
-import TerrainContainer from './terrain-container.js'
-
-// 将 id -> 配置映射缓存，避免每次遍历 Object.values
 const BLOCK_BY_ID = Object.values(blocks).reduce((map, item) => {
   map[item.id] = item
   return map
 }, {})
-const RESOURCE_IDS = new Set(resources.map(r => r.id))
+const RESOURCE_IDS = new Set(resourceBlocks.map(({ id }) => id))
 
 export default class TerrainRenderer {
   /**
-   * @param {*} container TerrainContainer
-   * @param {{ sharedParams?: any, debugEnabled?: boolean, debugTitle?: string, listenDataReady?: boolean }} options
+   * @param {object} options 渲染层依赖
+   * @param {THREE.Group} options.parent 网格所属父节点
+   * @param {object} options.resources 已加载资源或资源字典
+   * @param {object} options.params 共享渲染参数
+   * @param {Record<string, number>} [options.capacities] 方块类型固定容量
+   * @param {Function} [options.materialFactory] 共享材质工厂
+   * @param {Function} [options.onMeshCreated] 网格创建回调
    */
-  constructor(container, options = {}) {
-    this.experience = new Experience()
-    this.scene = this.experience.scene
-    this.resources = this.experience.resources
-    this.debug = this.experience.debug
-    this.time = this.experience.time
-
-    // 绑定容器（默认单例）
-    this.container = container || new TerrainContainer()
-
-    // 渲染参数（支持外部共享：让多个 renderer 共用同一份 params）
-    this.params = options.sharedParams || {
-      scale: 1, // 整体缩放
-      heightScale: 1, // 高度缩放，仅作用于 y 轴
-      showOresOnly: false, // 仅显示矿产
+  constructor({
+    parent,
+    resources,
+    params,
+    capacities = BLOCK_INSTANCE_CAPACITY,
+    materialFactory = getSharedBlockMaterials,
+    onMeshCreated,
+  }) {
+    this.parent = parent
+    this.resources = resources
+    this.params = params || {
+      scale: 1,
+      heightScale: 1,
+      showOresOnly: false,
     }
-    this._debugEnabled = options.debugEnabled ?? false
-    this._debugTitle = options.debugTitle || `地形渲染器 ${options.chunkName || ''}`.trim()
-    this._listenDataReady = options.listenDataReady ?? true
-
-    this.group = new THREE.Group()
-    if (options.chunkName) {
-      this.group.name = `chunk(${options.chunkName})`
-    }
-    this.scene.add(this.group)
+    this.capacities = capacities
+    this.materialFactory = materialFactory
+    this.onMeshCreated = onMeshCreated
+    this.container = null
 
     this._tempObject = new THREE.Object3D()
     this._tempMatrix = new THREE.Matrix4()
     this._blockMeshes = new Map()
-    this._animatedMaterials = [] // 统一追踪所有动画材质
-    this._statsParams = {
-      totalInstances: 0,
-    }
-    this._statsBinding = null
+    this._disposed = false
 
-    // ===== Mining System: Load crack textures =====
-    this._crackTextures = []
-    for (let i = 0; i <= 9; i++) {
-      const textureName = `destroy_stage_${i}`
-      const texture = this.resources.items[textureName]
-      if (texture) {
-        texture.minFilter = THREE.NearestFilter
-        texture.magFilter = THREE.NearestFilter
-        texture.wrapS = THREE.ClampToEdgeWrapping
-        texture.wrapT = THREE.ClampToEdgeWrapping
-        this._crackTextures.push(texture)
-      }
-    }
-
-    // Mining shader uniforms (shared across all block materials in this chunk)
-    this._miningUniforms = {
-      uCrackTexture: { value: this._crackTextures[0] || null },
-      uMiningProgress: { value: 0.0 },
-      uTargetInstanceId: { value: -1.0 },
-      uIsBeingMined: { value: false },
-    }
-
-    // 事件绑定
-    this._handleDataReady = this._handleDataReady.bind(this)
-    if (this._listenDataReady) {
-      emitter.on('terrain:data-ready', this._handleDataReady)
-    }
-
-    // Shadow quality event listener
-    this._currentShadowQuality = SHADOW_CONFIG.quality
-    this._handleShadowQuality = this._handleShadowQuality.bind(this)
-    emitter.on('shadow:quality-changed', this._handleShadowQuality)
-
-    // Mining event listeners
-    this._handleMiningProgress = this._handleMiningProgress.bind(this)
-    this._handleMiningCancel = this._handleMiningCancel.bind(this)
-    emitter.on('game:mining-progress', this._handleMiningProgress)
-    emitter.on('game:mining-cancel', this._handleMiningCancel)
-    emitter.on('game:mining-complete', this._handleMiningCancel)
-
-    // 若容器已有数据，立即绘制
-    this._rebuildFromContainer()
-
-    if (this.debug.active && this._debugEnabled) {
-      this.debugInit()
-    }
+    this._createMeshes()
+    this.parent.scale.setScalar(this.params.scale ?? 1)
   }
 
-  /**
-   * Handle shadow quality change event
-   * @param {{ quality: string }} payload - Shadow quality payload
-   */
-  _handleShadowQuality(payload) {
-    this._currentShadowQuality = payload.quality
-    this._applyShadowSettings()
-  }
+  _createMeshes() {
+    Object.entries(this.capacities).forEach(([typeKey, capacity]) => {
+      const type = blocks[typeKey]
+      if (!type?.visible)
+        return
 
-  /**
-   * Apply shadow settings to all block meshes based on current quality
-   * - LOW: All blocks castShadow = false
-   * - MEDIUM: Only tree blocks castShadow = true
-   * - HIGH: All blocks castShadow = true
-   */
-  _applyShadowSettings() {
-    const quality = this._currentShadowQuality
+      const material = this.materialFactory(type, this.resources?.items ?? this.resources)
+      if (!material)
+        return
 
-    this._blockMeshes.forEach((mesh, blockId) => {
-      mesh.castShadow = shouldTerrainCastShadow(quality, blockId)
+      const geometry = sharedGeometry.clone()
+      geometry.setAttribute('aAo', new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1))
+      const mesh = new THREE.InstancedMesh(geometry, material, capacity)
+      const record = { mesh, capacity, type }
+
+      this._normalizeMesh(record, typeKey)
+      this.parent.add(mesh)
+      this._blockMeshes.set(type.id, record)
+      this.onMeshCreated?.(mesh)
     })
   }
 
-  /**
-   * Handle mining progress update event
-   */
-  _handleMiningProgress(payload) {
-    const { progress, target } = payload
-    if (!target)
-      return
-
-    // Check if target is in current chunk
-    const chunkKey = `${target.chunkX},${target.chunkZ}`
-    if (this.group?.userData?.chunkKey !== chunkKey) {
-      // Not current chunk, reset mining state
-      if (this._miningUniforms.uIsBeingMined.value) {
-        this._handleMiningCancel()
-      }
-      return
+  _normalizeMesh(record, typeKey) {
+    const { mesh, capacity, type } = record
+    if (mesh.instanceMatrix.count < capacity) {
+      throw new ChunkRenderCapacityError({
+        layer: 'blocks',
+        typeId: typeKey,
+        required: capacity,
+        capacity: mesh.instanceMatrix.count,
+      })
     }
 
-    // Update uniforms
-    this._miningUniforms.uMiningProgress.value = progress
-    this._miningUniforms.uTargetInstanceId.value = target.instanceId
-    this._miningUniforms.uIsBeingMined.value = true
-
-    // Update crack texture based on progress (0-9 stages)
-    const stage = Math.min(Math.floor(progress * 10), 9)
-    if (this._crackTextures[stage]) {
-      this._miningUniforms.uCrackTexture.value = this._crackTextures[stage]
+    let ao = mesh.geometry.getAttribute('aAo')
+    if (!ao || ao.count < capacity) {
+      ao = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1)
+      mesh.geometry.setAttribute('aAo', ao)
     }
+
+    mesh.count = 0
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    mesh.castShadow = shouldTerrainCastShadow(SHADOW_CONFIG.quality, type.id)
+    mesh.receiveShadow = true
+    mesh.userData.blockId = type.id
+    mesh.userData.blockName = type.name
+    mesh.userData.instanceToGrid = []
   }
 
-  /**
-   * Handle mining cancel/complete event
-   */
-  _handleMiningCancel() {
-    this._miningUniforms.uIsBeingMined.value = false
-    this._miningUniforms.uMiningProgress.value = 0
-    this._miningUniforms.uTargetInstanceId.value = -1
+  _getTypeKey(blockId) {
+    return Object.keys(this.capacities).find(key => blocks[key]?.id === blockId) ?? String(blockId)
   }
 
-  /**
-   * 响应数据就绪事件
-   */
-  _handleDataReady(payload) {
-    if (payload?.container)
-      this.container = payload.container
-    this._rebuildFromContainer()
-  }
-
-  /**
-   * 重新根据容器构建所有 InstancedMesh
-   */
-  _rebuildFromContainer() {
-    if (!this.container)
-      return
-
-    this._disposeChildren()
-
+  _collectPositions(container) {
     const positionsByBlock = new Map()
 
-    // 收集可见方块的位置
-    this.container.forEachFilled((block, x, y, z) => {
-      if (this.container.isBlockObscured(x, y, z))
+    container.forEachFilled((block, x, y, z) => {
+      if (container.isBlockObscured(x, y, z))
         return
-
       if (this.params.showOresOnly && !RESOURCE_IDS.has(block.id))
         return
 
-      const list = positionsByBlock.get(block.id) || []
-      list.push({ x, y, z })
-      positionsByBlock.set(block.id, list)
+      const type = BLOCK_BY_ID[block.id]
+      if (!type?.visible)
+        return
+
+      const positions = positionsByBlock.get(block.id) || []
+      positions.push({ x, y, z })
+      positionsByBlock.set(block.id, positions)
     })
 
-    // 为每种方块创建 InstancedMesh
+    return positionsByBlock
+  }
+
+  _validatePositions(positionsByBlock) {
     positionsByBlock.forEach((positions, blockId) => {
-      const blockType = BLOCK_BY_ID[blockId]
-      if (!blockType || !blockType.visible)
-        return
-
-      // 共享材质：所有 chunk 复用同一份，避免重复创建与 WebGPU 管线重复编译
-      const materials = getSharedBlockMaterials(blockType, this.resources.items)
-      if (!materials)
-        return
-
-      // 收集动画材质，供 update() 统一更新时间 uniform
-      // 材质共享后同一实例可能在数组中出现多次（六面侧面），需去重
-      const matArray = Array.isArray(materials) ? materials : [materials]
-      matArray.forEach((mat) => {
-        if (mat._isAnimated && !this._animatedMaterials.includes(mat)) {
-          this._animatedMaterials.push(mat)
-        }
-      })
-
-      // Clone geometry to add instance attributes (AO)
-      const geometry = sharedGeometry.clone()
-
-      // Create AO instance attribute: single float per block (Top-Column AO)
-      // aAo: 0 = no occlusion (bright), 1 = max occlusion (darkest)
-      const aoArray = new Float32Array(positions.length)
-
-      positions.forEach((pos, i) => {
-        const block = this.container.getBlock(pos.x, pos.y, pos.z)
-        // block.ao is now 0-3 (Top-Column AO), map to 0-1 where higher = more occlusion
-        aoArray[i] = block.ao != null ? block.ao / 3.0 : 0.0
-      })
-      geometry.setAttribute('aAo', new THREE.InstancedBufferAttribute(aoArray, 1))
-
-      const mesh = new THREE.InstancedMesh(geometry, materials, positions.length)
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-
-      // castShadow is dynamically controlled by _applyShadowSettings based on quality
-      mesh.receiveShadow = true
-
-      // 射线拾取辅助信息：记录当前 InstancedMesh 对应的方块类型
-      // 注意：instanceId 仍需通过 matrix 反解局部 (x,y,z)
-      mesh.userData.blockId = blockId
-      mesh.userData.blockName = blockType.name
-      // 逆向映射：instanceId -> local grid position {x, y, z}
-      mesh.userData.instanceToGrid = []
-
-      positions.forEach((pos, index) => {
-        this._tempObject.position.set(
-          pos.x,
-          pos.y * this.params.heightScale,
-          pos.z,
-        )
-        this._tempObject.updateMatrix()
-        mesh.setMatrixAt(index, this._tempObject.matrix)
-
-        // 记录映射关系，方便 swap-and-pop 时更新 container
-        mesh.userData.instanceToGrid[index] = { x: pos.x, y: pos.y, z: pos.z }
-        this.container.setBlockInstanceId(pos.x, pos.y, pos.z, index)
-      })
-
-      mesh.instanceMatrix.needsUpdate = true
-      this.group.add(mesh)
-      this._blockMeshes.set(blockId, mesh)
+      const record = this._blockMeshes.get(blockId)
+      const capacity = record?.capacity ?? 0
+      if (positions.length > capacity) {
+        throw new ChunkRenderCapacityError({
+          layer: 'blocks',
+          typeId: this._getTypeKey(blockId),
+          required: positions.length,
+          capacity,
+        })
+      }
     })
+  }
 
-    // 更新统计
-    this._statsParams.totalInstances = Array.from(this._blockMeshes.values())
-      .reduce((sum, mesh) => sum + mesh.count, 0)
+  _markUpdates(mesh, count) {
+    mesh.instanceMatrix.clearUpdateRanges()
+    mesh.instanceMatrix.addUpdateRange(0, count * 16)
+    mesh.instanceMatrix.needsUpdate = true
 
-    // 应用整体缩放
-    this.group.scale.setScalar(this.params.scale)
-
-    // Apply shadow settings based on current quality
-    this._applyShadowSettings()
-
-    this._updateStatsPanel()
+    const ao = mesh.geometry.getAttribute('aAo')
+    ao.clearUpdateRanges()
+    ao.addUpdateRange(0, count)
+    ao.needsUpdate = true
   }
 
   /**
-   * 移除单个实例 (Swap-and-pop 优化)
-   * @param {THREE.InstancedMesh} mesh
-   * @param {number} instanceId
+   * 验证容量后，将容器数据写入固定网格。
+   * @param {import('./terrain-container.js').default} container 地形数据容器
+   */
+  populate(container) {
+    const positionsByBlock = this._collectPositions(container)
+    this._validatePositions(positionsByBlock)
+
+    container.clearInstanceIds()
+    this._blockMeshes.forEach(({ mesh }) => {
+      mesh.count = 0
+      mesh.userData.instanceToGrid.length = 0
+    })
+
+    positionsByBlock.forEach((positions, blockId) => {
+      const { mesh } = this._blockMeshes.get(blockId)
+      const ao = mesh.geometry.getAttribute('aAo')
+
+      positions.forEach((position, index) => {
+        const { x, y, z } = position
+        const block = container.getBlock(x, y, z)
+        this._tempObject.position.set(x, y * this.params.heightScale, z)
+        this._tempObject.updateMatrix()
+        mesh.setMatrixAt(index, this._tempObject.matrix)
+        ao.setX(index, block.ao != null ? block.ao / 3 : 0)
+        mesh.userData.instanceToGrid[index] = position
+        container.setBlockInstanceId(x, y, z, index)
+      })
+
+      mesh.count = positions.length
+      if (mesh.count > 0)
+        mesh.computeBoundingSphere()
+    })
+
+    this._blockMeshes.forEach(({ mesh }) => this._markUpdates(mesh, mesh.count))
+    this.parent.scale.setScalar(this.params.scale ?? 1)
+    this.container = container
+  }
+
+  /**
+   * 清空渲染计数和索引映射，保留固定网格及 GPU 资源。
+   * @param {import('./terrain-container.js').default} [container] 需要清理实例索引的容器
+   */
+  reset(container = this.container) {
+    container?.clearInstanceIds()
+    this._blockMeshes.forEach(({ mesh }) => {
+      mesh.count = 0
+      mesh.userData.instanceToGrid.length = 0
+      this._markUpdates(mesh, 0)
+    })
+    if (container === this.container)
+      this.container = null
+  }
+
+  getMeshes() {
+    return Array.from(this._blockMeshes.values(), ({ mesh }) => mesh)
+  }
+
+  getMesh(blockId) {
+    return this._blockMeshes.get(blockId)?.mesh
+  }
+
+  /**
+   * 原子提交已编译的替换网格，并退休原槽位资源。
+   * @param {number} blockId 方块 ID
+   * @param {THREE.InstancedMesh} mesh 替换网格
+   * @param {number} capacity 固定容量
+   * @returns {{ mesh: THREE.InstancedMesh, capacity: number, type: object }} 旧记录
+   */
+  replaceMesh(blockId, mesh, capacity) {
+    const oldRecord = this._blockMeshes.get(blockId)
+    if (!oldRecord)
+      throw new Error(`Unknown block render slot: ${blockId}`)
+
+    const newRecord = { mesh, capacity, type: oldRecord.type }
+    this._normalizeMesh(newRecord, this._getTypeKey(blockId))
+
+    this.parent.remove(oldRecord.mesh)
+    this.parent.add(mesh)
+    this._blockMeshes.set(blockId, newRecord)
+    try {
+      this.onMeshCreated?.(mesh)
+    }
+    catch (error) {
+      this.parent.remove(mesh)
+      this.parent.add(oldRecord.mesh)
+      this._blockMeshes.set(blockId, oldRecord)
+      throw error
+    }
+
+    oldRecord.mesh.dispose()
+    oldRecord.mesh.geometry.dispose()
+    return oldRecord
+  }
+
+  /**
+   * 使用 swap-and-pop 移除单个实例。
+   * @param {THREE.InstancedMesh} mesh 实例网格
+   * @param {number} instanceId 实例索引
    */
   removeInstance(mesh, instanceId) {
-    if (!mesh || instanceId === undefined || instanceId === null)
-      return
-    if (instanceId >= mesh.count)
+    if (!mesh || instanceId == null || instanceId < 0 || instanceId >= mesh.count)
       return
 
     const lastIndex = mesh.count - 1
+    const removedGrid = mesh.userData.instanceToGrid[instanceId]
+    const ao = mesh.geometry.getAttribute('aAo')
 
-    // 如果移除的是最后一个，直接减 count 即可
-    // 如果不是最后一个，则将最后一个交换到当前位置
     if (instanceId < lastIndex) {
-      // 1. 获取最后一个实例的矩阵
       mesh.getMatrixAt(lastIndex, this._tempMatrix)
-      // 2. 将其设置到当前被删除的位置
       mesh.setMatrixAt(instanceId, this._tempMatrix)
+      ao.setX(instanceId, ao.getX(lastIndex))
 
-      // 3. 更新逆向映射和容器中的 instanceId
-      const lastGridPos = mesh.userData.instanceToGrid[lastIndex]
-      mesh.userData.instanceToGrid[instanceId] = lastGridPos
-      this.container.setBlockInstanceId(lastGridPos.x, lastGridPos.y, lastGridPos.z, instanceId)
+      const lastGrid = mesh.userData.instanceToGrid[lastIndex]
+      mesh.userData.instanceToGrid[instanceId] = lastGrid
+      this.container?.setBlockInstanceId(lastGrid.x, lastGrid.y, lastGrid.z, instanceId)
     }
 
-    // 清理最后一个索引的数据（可选，主要为了内存整洁）
-    mesh.userData.instanceToGrid[lastIndex] = null
-
-    // 减少渲染总数
-    mesh.count--
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.computeBoundingSphere()
-    // 更新统计
-    this._statsParams.totalInstances--
-    this._updateStatsPanel()
+    mesh.userData.instanceToGrid.pop()
+    if (removedGrid)
+      this.container?.setBlockInstanceId(removedGrid.x, removedGrid.y, removedGrid.z, null)
+    mesh.count = lastIndex
+    this._markUpdates(mesh, mesh.count)
+    if (mesh.count > 0)
+      mesh.computeBoundingSphere()
   }
 
   /**
-   * 为 (x,y,z) 处的方块创建一个新的实例（揭示被遮挡的方块）
-   * @param {number} x
-   * @param {number} y
-   * @param {number} z
+   * 为新暴露方块追加实例，容量不足时保持当前数据并抛出结构化错误。
    */
   addBlockInstance(x, y, z) {
     if (!this.container)
       return
 
     const block = this.container.getBlock(x, y, z)
-    // 只有非空且还没有 instanceId 的方块才需要添加实例
-    if (!block || block.id === blocks.empty.id || block.instanceId !== null) {
-      return
-    }
-
-    const mesh = this._blockMeshes.get(block.id)
-    if (!mesh) {
-      // 如果该类型的 InstancedMesh 根本不存在，说明之前这个 chunk 里没这种方块
-      // 最稳妥的方法是直接 rebuild
-      this._rebuildFromContainer()
-      return
-    }
-
-    // 检查 InstancedMesh 是否还有容量
-    if (mesh.count < mesh.instanceMatrix.count) {
-      const instanceId = mesh.count
-      mesh.count++
-
-      this._tempObject.position.set(
-        x,
-        y * this.params.heightScale,
-        z,
-      )
-      this._tempObject.updateMatrix()
-      mesh.setMatrixAt(instanceId, this._tempObject.matrix)
-
-      // 更新映射关系
-      mesh.userData.instanceToGrid[instanceId] = { x, y, z }
-      this.container.setBlockInstanceId(x, y, z, instanceId)
-
-      mesh.instanceMatrix.needsUpdate = true
-      mesh.computeBoundingSphere()
-
-      this._statsParams.totalInstances++
-      this._updateStatsPanel()
-    }
-    else {
-      // 容量不足，触发全量重建以扩容
-      this._rebuildFromContainer()
-    }
-  }
-
-  /**
-   * 调试面板
-   */
-  debugInit() {
-    this.debugFolder = this.debug.ui.addFolder({
-      title: this._debugTitle,
-      expanded: false,
-    })
-
-    const renderFolder = this.debugFolder.addFolder({
-      title: '渲染参数',
-      expanded: true,
-    })
-
-    renderFolder.addBinding(this.params, 'scale', {
-      label: '整体缩放',
-      min: 0.1,
-      max: 3,
-      step: 0.1,
-    }).on('change', () => {
-      this.group.scale.setScalar(this.params.scale)
-    })
-
-    renderFolder.addBinding(this.params, 'heightScale', {
-      label: '高度缩放',
-      min: 0.5,
-      max: 5,
-      step: 0.1,
-    }).on('change', () => {
-      // 重新刷写矩阵
-      this._rebuildFromContainer()
-    })
-
-    renderFolder.addBinding(this.params, 'showOresOnly', {
-      label: '仅显示矿产',
-    }).on('change', () => {
-      this._rebuildFromContainer()
-    })
-
-    const statsFolder = this.debugFolder.addFolder({
-      title: '统计信息',
-      expanded: false,
-    })
-    this._statsBinding = statsFolder.addBinding(this._statsParams, 'totalInstances', {
-      label: '实例总数',
-      readonly: true,
-    })
-
-    // 方块材质调试
-    const materialsFolder = this.debugFolder.addFolder({
-      title: '方块材质',
-      expanded: false,
-    })
-
-    materialsFolder.addBinding(blocks.treeLeaves, 'alphaTest', {
-      label: '树叶 AlphaTest',
-      min: 0,
-      max: 1,
-      step: 0.01,
-    }).on('change', () => {
-      // 材质级参数变更需先清空共享材质缓存，重建时才会生效
-      clearSharedMaterialCache()
-      this._rebuildFromContainer()
-    })
-
-    materialsFolder.addBinding(blocks.treeLeaves, 'transparent', {
-      label: '树叶 透明',
-    }).on('change', () => {
-      clearSharedMaterialCache()
-      this._rebuildFromContainer()
-    })
-
-    // ===== 风动效果参数 =====
-    const windFolder = this.debugFolder.addFolder({
-      title: '风动效果',
-      expanded: false,
-    })
-
-    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'windSpeed', {
-      label: '风速',
-      min: 0.5,
-      max: 5,
-      step: 0.1,
-    }).on('change', () => {
-      // 实时更新所有动画材质的 windSpeed uniform
-      this._animatedMaterials.forEach((mat) => {
-        if (mat.uniforms?.uWindSpeed) {
-          mat.uniforms.uWindSpeed.value = ANIMATION_DEFAULTS.wind.windSpeed
-        }
-      })
-    })
-
-    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'swayAmplitude', {
-      label: '摇摆幅度',
-      min: 0,
-      max: 2,
-      step: 0.01,
-    }).on('change', () => {
-      this._animatedMaterials.forEach((mat) => {
-        if (mat.uniforms?.uSwayAmplitude) {
-          mat.uniforms.uSwayAmplitude.value = ANIMATION_DEFAULTS.wind.swayAmplitude
-        }
-      })
-    })
-
-    windFolder.addBinding(ANIMATION_DEFAULTS.wind, 'phaseScale', {
-      label: '相位差',
-      min: 0.1,
-      max: 3,
-      step: 0.1,
-    }).on('change', () => {
-      this._animatedMaterials.forEach((mat) => {
-        if (mat.uniforms?.uPhaseScale) {
-          mat.uniforms.uPhaseScale.value = ANIMATION_DEFAULTS.wind.phaseScale
-        }
-      })
-    })
-  }
-
-  /**
-   * 刷新统计显示（避免面板未初始化时报错）
-   */
-  _updateStatsPanel() {
-    if (this._statsBinding?.refresh)
-      this._statsBinding.refresh()
-  }
-
-  /**
-   * 每帧更新：更新所有动画材质的时间 uniform
-   */
-  update() {
-    if (this._animatedMaterials.length === 0)
+    if (!block || block.id === blocks.empty.id || block.instanceId !== null)
       return
 
-    // 将毫秒转换为秒
-    const elapsed = this.time.elapsed * 0.001
+    const record = this._blockMeshes.get(block.id)
+    const capacity = record?.capacity ?? 0
+    const required = (record?.mesh.count ?? 0) + 1
+    if (!record || required > capacity) {
+      throw new ChunkRenderCapacityError({
+        layer: 'blocks',
+        typeId: this._getTypeKey(block.id),
+        required,
+        capacity,
+      })
+    }
 
-    this._animatedMaterials.forEach((mat) => {
-      if (mat.uniforms?.uTime) {
-        mat.uniforms.uTime.value = elapsed
-      }
-    })
+    const { mesh } = record
+    const instanceId = mesh.count
+    this._tempObject.position.set(x, y * this.params.heightScale, z)
+    this._tempObject.updateMatrix()
+    mesh.setMatrixAt(instanceId, this._tempObject.matrix)
+    mesh.geometry.getAttribute('aAo').setX(instanceId, block.ao != null ? block.ao / 3 : 0)
+    mesh.userData.instanceToGrid[instanceId] = { x, y, z }
+    this.container.setBlockInstanceId(x, y, z, instanceId)
+    mesh.count++
+    this._markUpdates(mesh, mesh.count)
+    mesh.computeBoundingSphere()
   }
 
-  /**
-   * 清理当前所有实例
-   */
-  _disposeChildren() {
-    this._blockMeshes.forEach((mesh) => {
-      // 材质为全局共享（getSharedBlockMaterials），不随 chunk 卸载 dispose
-      this.group.remove(mesh)
-      mesh.dispose?.()
+  /** 释放槽位拥有的网格和方块几何体，不释放共享材质。 */
+  dispose() {
+    if (this._disposed)
+      return
+
+    this._blockMeshes.forEach(({ mesh }) => {
+      this.parent.remove(mesh)
+      mesh.dispose()
+      mesh.geometry.dispose()
     })
     this._blockMeshes.clear()
-    // 清理动画材质追踪列表
-    this._animatedMaterials = []
-  }
-
-  /**
-   * 释放资源
-   */
-  dispose() {
-    if (this._listenDataReady) {
-      emitter.off('terrain:data-ready', this._handleDataReady)
-    }
-    emitter.off('shadow:quality-changed', this._handleShadowQuality)
-    emitter.off('game:mining-progress', this._handleMiningProgress)
-    emitter.off('game:mining-cancel', this._handleMiningCancel)
-    emitter.off('game:mining-complete', this._handleMiningCancel)
-    this._disposeChildren()
-    this.scene.remove(this.group)
+    this.container = null
+    this._disposed = true
   }
 }
