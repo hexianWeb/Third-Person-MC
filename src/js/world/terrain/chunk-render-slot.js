@@ -297,9 +297,12 @@ export default class ChunkRenderSlot {
       materials: new Set(replacements.map(({ material }) => material)),
       oldMaterials: new Set(replacements.map(({ object }) => object.material)),
       hasReplacements: replacements.length > 0,
+      isCurrent: () => !this._disposed && replacements.every(({ object }) => object.parent === this.group),
       commit: () => {
         if (state !== 'pending')
           throw new Error(`Cannot commit material replacement from state ${state}`)
+        if (!replacements.every(({ object }) => object.parent === this.group))
+          throw new Error('Cannot commit material replacement for a retired render object')
         replacements.forEach(({ object, material }) => {
           object.material = material
         })

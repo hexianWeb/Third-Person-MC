@@ -13,12 +13,12 @@ import {
   isSupportedChunkViewDistance,
   STAGING_SLOT_COUNT,
 } from '../../config/chunk-render-capacity.js'
-import { shouldTerrainCastShadow } from '../../config/shadow-config.js'
+import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 import IdleQueue from '../../utils/utils/idle-queue.js'
 import BiomeGenerator from './biome-generator.js'
-import { blocks, clearSharedMaterialCache, createSharedMaterialFactory, resources } from './blocks-config.js'
+import { blocks, createStagedMaterialGeneration, resources } from './blocks-config.js'
 import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
 import ChunkRenderSlotPool from './chunk-render-slot-pool.js'
 import {
@@ -168,6 +168,7 @@ export default class ChunkManager {
     if (!quality)
       return
 
+    SHADOW_CONFIG.quality = quality
     this.renderSlotPool.slots.forEach((slot) => {
       slot.blockLayer.getMeshes().forEach((mesh) => {
         mesh.castShadow = shouldTerrainCastShadow(quality, mesh.userData.blockId)
@@ -176,17 +177,14 @@ export default class ChunkManager {
   }
 
   invalidateMaterialType(typeId = 'all') {
-    clearSharedMaterialCache(typeId)
-    const materialFactory = createSharedMaterialFactory(typeId, this.experience.resources.items)
-    const generation = this.renderSlotPool.invalidateMaterialType(typeId, materialFactory)
-    if (typeof generation === 'number')
+    const materialGeneration = createStagedMaterialGeneration(typeId, this.experience.resources.items)
+    const generation = this.renderSlotPool.invalidateMaterialType(typeId, materialGeneration)
+    if (typeof generation === 'number') {
+      materialGeneration.dispose()
       return Promise.resolve(false)
+    }
 
-    return generation.then((committed) => {
-      if (!committed && this.renderSlotPool.materialEpoch === generation.epoch)
-        clearSharedMaterialCache(typeId)
-      return committed
-    })
+    return generation
   }
 
   _addBlockInstanceSafely(chunkKey, renderer, x, y, z) {
@@ -1396,7 +1394,6 @@ export default class ChunkManager {
         this._queueActiveCapacityRefresh(chunkKey, error)
       }
     })
-    this._updateStats()
     // Keep the committed window intact while the fixed pool may be fully staged.
     // 当前固定池可能已被 transition 占满；保留现有完整窗口，等待后续窗口过渡重填。
     this._updateStats()

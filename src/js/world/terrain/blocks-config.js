@@ -539,6 +539,104 @@ export function createSharedMaterialFactory(typeId, textureItems) {
 }
 
 /**
+ * Create a material generation that owns its previews until the caller commits it.
+ * This keeps the active shared cache intact while WebGPU compiles detached previews.
+ * @param {string|number|null|undefined} typeId Material type to rebuild
+ * @param {Record<string, THREE.Texture>} textureItems Loaded texture resources
+ * @returns {{ materialFactory: (object: THREE.Object3D) => THREE.Material|THREE.Material[]|null, commit: () => Set<THREE.Material>, dispose: () => void }} Detached material generation lifecycle
+ */
+export function createStagedMaterialGeneration(typeId, textureItems) {
+  const matchesAllTypes = typeId === 'all' || typeId == null
+  const blockType = matchesAllTypes ? null : getBlockType(typeId)
+  const plantType = matchesAllTypes ? null : getPlantType(typeId)
+  const stagedBlockMaterials = new Map()
+  const stagedPlantMaterials = new Map()
+  let state = 'pending'
+
+  const getStagedBlockMaterials = (type) => {
+    let materials = stagedBlockMaterials.get(type.id)
+    if (materials === undefined) {
+      materials = createMaterials(type, textureItems)
+      if (materials)
+        stagedBlockMaterials.set(type.id, materials)
+    }
+    return materials
+  }
+
+  const getStagedPlantMaterials = (type) => {
+    let material = stagedPlantMaterials.get(type.id)
+    if (material === undefined) {
+      material = createPlantMaterials(type, textureItems)
+      if (material)
+        stagedPlantMaterials.set(type.id, material)
+    }
+    return material
+  }
+
+  const collectCachedMaterials = (cache, materials) => {
+    cache.forEach((value) => {
+      const materialList = Array.isArray(value) ? value : [value]
+      materialList.filter(Boolean).forEach(material => materials.add(material))
+    })
+  }
+
+  const replaceCacheEntries = (cache, stagedCache, displacedMaterials) => {
+    stagedCache.forEach((materials, id) => {
+      const previous = cache.get(id)
+      const materialList = Array.isArray(previous) ? previous : [previous]
+      materialList.filter(Boolean).forEach(material => displacedMaterials.add(material))
+      cache.set(id, materials)
+    })
+  }
+
+  return {
+    materialFactory(object) {
+      if (state !== 'pending')
+        return null
+
+      const objectBlockType = object.userData?.blockId !== undefined
+        ? getBlockType(object.userData.blockId)
+        : null
+      if (objectBlockType && (matchesAllTypes || objectBlockType.id === blockType?.id))
+        return getStagedBlockMaterials(objectBlockType)
+
+      const objectPlantType = object.userData?.plantId !== undefined
+        ? getPlantType(object.userData.plantId)
+        : null
+      if (objectPlantType && (matchesAllTypes || objectPlantType.id === plantType?.id))
+        return getStagedPlantMaterials(objectPlantType)
+
+      return null
+    },
+    commit() {
+      if (state !== 'pending')
+        throw new Error(`Cannot commit staged material generation from state ${state}`)
+
+      const displacedMaterials = new Set()
+      if (matchesAllTypes) {
+        collectCachedMaterials(_blockMaterialCache, displacedMaterials)
+        collectCachedMaterials(_plantMaterialCache, displacedMaterials)
+        _blockMaterialCache.clear()
+        _plantMaterialCache.clear()
+      }
+
+      replaceCacheEntries(_blockMaterialCache, stagedBlockMaterials, displacedMaterials)
+      replaceCacheEntries(_plantMaterialCache, stagedPlantMaterials, displacedMaterials)
+      state = 'committed'
+      return displacedMaterials
+    },
+    dispose() {
+      if (state !== 'pending')
+        return
+
+      disposeCachedMaterials(stagedBlockMaterials)
+      disposeCachedMaterials(stagedPlantMaterials)
+      state = 'disposed'
+    },
+  }
+}
+
+/**
  * 清空共享材质缓存（调试面板修改 alphaTest/transparent 等材质级参数后调用）
  * 注意：不主动 dispose 旧材质，由持有方重建时自然替换
  */

@@ -49,6 +49,8 @@ export default class ChunkRenderSlotPool {
 
     this._readyPromise = null
     this._materialGenerationPromise = null
+    this._materialGenerationId = 0
+    this._pendingOverflowCount = 0
     this._acquiredSlots = new Set()
     this._invalidatedMaterialTypes = new Set()
     this._sharedWaterGeometry = null
@@ -199,7 +201,11 @@ export default class ChunkRenderSlotPool {
     if (typeof guard !== 'function')
       throw new TypeError('Chunk render overflow guard must be a function')
 
+    // The replacement snapshots the current material. A pending material swap must
+    // not commit onto the retired mesh while this replacement is being compiled.
+    this._invalidateMaterialGeneration()
     const transaction = slot.replaceOverflowMesh(error)
+    this._pendingOverflowCount++
     let committed = false
     try {
       await this._compileWithRetry(
@@ -217,6 +223,8 @@ export default class ChunkRenderSlotPool {
       if (this._destroyed || !guard())
         return false
 
+      // A new generation may have started while the overflow mesh was compiling.
+      this._invalidateMaterialGeneration()
       transaction.commit()
       committed = true
       this.compileCount++
@@ -224,29 +232,64 @@ export default class ChunkRenderSlotPool {
       return true
     }
     finally {
+      this._pendingOverflowCount--
       if (!committed)
         transaction.dispose()
     }
   }
 
   /** 标记结构材质失效，并推进供异步守卫校验的材质纪元。 */
-  invalidateMaterialType(typeId, materialFactory) {
+  invalidateMaterialType(typeId, materialGeneration) {
     if (this._destroyed)
       return this.materialEpoch
 
     this._invalidatedMaterialTypes.add(typeId)
     const epoch = ++this.materialEpoch
-    if (typeof materialFactory !== 'function')
+    const generationId = this._invalidateMaterialGeneration()
+    if (!materialGeneration)
       return epoch
 
-    const generation = this._replaceMaterialGeneration(typeId, materialFactory, epoch)
+    const generation = this._replaceMaterialGeneration(
+      typeId,
+      this._normalizeMaterialGeneration(materialGeneration),
+      epoch,
+      generationId,
+    )
     generation.epoch = epoch
     this._materialGenerationPromise = generation
     return generation
   }
 
-  _isCurrentMaterialGeneration(epoch) {
-    return !this._destroyed && epoch === this.materialEpoch
+  _invalidateMaterialGeneration() {
+    return ++this._materialGenerationId
+  }
+
+  _normalizeMaterialGeneration(materialGeneration) {
+    if (typeof materialGeneration === 'function') {
+      return {
+        materialFactory: materialGeneration,
+        commit: () => new Set(),
+        dispose: () => {},
+        disposePreviewMaterials: true,
+      }
+    }
+
+    if (typeof materialGeneration?.materialFactory !== 'function')
+      throw new TypeError('Chunk render material generation requires a materialFactory function')
+
+    return {
+      materialFactory: materialGeneration.materialFactory,
+      commit: () => materialGeneration.commit?.() ?? new Set(),
+      dispose: () => materialGeneration.dispose?.(),
+      disposePreviewMaterials: false,
+    }
+  }
+
+  _isCurrentMaterialGeneration(epoch, generationId) {
+    return !this._destroyed
+      && epoch === this.materialEpoch
+      && generationId === this._materialGenerationId
+      && this._pendingOverflowCount === 0
   }
 
   _collectTransactionMaterials(transactions, key) {
@@ -267,14 +310,24 @@ export default class ChunkRenderSlotPool {
     })
   }
 
-  async _replaceMaterialGeneration(typeId, materialFactory, epoch) {
-    const transactions = this.slots.map(slot => slot.prepareMaterialReplacement(typeId, materialFactory))
+  async _replaceMaterialGeneration(typeId, materialGeneration, epoch, generationId) {
+    const transactions = this.slots.map(slot =>
+      slot.prepareMaterialReplacement(typeId, materialGeneration.materialFactory),
+    )
     const replacementMaterials = this._collectTransactionMaterials(transactions, 'materials')
     const oldMaterials = this._collectTransactionMaterials(transactions, 'oldMaterials')
+    let finalized = false
     const discard = () => {
+      if (finalized)
+        return
+
+      finalized = true
       transactions.forEach(transaction => transaction.dispose())
-      this._disposeMaterials(replacementMaterials)
+      materialGeneration.dispose()
+      if (materialGeneration.disposePreviewMaterials)
+        this._disposeMaterials(replacementMaterials)
     }
+    const transactionsAreCurrent = () => transactions.every(transaction => transaction.isCurrent?.() !== false)
 
     if (!transactions.some(transaction => transaction.hasReplacements)) {
       discard()
@@ -290,25 +343,28 @@ export default class ChunkRenderSlotPool {
           typeId,
           epoch,
         })
-        if (!this._isCurrentMaterialGeneration(epoch)) {
+        if (!this._isCurrentMaterialGeneration(epoch, generationId) || !transactionsAreCurrent()) {
           discard()
           return false
         }
         this.compileCount++
       }
 
-      if (!this._isCurrentMaterialGeneration(epoch)) {
+      if (!this._isCurrentMaterialGeneration(epoch, generationId) || !transactionsAreCurrent()) {
         discard()
         return false
       }
 
+      const displacedCacheMaterials = materialGeneration.commit() ?? new Set()
       transactions.forEach((transaction) => {
         transaction.commit()
       })
       this.slots.forEach((slot) => {
         slot.materialEpoch = epoch
       })
+      displacedCacheMaterials.forEach(material => oldMaterials.add(material))
       this._disposeMaterials(oldMaterials, replacementMaterials)
+      finalized = true
       return true
     }
     catch (error) {
@@ -373,6 +429,7 @@ export default class ChunkRenderSlotPool {
       return
 
     this._destroyed = true
+    this._invalidateMaterialGeneration()
     this._acquiredSlots.clear()
     this.slots.forEach(slot => slot.dispose())
     disposeSharedTerrainResources()

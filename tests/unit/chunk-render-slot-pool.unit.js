@@ -348,3 +348,206 @@ test('dispose during prewarm prevents late completion from mutating disposed slo
   assert.equal(firstSlot.resetCalls, 0)
   assert.equal(firstSlot.state, 'disposed')
 })
+
+function createMaterialSlot({ id, onMeshCreated, initialMaterial = { name: `old-${id}` } }) {
+  const slot = createFakeSlot({ id, onMeshCreated })
+  slot.renderObject = { material: initialMaterial, installed: true }
+  slot.materialTransactions = []
+  slot.prepareMaterialReplacement = function (typeId, materialFactory) {
+    const material = materialFactory(this.renderObject, typeId)
+    const transaction = {
+      group: { materialPreviewFor: this.id },
+      materials: new Set([material]),
+      oldMaterials: new Set([this.renderObject.material]),
+      hasReplacements: true,
+      commitCalls: 0,
+      disposeCalls: 0,
+      isCurrent: () => this.renderObject.installed,
+      commit: () => {
+        assert.equal(transaction.isCurrent(), true)
+        transaction.commitCalls++
+        this.renderObject.material = material
+      },
+      dispose: () => {
+        transaction.disposeCalls++
+      },
+    }
+    this.materialTransactions.push(transaction)
+    return transaction
+  }
+  const replaceOverflowMesh = slot.replaceOverflowMesh.bind(slot)
+  slot.replaceOverflowMesh = function (error) {
+    const transaction = replaceOverflowMesh(error)
+    const commit = transaction.commit.bind(transaction)
+    transaction.commit = () => {
+      this.renderObject.installed = false
+      return commit()
+    }
+    return transaction
+  }
+  return slot
+}
+
+function createStagedMaterialGeneration() {
+  const stagedMaterial = {
+    disposeCalls: 0,
+    dispose() {
+      this.disposeCalls++
+    },
+  }
+  return {
+    stagedMaterial,
+    commitCalls: 0,
+    disposeCalls: 0,
+    materialFactory: () => stagedMaterial,
+    commit() {
+      this.commitCalls++
+    },
+    dispose() {
+      this.disposeCalls++
+      stagedMaterial.dispose()
+    },
+  }
+}
+
+test('failed material generation retains the active generation and disposes staged ownership once', async () => {
+  const generation = createStagedMaterialGeneration()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
+    async compileAsync(target) {
+      if (target.materialPreviewFor !== undefined)
+        throw new Error('material compile failed')
+    },
+  })
+
+  const pending = pool.invalidateMaterialType('grass', generation)
+
+  assert.equal(typeof pending.then, 'function')
+  assert.equal(await pending, false)
+  assert.equal(generation.commitCalls, 0)
+  assert.equal(generation.disposeCalls, 1)
+  assert.equal(generation.stagedMaterial.disposeCalls, 1)
+  assert.ok(pool.slots.every(slot => slot.materialEpoch === 0))
+  assert.ok(pool.slots.every(slot => slot.materialTransactions[0].commitCalls === 0))
+  assert.ok(pool.slots.every(slot => slot.materialTransactions[0].disposeCalls === 1))
+})
+
+test('a committed material generation disposes a shared active material once', async () => {
+  const activeMaterial = {
+    disposeCalls: 0,
+    dispose() {
+      this.disposeCalls++
+    },
+  }
+  const generation = createStagedMaterialGeneration()
+  function SharedMaterialSlot(options) {
+    return createMaterialSlot({ ...options, initialMaterial: activeMaterial })
+  }
+  const pool = await initializePool(createPool({
+    slotFactory: SharedMaterialSlot,
+  }))
+
+  assert.equal(await pool.invalidateMaterialType('grass', generation), true)
+  assert.equal(generation.commitCalls, 1)
+  assert.equal(generation.disposeCalls, 0)
+  assert.equal(activeMaterial.disposeCalls, 1)
+  assert.equal(generation.stagedMaterial.disposeCalls, 0)
+})
+
+test('stale material generation disposes staged ownership without changing the active generation', async () => {
+  let finishCompile
+  const compileGate = new Promise((resolve) => {
+    finishCompile = resolve
+  })
+  const generation = createStagedMaterialGeneration()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
+    async compileAsync(target) {
+      if (target.materialPreviewFor !== undefined)
+        await compileGate
+    },
+  })
+
+  const pending = pool.invalidateMaterialType('grass', generation)
+  await Promise.resolve()
+  pool.invalidateMaterialType('stone')
+  finishCompile()
+
+  assert.equal(await pending, false)
+  assert.equal(generation.commitCalls, 0)
+  assert.equal(generation.disposeCalls, 1)
+  assert.equal(generation.stagedMaterial.disposeCalls, 1)
+  assert.ok(pool.slots.every(slot => slot.materialEpoch === 0))
+})
+
+test('destroy and overflow both invalidate a pending material generation before it can commit', async () => {
+  let finishCompile
+  const compileGate = new Promise((resolve) => {
+    finishCompile = resolve
+  })
+  let materialCompileStarted
+  const materialStarted = new Promise((resolve) => {
+    materialCompileStarted = resolve
+  })
+  const generation = createStagedMaterialGeneration()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
+    async compileAsync(target) {
+      if (target.materialPreviewFor !== undefined) {
+        materialCompileStarted()
+        await compileGate
+      }
+    },
+  })
+
+  const pending = pool.invalidateMaterialType('grass', generation)
+  await materialStarted
+  const slot = pool.acquire()
+  assert.equal(await pool.ensureCapacity(slot, { layer: 'blocks', typeId: 'grass', required: 5 }, () => true), true)
+  finishCompile()
+
+  assert.equal(await pending, false)
+  assert.equal(generation.commitCalls, 0)
+  assert.equal(generation.disposeCalls, 1)
+  assert.equal(generation.stagedMaterial.disposeCalls, 1)
+  assert.equal(slot.materialEpoch, 0)
+
+  const destroyingGeneration = createStagedMaterialGeneration()
+  const destroyingPending = pool.invalidateMaterialType('stone', destroyingGeneration)
+  pool.dispose()
+  assert.equal(await destroyingPending, false)
+  assert.equal(destroyingGeneration.commitCalls, 0)
+  assert.equal(destroyingGeneration.disposeCalls, 1)
+  assert.equal(destroyingGeneration.stagedMaterial.disposeCalls, 1)
+})
+
+test('a material generation started during overflow cannot commit onto the outgoing mesh', async () => {
+  let releaseOverflowCompile
+  const overflowCompileGate = new Promise((resolve) => {
+    releaseOverflowCompile = resolve
+  })
+  let overflowCompileStarted
+  const overflowStarted = new Promise((resolve) => {
+    overflowCompileStarted = resolve
+  })
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
+    async compileAsync(target) {
+      if (target.replacementFor !== undefined) {
+        overflowCompileStarted()
+        await overflowCompileGate
+      }
+    },
+  })
+  const slot = pool.acquire()
+  const overflow = pool.ensureCapacity(slot, { layer: 'blocks', typeId: 'grass', required: 5 }, () => true)
+
+  await overflowStarted
+  const generation = createStagedMaterialGeneration()
+  const pending = pool.invalidateMaterialType('grass', generation)
+  await new Promise(resolve => setImmediate(resolve))
+  releaseOverflowCompile()
+
+  assert.equal(await overflow, true)
+  assert.equal(await pending, false)
+  assert.equal(generation.commitCalls, 0)
+  assert.equal(generation.disposeCalls, 1)
+  assert.equal(generation.stagedMaterial.disposeCalls, 1)
+  assert.equal(slot.materialEpoch, 0)
+})
