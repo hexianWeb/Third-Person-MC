@@ -66,7 +66,7 @@ export default class World {
       },
     })
 
-    this.chunkManager.viewDistance = settingsStore.chunkViewDistance
+    this.chunkManager.setViewDistance(settingsStore.chunkViewDistance)
     this.chunkManager.unloadPadding = settingsStore.chunkUnloadPadding
 
     this.experience.terrainDataManager = this.chunkManager
@@ -123,7 +123,7 @@ export default class World {
       if (!this.chunkManager)
         return
       if (data.viewDistance !== undefined)
-        this.chunkManager.viewDistance = data.viewDistance
+        this.chunkManager.setViewDistance(data.viewDistance)
       if (data.unloadPadding !== undefined)
         this.chunkManager.unloadPadding = data.unloadPadding
       if (this.player) {

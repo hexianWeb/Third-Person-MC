@@ -10,7 +10,13 @@ import {
   TOTAL_SLOT_COUNT,
 } from '../../src/js/config/chunk-render-capacity.js'
 import ChunkRenderCapacityError from '../../src/js/world/terrain/chunk-render-capacity-error.js'
-import { diffChunkWindows, getChunkWindow } from '../../src/js/world/terrain/chunk-window.js'
+import {
+  diffChunkWindows,
+  getChunkWindow,
+  getInitialChunkWindowCenter,
+  getNextChunkWindowCenter,
+  isCurrentChunkAssignment,
+} from '../../src/js/world/terrain/chunk-window.js'
 import TerrainContainer from '../../src/js/world/terrain/terrain-container.js'
 
 test('fixed render policy owns nine active and five staging slots', () => {
@@ -31,6 +37,47 @@ test('a diagonal one-chunk move has five incoming chunks', () => {
   assert.equal(diff.overlap.size, 4)
   assert.equal(diff.incoming.size, 5)
   assert.equal(diff.outgoing.size, 5)
+})
+
+test('a far request advances one complete window at a time', () => {
+  const requested = { x: 3, z: 4 }
+  let center = { x: 0, z: 0 }
+  const steps = []
+
+  while (center.x !== requested.x || center.z !== requested.z) {
+    const next = getNextChunkWindowCenter(center, requested)
+    const diff = diffChunkWindows(getChunkWindow(center.x, center.z), getChunkWindow(next.x, next.z))
+    steps.push({ center: next, incoming: diff.incoming.size })
+    center = next
+  }
+
+  assert.deepEqual(steps.map(({ center: stepCenter }) => stepCenter), [
+    { x: 1, z: 1 },
+    { x: 2, z: 2 },
+    { x: 3, z: 3 },
+    { x: 3, z: 4 },
+  ])
+  assert.ok(steps.every(({ incoming }) => incoming <= STAGING_SLOT_COUNT))
+})
+
+test('the initial render transition keeps a center requested during prewarm', () => {
+  assert.deepEqual(getInitialChunkWindowCenter({ x: -4, z: 6 }), { x: -4, z: 6 })
+  assert.deepEqual(getInitialChunkWindowCenter(null), { x: 0, z: 0 })
+})
+
+test('a superseded assignment is stale even when its key and slot still match', () => {
+  const slot = { assignmentId: 7 }
+  const targetWindow = getChunkWindow(1, 0)
+
+  assert.equal(isCurrentChunkAssignment({
+    assignmentId: 7,
+    chunkKey: '1,0',
+    currentTransitionId: 12,
+    destroyed: false,
+    slot,
+    targetWindow,
+    transitionId: 11,
+  }), false)
 })
 
 test('capacity errors expose structured overflow context', () => {

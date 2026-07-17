@@ -9,11 +9,24 @@ import {
   TREE_PARAMS,
   WATER_PARAMS,
 } from '../../config/chunk-config.js'
+import {
+  isSupportedChunkViewDistance,
+  STAGING_SLOT_COUNT,
+} from '../../config/chunk-render-capacity.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 import IdleQueue from '../../utils/utils/idle-queue.js'
 import BiomeGenerator from './biome-generator.js'
 import { blocks, resources } from './blocks-config.js'
+import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
+import ChunkRenderSlotPool from './chunk-render-slot-pool.js'
+import {
+  diffChunkWindows,
+  getChunkWindow,
+  getInitialChunkWindowCenter,
+  getNextChunkWindowCenter,
+  isCurrentChunkAssignment,
+} from './chunk-window.js'
 import TerrainChunk from './terrain-chunk.js'
 import TerrainPersistence from './terrain-persistence.js'
 
@@ -33,6 +46,7 @@ export default class ChunkManager {
     this.terrainParams = options.terrain ? { ...TERRAIN_PARAMS, ...options.terrain } : { ...TERRAIN_PARAMS }
     this.treeParams = options.trees ? { ...TREE_PARAMS, ...options.trees } : { ...TREE_PARAMS }
     this.renderParams = { ...RENDER_PARAMS }
+    this.renderParams.chunkWidth = this.chunkWidth
     this.waterParams = options.water ? { ...WATER_PARAMS, ...options.water } : { ...WATER_PARAMS }
     this.biomeParams = {
       biomeSource: options.biomeSource ?? 'generator',
@@ -51,7 +65,26 @@ export default class ChunkManager {
     /** @type {Map<string, TerrainChunk>} */
     this.chunks = new Map()
 
+    /** @type {Map<string, import('./chunk-render-slot.js').default>} */
+    this.activeSlots = new Map()
+    this.renderSlotPool = new ChunkRenderSlotPool({
+      resources: this.experience.resources,
+      renderParams: this.renderParams,
+      waterParams: this.waterParams,
+    })
+
     this.idleQueue = new IdleQueue()
+
+    this._renderPoolReadyPromise = null
+    this._renderSlotsReady = false
+    this._transitionRunnerPromise = null
+    this._transitionId = 0
+    this._nextAssignmentId = 0
+    this._latestRequestedCenter = null
+    this._committedCenter = null
+    this._targetWindow = new Set()
+    this._destroyed = false
+    this._hasWarnedUnsupportedViewDistance = false
 
     this._lastPlayerChunkX = null
     this._lastPlayerChunkZ = null
@@ -82,6 +115,44 @@ export default class ChunkManager {
     // Step2：初始化时先确保玩家附近一圈 chunk 存在并排队生成
     // 这里以 (0,0) 为中心（玩家初始通常在 chunk(0,0)）
     this.updateStreaming({ x: this.chunkWidth * 0.5, z: this.chunkWidth * 0.5 }, true)
+    return this.initializeRenderPool()
+  }
+
+  initializeRenderPool() {
+    if (!this._renderPoolReadyPromise) {
+      this._renderPoolReadyPromise = this.experience.renderer.whenReady()
+        .then(() => this.renderSlotPool.initialize(
+          this.experience.renderer.instance,
+          this.experience.scene,
+          this.experience.camera.instance,
+        ))
+        .then(async () => {
+          this._renderSlotsReady = true
+          const initialCenter = getInitialChunkWindowCenter(this._latestRequestedCenter)
+          await this._requestWindow(initialCenter.x, initialCenter.z, true)
+        })
+    }
+    return this._renderPoolReadyPromise
+  }
+
+  whenRenderReady() {
+    return this._renderPoolReadyPromise ?? Promise.resolve()
+  }
+
+  setViewDistance(value) {
+    if (!isSupportedChunkViewDistance(value)) {
+      if (!this._hasWarnedUnsupportedViewDistance) {
+        console.warn(`[ChunkManager] render slot pool requires viewDistance=1; ignored ${value}`)
+        this._hasWarnedUnsupportedViewDistance = true
+      }
+      return false
+    }
+    this.viewDistance = value
+    return true
+  }
+
+  getRenderDiagnostics() {
+    return this.renderSlotPool.getDiagnostics()
   }
 
   /**
@@ -202,8 +273,7 @@ export default class ChunkManager {
       if (currentChunk?.state === 'init') {
         currentChunk.generator.params.seed = this.seed
         currentChunk.generateData()
-        currentChunk.buildMesh()
-        currentChunk.renderer.group.scale.setScalar(this.renderParams.scale)
+        this._applyChunkModifications(currentChunk)
       }
     }
 
@@ -441,7 +511,6 @@ export default class ChunkManager {
       seed: this.seed,
       terrain: this.terrainParams,
       sharedTerrainParams: this.terrainParams,
-      sharedRenderParams: this.renderParams,
       sharedTreeParams: this.treeParams,
       sharedWaterParams: this.waterParams,
       sharedBiomeGenerator: this.biomeGenerator, // STEP 2: 共享群系生成器
@@ -478,64 +547,18 @@ export default class ChunkManager {
     this._lastPlayerChunkX = pcx
     this._lastPlayerChunkZ = pcz
 
-    const dLoad = this.viewDistance
-    const dUnload = this.viewDistance + this.unloadPadding
-
-    // ===== 计算加载目标集合 =====
-    const targetLoad = new Set()
-    for (let cz = pcz - dLoad; cz <= pcz + dLoad; cz++) {
-      for (let cx = pcx - dLoad; cx <= pcx + dLoad; cx++) {
-        targetLoad.add(this._key(cx, cz))
-      }
-    }
-
-    // ===== Add：创建缺失 chunk，并按距离优先排队生成 =====
-    const toAdd = []
-    targetLoad.forEach((key) => {
-      if (!this.chunks.has(key)) {
-        const [sx, sz] = key.split(',').map(Number)
-        toAdd.push({ chunkX: sx, chunkZ: sz })
-      }
-    })
-
-    // 中心优先：max(|dx|,|dz|) 越小越先
-    toAdd.sort((a, b) => {
-      const da = Math.max(Math.abs(a.chunkX - pcx), Math.abs(a.chunkZ - pcz))
-      const db = Math.max(Math.abs(b.chunkX - pcx), Math.abs(b.chunkZ - pcz))
-      return da - db
-    })
-
-    for (const item of toAdd) {
-      const chunk = this._ensureChunk(item.chunkX, item.chunkZ)
-      this._enqueueChunkBuild(chunk, pcx, pcz)
-    }
-
-    // ===== Remove：卸载滞后（只移除 dUnload 外的 chunk）=====
-    for (const [key, chunk] of this.chunks.entries()) {
-      const cx = chunk.chunkX
-      const cz = chunk.chunkZ
-      if (Math.abs(cx - pcx) > dUnload || Math.abs(cz - pcz) > dUnload) {
-        // 取消队列任务（避免卸载后仍被执行）
-        this.idleQueue.cancelByPrefix(`${key}:`)
-        chunk.dispose()
-        this.chunks.delete(key)
-      }
-    }
-
-    // ===== 碰撞保底：玩家脚下 chunk 强制同步生成数据（避免出生/边界空洞）=====
-    // 碰撞只依赖数据层，mesh 构建交给队列以最高优先级执行，减少同步阻塞时间
+    // 碰撞只依赖数据层，玩家当前 chunk 始终同步优先生成。
     const currentKey = this._key(pcx, pcz)
-    const currentChunk = this.chunks.get(currentKey)
+    const currentChunk = this._ensureChunk(pcx, pcz)
     if (currentChunk?.state === 'init') {
       currentChunk.generator.params.seed = this.seed
       currentChunk.generateData()
       this._applyChunkModifications(currentChunk)
-      // 数据已同步生成，取消排队中的 data 任务，直接排 mesh（priority -1 保证最先执行）
       this.idleQueue.cancel(`${currentKey}:data`)
-      this._enqueueMeshBuild(currentChunk, -1)
     }
 
     this._updateStats()
+    return this._requestWindow(pcx, pcz)
   }
 
   /**
@@ -573,48 +596,227 @@ export default class ChunkManager {
     chunk._pendingModifications = null
   }
 
-  _enqueueChunkBuild(chunk, pcx, pcz) {
-    if (!chunk)
-      return
-    const key = this._key(chunk.chunkX, chunk.chunkZ)
-    const dist = Math.max(Math.abs(chunk.chunkX - pcx), Math.abs(chunk.chunkZ - pcz))
+  _requestWindow(centerX, centerZ) {
+    if (this._destroyed)
+      return Promise.resolve()
 
-    // 先生成数据，再建网格（用 key 前缀确保可取消）
-    this.idleQueue.enqueue(`${key}:data`, () => {
-      // 若已卸载则跳过
-      if (!this.chunks.has(key) || chunk.state === 'disposed')
-        return
+    this._latestRequestedCenter = { x: centerX, z: centerZ }
+    this._transitionId++
 
-      chunk.generator.params.seed = this.seed
-      const ok = chunk.generateData()
-      if (!ok)
-        return
+    if (!this._renderSlotsReady)
+      return this._transitionRunnerPromise ?? Promise.resolve()
 
-      // ===== 应用玩家修改 =====
-      this._applyChunkModifications(chunk)
-
-      // 数据完成后排队建网格（同 dist 优先级）
-      this._enqueueMeshBuild(chunk, dist)
-    }, dist)
+    if (!this._transitionRunnerPromise) {
+      const runner = this._runLatestTransition()
+      this._transitionRunnerPromise = runner.finally(() => {
+        this._transitionRunnerPromise = null
+      })
+    }
+    return this._transitionRunnerPromise
   }
 
-  /**
-   * 排队构建 chunk 的 mesh（数据层已就绪时调用）
-   * @param {TerrainChunk} chunk
-   * @param {number} priority 数字越小优先级越高（玩家脚下 chunk 用负值抢占）
-   */
-  _enqueueMeshBuild(chunk, priority = 0) {
-    const key = this._key(chunk.chunkX, chunk.chunkZ)
-    this.idleQueue.enqueue(`${key}:mesh`, () => {
-      if (!this.chunks.has(key) || chunk.state === 'disposed')
-        return
-      const built = chunk.buildMesh()
-      if (built) {
-        chunk.renderer.group.scale.setScalar(this.renderParams.scale)
-        emitter.emit('game:chunk-built', { chunkX: chunk.chunkX, chunkZ: chunk.chunkZ })
+  async _runLatestTransition() {
+    while (!this._destroyed && this._latestRequestedCenter) {
+      const transitionId = this._transitionId
+      const requestedCenter = { ...this._latestRequestedCenter }
+      const center = this._getNextTransitionCenter(requestedCenter)
+      const targetWindow = getChunkWindow(center.x, center.z)
+      this._targetWindow = targetWindow
+
+      const diff = diffChunkWindows(new Set(this.activeSlots.keys()), targetWindow)
+      if (this.activeSlots.size > 0 && diff.incoming.size > STAGING_SLOT_COUNT)
+        throw new Error(`Atomic chunk transition requires ${diff.incoming.size} staging slots`)
+
+      const transitionStart = globalThis.performance?.now?.() ?? Date.now()
+      const incomingKeys = Array.from(diff.incoming).sort((left, right) => {
+        const [leftX, leftZ] = left.split(',').map(Number)
+        const [rightX, rightZ] = right.split(',').map(Number)
+        const leftDistance = Math.max(Math.abs(leftX - center.x), Math.abs(leftZ - center.z))
+        const rightDistance = Math.max(Math.abs(rightX - center.x), Math.abs(rightZ - center.z))
+        return leftDistance - rightDistance
+      })
+      const stagedSlots = new Map()
+
+      for (const chunkKey of incomingKeys) {
+        if (transitionId !== this._transitionId)
+          break
+
+        const slot = await this._stageIncomingChunk(chunkKey, transitionId, center)
+        if (!slot)
+          break
+        stagedSlots.set(chunkKey, slot)
       }
-      this._updateStats()
-    }, priority)
+
+      const isCurrent = !this._destroyed
+        && transitionId === this._transitionId
+        && this._targetWindow === targetWindow
+        && incomingKeys.every(chunkKey => stagedSlots.has(chunkKey))
+
+      if (!isCurrent) {
+        this._releaseStaleSlots(stagedSlots.values())
+        continue
+      }
+
+      this._commitTransition({
+        center,
+        diff,
+        stagedSlots,
+        targetWindow,
+        transitionStart,
+      })
+
+      if (
+        transitionId === this._transitionId
+        && center.x === requestedCenter.x
+        && center.z === requestedCenter.z
+      ) {
+        return
+      }
+    }
+  }
+
+  _getNextTransitionCenter(requestedCenter) {
+    return getNextChunkWindowCenter(this._committedCenter, requestedCenter)
+  }
+
+  async _stageIncomingChunk(chunkKey, transitionId, center) {
+    const [chunkX, chunkZ] = chunkKey.split(',').map(Number)
+    const chunk = this._ensureChunk(chunkX, chunkZ)
+    const slot = this.renderSlotPool.acquire()
+    if (!slot)
+      throw new Error(`No staging render slot available for chunk ${chunkKey}`)
+
+    const assignmentId = ++this._nextAssignmentId
+    slot.assignmentId = assignmentId
+    const isCurrent = () => isCurrentChunkAssignment({
+      assignmentId,
+      chunkKey,
+      currentTransitionId: this._transitionId,
+      destroyed: this._destroyed,
+      slot,
+      targetWindow: this._targetWindow,
+      transitionId,
+    })
+    const priority = Math.max(Math.abs(chunkX - center.x), Math.abs(chunkZ - center.z))
+
+    try {
+      while (isCurrent()) {
+        try {
+          const populated = await new Promise((resolve, reject) => {
+            this.idleQueue.enqueue(`transition:${transitionId}:${chunkKey}`, () => {
+              try {
+                if (!isCurrent()) {
+                  resolve(false)
+                  return
+                }
+
+                if (chunk.state === 'init') {
+                  chunk.generator.params.seed = this.seed
+                  chunk.generateData()
+                  this._applyChunkModifications(chunk)
+                }
+                if (!isCurrent()) {
+                  resolve(false)
+                  return
+                }
+
+                slot.populate(chunk)
+                resolve(true)
+              }
+              catch (error) {
+                reject(error)
+              }
+            }, priority)
+            this.idleQueue.pump()
+          })
+
+          if (!populated || !isCurrent()) {
+            this._releaseStaleSlots([slot])
+            return null
+          }
+          return slot
+        }
+        catch (error) {
+          if (!(error instanceof ChunkRenderCapacityError))
+            throw error
+          if (!isCurrent()) {
+            this._releaseStaleSlots([slot])
+            return null
+          }
+
+          const expanded = await this.renderSlotPool.ensureCapacity(slot, error, isCurrent)
+          if (!expanded || !isCurrent()) {
+            this._releaseStaleSlots([slot])
+            return null
+          }
+        }
+      }
+
+      this._releaseStaleSlots([slot])
+      return null
+    }
+    catch (error) {
+      this._releaseStaleSlots([slot])
+      throw error
+    }
+  }
+
+  _commitTransition({ center, diff, stagedSlots, targetWindow, transitionStart }) {
+    const previousActiveSlots = this.activeSlots
+    const nextActiveSlots = new Map()
+    targetWindow.forEach((chunkKey) => {
+      const slot = previousActiveSlots.get(chunkKey) ?? stagedSlots.get(chunkKey)
+      if (!slot)
+        throw new Error(`Cannot commit incomplete chunk render window: ${chunkKey}`)
+      nextActiveSlots.set(chunkKey, slot)
+    })
+
+    globalThis.performance?.mark?.('chunk-window:commit-start')
+    diff.incoming.forEach((chunkKey) => {
+      const [chunkX, chunkZ] = chunkKey.split(',').map(Number)
+      stagedSlots.get(chunkKey).attach(chunkX, chunkZ)
+    })
+
+    this.activeSlots = nextActiveSlots
+    diff.outgoing.forEach((chunkKey) => {
+      const slot = previousActiveSlots.get(chunkKey)
+      slot.reset()
+      this.renderSlotPool.release(slot)
+    })
+    this._committedCenter = { ...center }
+    globalThis.performance?.mark?.('chunk-window:commit-end')
+
+    const transitionEnd = globalThis.performance?.now?.() ?? Date.now()
+    this.renderSlotPool.lastTransitionMs = transitionEnd - transitionStart
+    diff.incoming.forEach((chunkKey) => {
+      const [chunkX, chunkZ] = chunkKey.split(',').map(Number)
+      emitter.emit('game:chunk-built', { chunkX, chunkZ })
+    })
+
+    this._pruneDataChunks(center)
+    this._updateStats()
+  }
+
+  _releaseStaleSlots(slots) {
+    new Set(slots).forEach((slot) => {
+      if (!slot || slot.state === 'active')
+        return
+      slot.assignmentId = ++this._nextAssignmentId
+      this.renderSlotPool.release(slot)
+    })
+  }
+
+  _pruneDataChunks(center) {
+    const unloadDistance = this.viewDistance + this.unloadPadding
+    this.chunks.forEach((chunk, chunkKey) => {
+      if (
+        !this.activeSlots.has(chunkKey)
+        && (Math.abs(chunk.chunkX - center.x) > unloadDistance || Math.abs(chunk.chunkZ - center.z) > unloadDistance)
+      ) {
+        chunk.dispose()
+        this.chunks.delete(chunkKey)
+      }
+    })
   }
 
   // #region 调试面板
@@ -638,10 +840,8 @@ export default class ChunkManager {
       max: 3,
       step: 0.1,
     }).on('change', () => {
-      // 直接同步所有 chunk 的 group 缩放
-      this.chunks.forEach((chunk) => {
-        chunk.renderer?.group?.scale?.setScalar?.(this.renderParams.scale)
-      })
+      // 槽位身份固定，缩放同时写入活动与空闲槽位。
+      this.renderSlotPool.slots.forEach(slot => slot.group.scale.setScalar(this.renderParams.scale))
     })
 
     renderFolder.addBinding(this.renderParams, 'heightScale', {
@@ -933,13 +1133,10 @@ export default class ChunkManager {
     })
     streamingFolder.addBinding(this, 'viewDistance', {
       label: '加载半径(d)',
-      min: 0,
-      max: 6,
+      min: 1,
+      max: 1,
       step: 1,
-    }).on('change', () => {
-      // 强制刷新：让 streaming 重新计算集合
-      this._lastPlayerChunkX = null
-      this._lastPlayerChunkZ = null
+      readonly: true,
     })
     streamingFolder.addBinding(this, 'unloadPadding', {
       label: '卸载滞后(+)',
@@ -1000,12 +1197,8 @@ export default class ChunkManager {
    * 重建所有 chunk 的渲染层（基础参数如 scale/heightScale 变更）
    */
   _rebuildAllChunks() {
-    this.chunks.forEach((chunk) => {
-      chunk.buildMesh()
-      // 同步 scale
-      chunk.renderer?.group?.scale?.setScalar?.(this.renderParams.scale)
-      chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
-    })
+    // Keep the committed window intact while the fixed pool may be fully staged.
+    // 当前固定池可能已被 transition 占满；保留现有完整窗口，等待后续窗口过渡重填。
     this._updateStats()
   }
 
@@ -1013,9 +1206,8 @@ export default class ChunkManager {
    * 刷新所有 chunk 的水面高度（用于 waterOffset 或 heightScale 变更）
    */
   _refreshAllWater() {
-    this.chunks.forEach((chunk) => {
-      chunk.refreshWater?.()
-    })
+    // Do not replace committed slots in place: a failed fill must retain the prior window.
+    // 与重建一致：不在已提交窗口中原地替换槽位，避免填充失败破坏原子完整性。
   }
 
   /**
@@ -1023,9 +1215,10 @@ export default class ChunkManager {
    */
   _updateStats() {
     let total = 0
-    this.chunks.forEach((chunk) => {
-      const count = chunk.renderer?._statsParams?.totalInstances ?? 0
-      total += count
+    this.activeSlots.forEach((slot) => {
+      slot.getRenderObjects().forEach((object) => {
+        total += object.isInstancedMesh ? object.count : 0
+      })
     })
     this._statsParams.totalInstances = total
     this._statsParams.chunkCount = this.chunks.size
@@ -1046,7 +1239,7 @@ export default class ChunkManager {
       waterTexture.offset.y += this.waterParams.flowSpeedY * delta
     }
 
-    this.chunks.forEach(chunk => chunk.update())
+    this.renderSlotPool.update(this.experience.time.elapsed * 0.001)
   }
 
   /**
@@ -1066,15 +1259,15 @@ export default class ChunkManager {
       // 确保每个 chunk 的 generator 使用共享的 biomeGenerator
       chunk.generator.biomeGenerator = this.biomeGenerator
       chunk.regenerate(params)
-      // 同步渲染缩放
-      chunk.renderer?.group?.scale?.setScalar(this.renderParams.scale)
-      chunk.plantRenderer?.group?.scale?.setScalar?.(this.renderParams.scale)
     })
 
-    this._updateStats()
+    this._rebuildAllChunks()
   }
 
   destroy() {
+    this._destroyed = true
+    this._transitionId++
+
     // Cancel pending save
     if (this._saveTimeout) {
       clearTimeout(this._saveTimeout)
@@ -1091,5 +1284,7 @@ export default class ChunkManager {
       chunk.dispose()
     })
     this.chunks.clear()
+    this.activeSlots.clear()
+    this.renderSlotPool.dispose()
   }
 }
