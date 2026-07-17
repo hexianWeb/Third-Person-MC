@@ -157,11 +157,12 @@ export default class TerrainRenderer {
    * 验证容量后，将容器数据写入固定网格。
    * @param {import('./terrain-container.js').default} container 地形数据容器
    */
-  populate(container) {
+  populate(container, { assignInstanceIds = true } = {}) {
     const positionsByBlock = this._collectPositions(container)
     this._validatePositions(positionsByBlock)
 
-    container.clearInstanceIds()
+    if (assignInstanceIds)
+      container.clearInstanceIds()
     this._blockMeshes.forEach(({ mesh }) => {
       mesh.count = 0
       mesh.userData.instanceToGrid.length = 0
@@ -179,7 +180,8 @@ export default class TerrainRenderer {
         mesh.setMatrixAt(index, this._tempObject.matrix)
         ao.setX(index, block.ao != null ? block.ao / 3 : 0)
         mesh.userData.instanceToGrid[index] = position
-        container.setBlockInstanceId(x, y, z, index)
+        if (assignInstanceIds)
+          container.setBlockInstanceId(x, y, z, index)
       })
 
       mesh.count = positions.length
@@ -196,15 +198,29 @@ export default class TerrainRenderer {
    * 清空渲染计数和索引映射，保留固定网格及 GPU 资源。
    * @param {import('./terrain-container.js').default} [container] 需要清理实例索引的容器
    */
-  reset(container = this.container) {
-    container?.clearInstanceIds()
+  reset(container = this.container, clearInstanceIds = true) {
+    if (clearInstanceIds)
+      container?.clearInstanceIds()
     this._blockMeshes.forEach(({ mesh }) => {
       mesh.count = 0
       mesh.userData.instanceToGrid.length = 0
       this._markUpdates(mesh, 0)
     })
-    if (container === this.container)
+    if (container === this.container || !clearInstanceIds)
       this.container = null
+  }
+
+  syncInstanceIds(container = this.container) {
+    if (!container)
+      return
+
+    container.clearInstanceIds()
+    this._blockMeshes.forEach(({ mesh }) => {
+      mesh.userData.instanceToGrid.forEach(({ x, y, z }, instanceId) => {
+        container.setBlockInstanceId(x, y, z, instanceId)
+      })
+    })
+    this.container = container
   }
 
   getMeshes() {

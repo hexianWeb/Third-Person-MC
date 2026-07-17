@@ -70,6 +70,7 @@ export default class World {
     this.chunkManager.unloadPadding = settingsStore.chunkUnloadPadding
 
     this.experience.terrainDataManager = this.chunkManager
+    this.chunkManager.initializeRenderPool()
     this.chunkManager.initInitialGrid()
   }
 
@@ -179,7 +180,7 @@ export default class World {
     }
 
     // Use the new lightweight regeneration API
-    this.chunkManager.regenerateAll({
+    const resetPromise = this.chunkManager.regenerateAll({
       seed,
       terrain,
       trees,
@@ -190,7 +191,11 @@ export default class World {
     // Reset player position to safe spawn point (Strategy A)
     if (this.player) {
       // 触发一次重生，它内部会通过最新的 chunkManager 数据计算正确的高度
-      this.player.respawn()
+      const respawn = () => this.player?.respawn()
+      if (resetPromise?.dataReady)
+        void resetPromise.dataReady.then(respawn)
+      else
+        respawn()
     }
   }
 

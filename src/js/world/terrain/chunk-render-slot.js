@@ -86,6 +86,7 @@ export default class ChunkRenderSlot {
     this.chunk = null
     this.materialEpoch = 0
     this._compileSnapshot = null
+    this._assignsInstanceIds = true
     this._disposed = false
 
     this.blockLayer = blockLayerFactory({
@@ -148,23 +149,24 @@ export default class ChunkRenderSlot {
   }
 
   /** 将数据写入已有渲染对象，但不挂载到全局场景。 */
-  populate(chunk) {
+  populate(chunk, { assignInstanceIds = true } = {}) {
     this._assertUsable()
     if (this.state !== 'free')
       throw new Error(`Cannot populate chunk render slot ${this.id} from state ${this.state}`)
 
     this.state = 'filling'
     try {
-      this.blockLayer.populate(chunk.container)
+      this.blockLayer.populate(chunk.container, { assignInstanceIds })
       this.plantLayer.populate(chunk.generator?.plantData ?? chunk.plantData ?? [])
       this._refreshWaterHeight()
       this.chunk = chunk
       this.chunkKey = `${chunk.chunkX},${chunk.chunkZ}`
+      this._assignsInstanceIds = assignInstanceIds
       this.state = 'ready'
       return this
     }
     catch (error) {
-      this.blockLayer.reset(chunk.container)
+      this.blockLayer.reset(chunk.container, assignInstanceIds)
       this.plantLayer.reset()
       this._clearBindingMetadata()
       this.scene.remove(this.group)
@@ -237,9 +239,10 @@ export default class ChunkRenderSlot {
     this.state = 'retiring'
     this.scene.remove(this.group)
     this._restoreCompileState()
-    this.blockLayer.reset(this.chunk?.container)
+    this.blockLayer.reset(this.chunk?.container, this._assignsInstanceIds)
     this.plantLayer.reset()
     this._clearBindingMetadata()
+    this._assignsInstanceIds = true
     this.group.position.set(0, 0, 0)
     this.state = 'free'
   }
@@ -250,6 +253,66 @@ export default class ChunkRenderSlot {
       ...this.plantLayer.getMeshes(),
       this.waterMesh,
     ]
+  }
+
+  syncInstanceMappings() {
+    this.blockLayer.syncInstanceIds(this.chunk?.container)
+    this._assignsInstanceIds = true
+  }
+
+  prepareMaterialReplacement(typeId, materialFactory) {
+    this._assertUsable()
+    if (typeof materialFactory !== 'function')
+      throw new TypeError('Chunk render material factory must be a function')
+
+    const group = new THREE.Group()
+    const identity = new THREE.Matrix4()
+    const replacements = []
+    this.getRenderObjects().forEach((object) => {
+      if (!object.isInstancedMesh)
+        return
+
+      const material = materialFactory(object, typeId)
+      if (!material || material === object.material)
+        return
+
+      const preview = new THREE.InstancedMesh(object.geometry, material, 1)
+      preview.setMatrixAt(0, identity)
+      preview.count = 1
+      preview.frustumCulled = false
+      group.add(preview)
+      replacements.push({ object, material, preview })
+    })
+
+    let state = 'pending'
+    const releasePreviews = () => {
+      replacements.forEach(({ preview }) => {
+        group.remove(preview)
+        preview.dispose()
+      })
+    }
+
+    return {
+      group,
+      materials: new Set(replacements.map(({ material }) => material)),
+      oldMaterials: new Set(replacements.map(({ object }) => object.material)),
+      hasReplacements: replacements.length > 0,
+      commit: () => {
+        if (state !== 'pending')
+          throw new Error(`Cannot commit material replacement from state ${state}`)
+        replacements.forEach(({ object, material }) => {
+          object.material = material
+        })
+        releasePreviews()
+        state = 'committed'
+      },
+      dispose: () => {
+        if (state !== 'pending')
+          return
+        releasePreviews()
+        state = 'disposed'
+      },
+    }
   }
 
   /**

@@ -4,6 +4,7 @@
 import * as THREE from 'three'
 
 import { FIXED_INSTANCE_BUFFER_BYTES, TOTAL_SLOT_COUNT } from '../../config/chunk-render-capacity.js'
+import { disposeSharedTerrainResources } from './blocks-config.js'
 import ChunkRenderSlot from './chunk-render-slot.js'
 
 const WATER_COLOR = 0x3399CC
@@ -47,6 +48,7 @@ export default class ChunkRenderSlotPool {
     this.lastTransitionMs = 0
 
     this._readyPromise = null
+    this._materialGenerationPromise = null
     this._acquiredSlots = new Set()
     this._invalidatedMaterialTypes = new Set()
     this._sharedWaterGeometry = null
@@ -228,13 +230,93 @@ export default class ChunkRenderSlotPool {
   }
 
   /** 标记结构材质失效，并推进供异步守卫校验的材质纪元。 */
-  invalidateMaterialType(typeId) {
+  invalidateMaterialType(typeId, materialFactory) {
     if (this._destroyed)
       return this.materialEpoch
 
     this._invalidatedMaterialTypes.add(typeId)
-    this.materialEpoch++
-    return this.materialEpoch
+    const epoch = ++this.materialEpoch
+    if (typeof materialFactory !== 'function')
+      return epoch
+
+    const generation = this._replaceMaterialGeneration(typeId, materialFactory, epoch)
+    generation.epoch = epoch
+    this._materialGenerationPromise = generation
+    return generation
+  }
+
+  _isCurrentMaterialGeneration(epoch) {
+    return !this._destroyed && epoch === this.materialEpoch
+  }
+
+  _collectTransactionMaterials(transactions, key) {
+    const materials = new Set()
+    transactions.forEach((transaction) => {
+      transaction[key].forEach((material) => {
+        const materialList = Array.isArray(material) ? material : [material]
+        materialList.filter(Boolean).forEach(item => materials.add(item))
+      })
+    })
+    return materials
+  }
+
+  _disposeMaterials(materials, retainedMaterials = new Set()) {
+    materials.forEach((material) => {
+      if (!retainedMaterials.has(material))
+        material.dispose?.()
+    })
+  }
+
+  async _replaceMaterialGeneration(typeId, materialFactory, epoch) {
+    const transactions = this.slots.map(slot => slot.prepareMaterialReplacement(typeId, materialFactory))
+    const replacementMaterials = this._collectTransactionMaterials(transactions, 'materials')
+    const oldMaterials = this._collectTransactionMaterials(transactions, 'oldMaterials')
+    const discard = () => {
+      transactions.forEach(transaction => transaction.dispose())
+      this._disposeMaterials(replacementMaterials)
+    }
+
+    if (!transactions.some(transaction => transaction.hasReplacements)) {
+      discard()
+      return false
+    }
+
+    try {
+      for (const transaction of transactions) {
+        if (!transaction.hasReplacements)
+          continue
+        await this._compileWithRetry(transaction, {
+          phase: 'material',
+          typeId,
+          epoch,
+        })
+        if (!this._isCurrentMaterialGeneration(epoch)) {
+          discard()
+          return false
+        }
+        this.compileCount++
+      }
+
+      if (!this._isCurrentMaterialGeneration(epoch)) {
+        discard()
+        return false
+      }
+
+      transactions.forEach((transaction) => {
+        transaction.commit()
+      })
+      this.slots.forEach((slot) => {
+        slot.materialEpoch = epoch
+      })
+      this._disposeMaterials(oldMaterials, replacementMaterials)
+      return true
+    }
+    catch (error) {
+      discard()
+      if (!this._destroyed)
+        console.warn(`[ChunkRenderSlotPool] material generation failed for ${typeId}:`, error)
+      return false
+    }
   }
 
   /** 每帧只更新一次全部共享动画材质的时间 uniform。 */
@@ -293,6 +375,7 @@ export default class ChunkRenderSlotPool {
     this._destroyed = true
     this._acquiredSlots.clear()
     this.slots.forEach(slot => slot.dispose())
+    disposeSharedTerrainResources()
     this._sharedWaterGeometry?.dispose()
     this._sharedWaterMaterial?.dispose()
     this._sharedWaterGeometry = null

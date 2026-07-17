@@ -475,6 +475,13 @@ export function createMaterials(blockType, textureItems) {
 // 2. 避免 WebGPU 下新材质首帧触发管线重复编译（新 chunk 出现瞬间卡顿的主要来源）
 const _blockMaterialCache = new Map()
 const _plantMaterialCache = new Map()
+let _sharedTerrainResourcesDisposed = false
+
+function getBlockType(typeId) {
+  return Object.entries(blocks).find(([key, type]) =>
+    key === typeId || type.name === typeId || type.id === typeId,
+  )?.[1] ?? null
+}
 
 /**
  * 获取共享方块材质（不存在则创建并缓存）
@@ -509,13 +516,56 @@ export function getSharedPlantMaterials(plantType, textureItems) {
   return material
 }
 
+export function createSharedMaterialFactory(typeId, textureItems) {
+  const matchesAllTypes = typeId === 'all' || typeId == null
+  const blockType = matchesAllTypes ? null : getBlockType(typeId)
+  const plantType = matchesAllTypes ? null : getPlantType(typeId)
+
+  return (object) => {
+    const objectBlockType = object.userData?.blockId !== undefined
+      ? getBlockType(object.userData.blockId)
+      : null
+    if (objectBlockType && (matchesAllTypes || objectBlockType.id === blockType?.id))
+      return getSharedBlockMaterials(objectBlockType, textureItems)
+
+    const objectPlantType = object.userData?.plantId !== undefined
+      ? getPlantType(object.userData.plantId)
+      : null
+    if (objectPlantType && (matchesAllTypes || objectPlantType.id === plantType?.id))
+      return getSharedPlantMaterials(objectPlantType, textureItems)
+
+    return null
+  }
+}
+
 /**
  * 清空共享材质缓存（调试面板修改 alphaTest/transparent 等材质级参数后调用）
  * 注意：不主动 dispose 旧材质，由持有方重建时自然替换
  */
-export function clearSharedMaterialCache() {
-  _blockMaterialCache.clear()
-  _plantMaterialCache.clear()
+export function clearSharedMaterialCache(typeId = 'all') {
+  if (typeId === 'all' || typeId == null) {
+    _blockMaterialCache.clear()
+    _plantMaterialCache.clear()
+    return
+  }
+
+  const blockType = getBlockType(typeId)
+  if (blockType)
+    _blockMaterialCache.delete(blockType.id)
+
+  const plantType = getPlantType(typeId)
+  if (plantType)
+    _plantMaterialCache.delete(plantType.id)
+}
+
+function disposeCachedMaterials(cache) {
+  const materials = new Set()
+  cache.forEach((value) => {
+    const materialList = Array.isArray(value) ? value : [value]
+    materialList.filter(Boolean).forEach(material => materials.add(material))
+  })
+  materials.forEach(material => material.dispose?.())
+  cache.clear()
 }
 
 /**
@@ -638,6 +688,10 @@ export const plants = {
 }
 
 // 植物 ID -> 配置映射
+function getPlantType(typeId) {
+  return Object.values(plants).find(type => type.name === typeId || type.id === typeId) ?? null
+}
+
 export const PLANT_BY_ID = Object.values(plants).reduce((map, item) => {
   map[item.id] = item
   return map
@@ -827,4 +881,15 @@ export function createPlantMaterials(plantType, textureItems) {
   }
 
   return material
+}
+
+export function disposeSharedTerrainResources() {
+  if (_sharedTerrainResourcesDisposed)
+    return
+
+  _sharedTerrainResourcesDisposed = true
+  disposeCachedMaterials(_blockMaterialCache)
+  disposeCachedMaterials(_plantMaterialCache)
+  sharedGeometry.dispose()
+  sharedCrossPlaneGeometry.dispose()
 }

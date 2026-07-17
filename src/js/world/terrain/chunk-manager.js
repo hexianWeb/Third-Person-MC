@@ -13,11 +13,12 @@ import {
   isSupportedChunkViewDistance,
   STAGING_SLOT_COUNT,
 } from '../../config/chunk-render-capacity.js'
+import { shouldTerrainCastShadow } from '../../config/shadow-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 import IdleQueue from '../../utils/utils/idle-queue.js'
 import BiomeGenerator from './biome-generator.js'
-import { blocks, resources } from './blocks-config.js'
+import { blocks, clearSharedMaterialCache, createSharedMaterialFactory, resources } from './blocks-config.js'
 import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
 import ChunkRenderSlotPool from './chunk-render-slot-pool.js'
 import {
@@ -80,11 +81,14 @@ export default class ChunkManager {
     this._transitionRunnerPromise = null
     this._transitionId = 0
     this._nextAssignmentId = 0
+    this._activeCapacityRefreshes = new Map()
     this._latestRequestedCenter = null
     this._committedCenter = null
     this._targetWindow = new Set()
     this._destroyed = false
     this._hasWarnedUnsupportedViewDistance = false
+    this._handleShadowQualityChanged = this._handleShadowQualityChanged.bind(this)
+    emitter.on('shadow:quality-changed', this._handleShadowQualityChanged)
 
     this._lastPlayerChunkX = null
     this._lastPlayerChunkZ = null
@@ -155,14 +159,162 @@ export default class ChunkManager {
     return this.renderSlotPool.getDiagnostics()
   }
 
+  _getActiveBlockLayer(chunkKey) {
+    return this.activeSlots.get(chunkKey)?.blockLayer ?? null
+  }
+
+  _handleShadowQualityChanged(payload) {
+    const quality = typeof payload === 'string' ? payload : payload?.quality
+    if (!quality)
+      return
+
+    this.renderSlotPool.slots.forEach((slot) => {
+      slot.blockLayer.getMeshes().forEach((mesh) => {
+        mesh.castShadow = shouldTerrainCastShadow(quality, mesh.userData.blockId)
+      })
+    })
+  }
+
+  invalidateMaterialType(typeId = 'all') {
+    clearSharedMaterialCache(typeId)
+    const materialFactory = createSharedMaterialFactory(typeId, this.experience.resources.items)
+    const generation = this.renderSlotPool.invalidateMaterialType(typeId, materialFactory)
+    if (typeof generation === 'number')
+      return Promise.resolve(false)
+
+    return generation.then((committed) => {
+      if (!committed && this.renderSlotPool.materialEpoch === generation.epoch)
+        clearSharedMaterialCache(typeId)
+      return committed
+    })
+  }
+
+  _addBlockInstanceSafely(chunkKey, renderer, x, y, z) {
+    try {
+      renderer.addBlockInstance(x, y, z)
+    }
+    catch (error) {
+      if (!(error instanceof ChunkRenderCapacityError))
+        throw error
+      this._queueActiveCapacityRefresh(chunkKey, error)
+    }
+  }
+
+  _refreshActiveChunk(chunkKey) {
+    const slot = this.activeSlots.get(chunkKey)
+    const chunk = this.chunks.get(chunkKey)
+    if (!slot || !chunk || slot.state !== 'active')
+      return false
+
+    slot.blockLayer.populate(chunk.container)
+    slot.plantLayer.populate(chunk.generator?.plantData ?? chunk.plantData ?? [])
+    slot._refreshWaterHeight()
+    return true
+  }
+
+  _queueActiveCapacityRefresh(chunkKey, error) {
+    if (this._activeCapacityRefreshes.has(chunkKey))
+      return
+
+    const activeSlot = this.activeSlots.get(chunkKey)
+    if (!activeSlot)
+      return
+
+    const transitionId = this._transitionId
+    const activeAssignmentId = activeSlot.assignmentId
+    const guard = () => !this._destroyed
+      && transitionId === this._transitionId
+      && this.activeSlots.get(chunkKey) === activeSlot
+      && activeSlot.assignmentId === activeAssignmentId
+
+    const refresh = this._replaceActiveSlotWhenReady(chunkKey, activeSlot, error, guard)
+      .catch((refreshError) => {
+        if (!this._destroyed)
+          console.error(`Failed to refresh active chunk ${chunkKey}:`, refreshError)
+      })
+      .finally(() => {
+        if (this._activeCapacityRefreshes.get(chunkKey) === refresh)
+          this._activeCapacityRefreshes.delete(chunkKey)
+      })
+
+    this._activeCapacityRefreshes.set(chunkKey, refresh)
+  }
+
+  async _replaceActiveSlotWhenReady(chunkKey, activeSlot, error, guard) {
+    const chunk = this.chunks.get(chunkKey)
+    if (!chunk || !guard())
+      return false
+
+    const stagingSlot = this.renderSlotPool.acquire()
+    if (!stagingSlot)
+      return this._expandActiveSlotInPlace(chunkKey, activeSlot, error, guard)
+
+    const assignmentId = ++this._nextAssignmentId
+    stagingSlot.assignmentId = assignmentId
+    const isCurrent = () => guard() && stagingSlot.assignmentId === assignmentId
+    let overflow = error
+    let committed = false
+
+    try {
+      while (isCurrent()) {
+        try {
+          stagingSlot.populate(chunk, { assignInstanceIds: false })
+          if (!isCurrent())
+            return false
+
+          stagingSlot.attach(chunk.chunkX, chunk.chunkZ)
+          this.activeSlots.set(chunkKey, stagingSlot)
+          activeSlot.reset()
+          this.renderSlotPool.release(activeSlot)
+          stagingSlot.syncInstanceMappings()
+          committed = true
+          this._updateStats()
+          return true
+        }
+        catch (nextError) {
+          if (!(nextError instanceof ChunkRenderCapacityError))
+            throw nextError
+          overflow = nextError
+        }
+
+        const expanded = await this.renderSlotPool.ensureCapacity(stagingSlot, overflow, isCurrent)
+        if (!expanded)
+          return false
+      }
+      return false
+    }
+    finally {
+      if (!committed && stagingSlot.assignmentId === assignmentId)
+        this._releaseStaleSlots([stagingSlot])
+    }
+  }
+
+  async _expandActiveSlotInPlace(chunkKey, activeSlot, error, guard) {
+    let overflow = error
+    while (guard()) {
+      const expanded = await this.renderSlotPool.ensureCapacity(activeSlot, overflow, guard)
+      if (!expanded || !guard())
+        return false
+
+      try {
+        this._refreshActiveChunk(chunkKey)
+        return true
+      }
+      catch (nextError) {
+        if (!(nextError instanceof ChunkRenderCapacityError))
+          throw nextError
+        overflow = nextError
+      }
+    }
+    return false
+  }
+
   /**
    * Set world seed and regenerate all chunks
    * @param {number} newSeed - The new seed value
    */
   setSeed(newSeed) {
-    this.seed = newSeed
-    this.biomeGenerator.seed = newSeed
-    this._regenerateAllChunks()
+    return this.regenerateAll({ seed: newSeed, clearPersistence: false })
   }
 
   // ========================================
@@ -235,12 +387,17 @@ export default class ChunkManager {
     forceSyncCenterChunk = true,
     clearPersistence = true,
   } = {}) {
-    // (1) Cancel old queue tasks
-    this.idleQueue.clear?.()
-    // Alternatively, cancel by prefix for all chunks
-    this.chunks.forEach((_, key) => {
-      this.idleQueue.cancelByPrefix(`${key}:`)
+    if (this._destroyed)
+      return Promise.resolve({ seed: this.seed, dataReady: Promise.resolve(null) })
+
+    this._invalidateTransitionState()
+    this._releaseAllRenderSlots()
+
+    this.chunks.forEach((chunk) => {
+      chunk.dispose()
     })
+    this.chunks.clear()
+    this.biomeGenerator.clearAllCache()
 
     // (2) Update seed
     if (seed !== undefined) {
@@ -256,29 +413,28 @@ export default class ChunkManager {
       this.persistence.clearAll()
     }
 
-    // (4) Force rebuild all existing chunks
-    this._regenerateAllChunks()
-
-    // (5) Force refresh streaming grid
+    // (4) Force refresh streaming grid
     this._lastPlayerChunkX = null
     this._lastPlayerChunkZ = null
-    this.updateStreaming(centerPos, true)
 
-    // (6) Sync-generate center chunk if requested
+    // (5) Keep collision and respawn data independent from render prewarming.
+    let currentChunk = null
     if (forceSyncCenterChunk) {
       const pcx = Math.floor(centerPos.x / this.chunkWidth)
       const pcz = Math.floor(centerPos.z / this.chunkWidth)
-      const currentKey = this._key(pcx, pcz)
-      const currentChunk = this.chunks.get(currentKey)
-      if (currentChunk?.state === 'init') {
+      currentChunk = this._ensureChunk(pcx, pcz)
+      if (currentChunk.state === 'init') {
         currentChunk.generator.params.seed = this.seed
         currentChunk.generateData()
         this._applyChunkModifications(currentChunk)
       }
     }
 
-    // (7) Return info
-    return { seed: this.seed }
+    // (6) A fresh transition starts from the new data window without recreating the pool.
+    const renderReady = this.updateStreaming(centerPos, true) ?? Promise.resolve()
+    renderReady.dataReady = Promise.resolve(currentChunk)
+    renderReady.seed = this.seed
+    return renderReady
   }
 
   /**
@@ -326,6 +482,7 @@ export default class ChunkManager {
   removeBlockWorld(x, y, z) {
     const chunkX = Math.floor(x / this.chunkWidth)
     const chunkZ = Math.floor(z / this.chunkWidth)
+    const chunkKey = this._key(chunkX, chunkZ)
     const chunk = this.getChunk(chunkX, chunkZ)
 
     if (!chunk)
@@ -344,11 +501,13 @@ export default class ChunkManager {
 
     // 2. 更新数据层
     chunk.container.setBlockId(localX, y, localZ, blocks.empty.id)
+    this.persistence.recordModification(x, y, z, blocks.empty.id, this.chunkWidth)
+    this._scheduleSave()
 
     // 3. 更新渲染层
-    const renderer = chunk.renderer
+    const renderer = this._getActiveBlockLayer(chunkKey)
     if (renderer) {
-      const mesh = renderer._blockMeshes.get(blockId)
+      const mesh = renderer.getMesh(blockId)
       if (mesh) {
         renderer.removeInstance(mesh, instanceId)
       }
@@ -371,7 +530,7 @@ export default class ChunkManager {
           // 如果邻居非空、没有实例，且现在不再被遮挡
           if (neighborBlock.id !== blocks.empty.id && neighborBlock.instanceId === null) {
             if (!chunk.container.isBlockObscured(n.x, n.y, n.z)) {
-              renderer.addBlockInstance(n.x, n.y, n.z)
+              this._addBlockInstanceSafely(chunkKey, renderer, n.x, n.y, n.z)
             }
           }
         }
@@ -379,8 +538,6 @@ export default class ChunkManager {
     }
 
     // 记录修改（0 表示删除）
-    this.persistence.recordModification(x, y, z, blocks.empty.id, this.chunkWidth)
-    this._scheduleSave()
 
     return true
   }
@@ -398,6 +555,7 @@ export default class ChunkManager {
   addBlockWorld(x, y, z, blockId) {
     const chunkX = Math.floor(x / this.chunkWidth)
     const chunkZ = Math.floor(z / this.chunkWidth)
+    const chunkKey = this._key(chunkX, chunkZ)
     const chunk = this.getChunk(chunkX, chunkZ)
 
     if (!chunk)
@@ -413,13 +571,15 @@ export default class ChunkManager {
 
     // 2. 更新数据层
     chunk.container.setBlockId(localX, y, localZ, blockId)
+    this.persistence.recordModification(x, y, z, blockId, this.chunkWidth)
+    this._scheduleSave()
 
     // 3. 更新渲染层
-    const renderer = chunk.renderer
+    const renderer = this._getActiveBlockLayer(chunkKey)
     if (renderer) {
       // 3a. 如果自身不被遮挡，添加实例
       if (!chunk.container.isBlockObscured(localX, y, localZ)) {
-        renderer.addBlockInstance(localX, y, localZ)
+        this._addBlockInstanceSafely(chunkKey, renderer, localX, y, localZ)
       }
 
       // 3b. 隐藏现在被遮挡的邻居方块
@@ -441,7 +601,7 @@ export default class ChunkManager {
           if (neighborBlock.id !== blocks.empty.id && neighborBlock.instanceId !== null) {
             if (chunk.container.isBlockObscured(n.x, n.y, n.z)) {
               // 移除实例
-              const mesh = renderer._blockMeshes.get(neighborBlock.id)
+              const mesh = renderer.getMesh(neighborBlock.id)
               if (mesh) {
                 renderer.removeInstance(mesh, neighborBlock.instanceId)
               }
@@ -454,8 +614,6 @@ export default class ChunkManager {
     }
 
     // 记录修改
-    this.persistence.recordModification(x, y, z, blockId, this.chunkWidth)
-    this._scheduleSave()
 
     return true
   }
@@ -596,6 +754,31 @@ export default class ChunkManager {
     chunk._pendingModifications = null
   }
 
+  _invalidateTransitionState() {
+    this._transitionId++
+    this._latestRequestedCenter = null
+    this._committedCenter = null
+    this._targetWindow = new Set()
+    this._activeCapacityRefreshes.clear()
+    this.renderSlotPool.slots.forEach((slot) => {
+      slot.assignmentId = ++this._nextAssignmentId
+    })
+
+    // Replacing the queue lets obsolete awaited work settle through its stale guard
+    // without allowing it to block the next reset transition.
+    this.idleQueue = new IdleQueue()
+    this._transitionRunnerPromise = null
+  }
+
+  _releaseAllRenderSlots() {
+    this.activeSlots.clear()
+    this.renderSlotPool.slots.forEach((slot) => {
+      if (slot.state === 'active')
+        slot.reset()
+      this.renderSlotPool.release(slot)
+    })
+  }
+
   _requestWindow(centerX, centerZ) {
     if (this._destroyed)
       return Promise.resolve()
@@ -608,9 +791,11 @@ export default class ChunkManager {
 
     if (!this._transitionRunnerPromise) {
       const runner = this._runLatestTransition()
-      this._transitionRunnerPromise = runner.finally(() => {
-        this._transitionRunnerPromise = null
+      const trackedRunner = runner.finally(() => {
+        if (this._transitionRunnerPromise === trackedRunner)
+          this._transitionRunnerPromise = null
       })
+      this._transitionRunnerPromise = trackedRunner
     }
     return this._transitionRunnerPromise
   }
@@ -698,6 +883,10 @@ export default class ChunkManager {
       transitionId,
     })
     const priority = Math.max(Math.abs(chunkX - center.x), Math.abs(chunkZ - center.z))
+    const releaseSlot = () => {
+      if (slot.assignmentId === assignmentId)
+        this._releaseStaleSlots([slot])
+    }
 
     try {
       while (isCurrent()) {
@@ -731,7 +920,7 @@ export default class ChunkManager {
           })
 
           if (!populated || !isCurrent()) {
-            this._releaseStaleSlots([slot])
+            releaseSlot()
             return null
           }
           return slot
@@ -740,23 +929,23 @@ export default class ChunkManager {
           if (!(error instanceof ChunkRenderCapacityError))
             throw error
           if (!isCurrent()) {
-            this._releaseStaleSlots([slot])
+            releaseSlot()
             return null
           }
 
           const expanded = await this.renderSlotPool.ensureCapacity(slot, error, isCurrent)
           if (!expanded || !isCurrent()) {
-            this._releaseStaleSlots([slot])
+            releaseSlot()
             return null
           }
         }
       }
 
-      this._releaseStaleSlots([slot])
+      releaseSlot()
       return null
     }
     catch (error) {
-      this._releaseStaleSlots([slot])
+      releaseSlot()
       throw error
     }
   }
@@ -1197,6 +1386,17 @@ export default class ChunkManager {
    * 重建所有 chunk 的渲染层（基础参数如 scale/heightScale 变更）
    */
   _rebuildAllChunks() {
+    this.activeSlots.forEach((_, chunkKey) => {
+      try {
+        this._refreshActiveChunk(chunkKey)
+      }
+      catch (error) {
+        if (!(error instanceof ChunkRenderCapacityError))
+          throw error
+        this._queueActiveCapacityRefresh(chunkKey, error)
+      }
+    })
+    this._updateStats()
     // Keep the committed window intact while the fixed pool may be fully staged.
     // 当前固定池可能已被 transition 占满；保留现有完整窗口，等待后续窗口过渡重填。
     this._updateStats()
@@ -1206,6 +1406,9 @@ export default class ChunkManager {
    * 刷新所有 chunk 的水面高度（用于 waterOffset 或 heightScale 变更）
    */
   _refreshAllWater() {
+    this.activeSlots.forEach((slot) => {
+      slot._refreshWaterHeight()
+    })
     // Do not replace committed slots in place: a failed fill must retain the prior window.
     // 与重建一致：不在已提交窗口中原地替换槽位，避免填充失败破坏原子完整性。
   }
@@ -1259,6 +1462,8 @@ export default class ChunkManager {
       // 确保每个 chunk 的 generator 使用共享的 biomeGenerator
       chunk.generator.biomeGenerator = this.biomeGenerator
       chunk.regenerate(params)
+      chunk._pendingModifications = this.persistence.getChunkModifications(chunk.chunkX, chunk.chunkZ)
+      this._applyChunkModifications(chunk)
     })
 
     this._rebuildAllChunks()
@@ -1266,7 +1471,8 @@ export default class ChunkManager {
 
   destroy() {
     this._destroyed = true
-    this._transitionId++
+    this._invalidateTransitionState()
+    emitter.off('shadow:quality-changed', this._handleShadowQualityChanged)
 
     // Cancel pending save
     if (this._saveTimeout) {
