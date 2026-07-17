@@ -131,6 +131,63 @@ test('retries compilation once and never creates a fifteenth slot', async () => 
   assert.equal(pool.slots.length, 14)
 })
 
+test('reports a twice-failed prewarm compile without expanding the fixed slot pool', async () => {
+  let attempts = 0
+  const failures = []
+  const pool = createPool({
+    onCompileFailure: ({ context, error }) => {
+      failures.push({
+        slotId: context.slotId,
+        phase: context.phase,
+        reason: error.message,
+      })
+    },
+  })
+
+  await assert.rejects(
+    pool.initialize({
+      async compileAsync(group) {
+        if (group.slotId !== 0)
+          return
+        attempts++
+        throw new Error('permanent compile failure')
+      },
+    }, {}, {}),
+    /permanent compile failure/,
+  )
+
+  assert.equal(attempts, 2)
+  assert.equal(pool.slots.length, 14)
+  assert.equal(pool.slots[0].state, 'failed')
+  assert.deepEqual(failures, [{
+    slotId: 0,
+    phase: 'startup',
+    reason: 'permanent compile failure',
+  }])
+  assert.equal(typeof pool.getDiagnostics().lastCompileMs, 'number')
+})
+
+test('stops prewarm submissions when the renderer is unavailable', async () => {
+  let compileCalls = 0
+  const failures = []
+  const pool = createPool({
+    onCompileFailure: failure => failures.push(failure),
+  })
+
+  await assert.rejects(
+    pool.initialize({
+      async compileAsync() {
+        compileCalls++
+      },
+    }, {}, {}, () => false),
+    /Renderer is unavailable/,
+  )
+
+  assert.equal(compileCalls, 0)
+  assert.equal(pool.slots[0].state, 'free')
+  assert.deepEqual(failures, [])
+})
+
 test('initialize binds the first renderer, scene, and camera exactly once', async () => {
   let compileCalls = 0
   const pool = createPool()
@@ -187,6 +244,7 @@ test('diagnostics are fresh frozen snapshots with the fixed memory estimate', as
     overflowCount: 0,
     estimatedBufferBytes: FIXED_INSTANCE_BUFFER_BYTES,
     lastTransitionMs: 0,
+    lastCompileMs: 0,
     startupCompileCount: 14,
     materialEpoch: 0,
   })
@@ -254,6 +312,7 @@ test('a stale overflow disposes only the uncommitted replacement', async () => {
 test('a failed overflow retry disposes the replacement without evaluating the guard', async () => {
   let replacementAttempts = 0
   let guardCalls = 0
+  const failures = []
   const renderer = {
     async compileAsync(target) {
       if (!target.replacementFor && target.replacementFor !== 0)
@@ -262,7 +321,13 @@ test('a failed overflow retry disposes the replacement without evaluating the gu
       throw new Error('replacement compile failure')
     },
   }
-  const pool = await initializePool(createPool(), renderer)
+  const pool = await initializePool(createPool({
+    onCompileFailure: ({ context, error }) => failures.push({
+      chunkX: context.chunkX,
+      chunkZ: context.chunkZ,
+      reason: error.message,
+    }),
+  }), renderer)
   const slot = pool.acquire()
 
   await assert.rejects(
@@ -273,6 +338,7 @@ test('a failed overflow retry disposes the replacement without evaluating the gu
         guardCalls++
         return true
       },
+      { chunkX: 3, chunkZ: -2 },
     ),
     /replacement compile failure/,
   )
@@ -283,6 +349,13 @@ test('a failed overflow retry disposes the replacement without evaluating the gu
   assert.equal(transaction.commitCalls, 0)
   assert.equal(transaction.disposeCalls, 1)
   assert.equal(pool.getDiagnostics().compileCount, 0)
+  assert.equal(slot.state, 'failed')
+  assert.equal(pool.getDiagnostics().failedSlots, 1)
+  assert.deepEqual(failures, [{
+    chunkX: 3,
+    chunkZ: -2,
+    reason: 'replacement compile failure',
+  }])
 })
 
 test('material invalidation advances the epoch and dispose destroys every slot once', async () => {
@@ -419,10 +492,20 @@ test('failed material generation retains the active generation and disposes stag
     },
   })
 
-  const pending = pool.invalidateMaterialType('grass', generation)
+  const originalWarn = console.warn
+  const warnings = []
+  console.warn = (...args) => warnings.push(args)
+  let result
+  try {
+    result = await pool.invalidateMaterialType('grass', generation)
+  }
+  finally {
+    console.warn = originalWarn
+  }
 
-  assert.equal(typeof pending.then, 'function')
-  assert.equal(await pending, false)
+  assert.equal(result, false)
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0][0], /material generation failed/)
   assert.equal(generation.commitCalls, 0)
   assert.equal(generation.disposeCalls, 1)
   assert.equal(generation.stagedMaterial.disposeCalls, 1)

@@ -14,6 +14,16 @@ function defaultDelay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
+function markPerformance(name) {
+  const performanceApi = globalThis.performance
+  performanceApi?.clearMarks?.(name)
+  performanceApi?.mark?.(name)
+}
+
+function getNow() {
+  return globalThis.performance?.now?.() ?? Date.now()
+}
+
 export default class ChunkRenderSlotPool {
   /**
    * @param {object} options 池依赖
@@ -22,6 +32,7 @@ export default class ChunkRenderSlotPool {
    * @param {object} options.waterParams 共享水面参数
    * @param {typeof ChunkRenderSlot} [options.slotFactory] 槽位工厂
    * @param {(milliseconds: number) => Promise<void>} [options.delay] 重试延时函数
+   * @param {(details: { slot: ChunkRenderSlot, context: object, error: Error }) => void} [options.onCompileFailure] 编译失败回调
    */
   constructor({
     resources,
@@ -29,12 +40,14 @@ export default class ChunkRenderSlotPool {
     waterParams = {},
     slotFactory = ChunkRenderSlot,
     delay = defaultDelay,
+    onCompileFailure = null,
   }) {
     this.resources = resources
     this.renderParams = renderParams
     this.waterParams = waterParams
     this.SlotFactory = slotFactory
     this.delay = delay
+    this.onCompileFailure = onCompileFailure
 
     this.slots = []
     this.renderer = null
@@ -46,6 +59,7 @@ export default class ChunkRenderSlotPool {
     this.overflowCount = 0
     this.startupCompileCount = 0
     this.lastTransitionMs = 0
+    this.lastCompileMs = 0
 
     this._readyPromise = null
     this._materialGenerationPromise = null
@@ -56,10 +70,11 @@ export default class ChunkRenderSlotPool {
     this._sharedWaterGeometry = null
     this._sharedWaterMaterial = null
     this._destroyed = false
+    this._canSubmit = () => true
   }
 
   /** 绑定一次实时 WebGPU 上下文并启动十四个槽位的串行预编译。 */
-  initialize(renderer, scene, camera) {
+  initialize(renderer, scene, camera, canSubmit = () => true) {
     if (this._readyPromise)
       return this._readyPromise
     if (this._destroyed)
@@ -68,6 +83,7 @@ export default class ChunkRenderSlotPool {
     this.renderer = renderer
     this.scene = scene
     this.camera = camera
+    this._canSubmit = canSubmit
     this._readyPromise = this._initializeSlots()
     return this._readyPromise
   }
@@ -130,10 +146,10 @@ export default class ChunkRenderSlotPool {
         slot.finishCompile(this.materialEpoch)
       }
       catch (error) {
-        if (!this._destroyed) {
+        if (error.chunkRenderUnavailable && !this._destroyed)
           slot.reset()
-          slot.state = 'failed'
-        }
+        else
+          this._markSlotFailed(slot, error, { phase: 'startup', slotId: slot.id })
         throw error
       }
     }
@@ -141,17 +157,26 @@ export default class ChunkRenderSlotPool {
     // 启动期创建和编译单独计数，运行期计数从游戏可见前重新开始。
     this.meshCreateCount = 0
     this.compileCount = 0
+    this.lastCompileMs = 0
   }
 
   async _compileWithRetry(slot, context) {
-    globalThis.performance?.mark('chunk-slot:compile-start')
+    const compileStart = getNow()
+    markPerformance('chunk-slot:compile-start')
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
+        if (!this._canSubmit())
+          throw this._createRendererUnavailableError(context)
+
         try {
           await this.renderer.compileAsync(slot.group, this.camera, this.scene)
+          if (!this._canSubmit())
+            throw this._createRendererUnavailableError(context)
           return
         }
         catch (error) {
+          if (error.chunkRenderUnavailable || !this._canSubmit())
+            throw this._createRendererUnavailableError(context)
           if (attempt === 1)
             throw error
           await this.delay(COMPILE_RETRY_DELAY_MS)
@@ -163,8 +188,29 @@ export default class ChunkRenderSlotPool {
       throw error
     }
     finally {
-      globalThis.performance?.mark('chunk-slot:compile-end')
+      this.lastCompileMs = getNow() - compileStart
+      markPerformance('chunk-slot:compile-end')
     }
+  }
+
+  _createRendererUnavailableError(context) {
+    const error = new Error('Renderer is unavailable for chunk compilation')
+    error.chunkRenderUnavailable = true
+    error.chunkRenderContext = context
+    return error
+  }
+
+  _markSlotFailed(slot, error, context) {
+    if (this._destroyed || error.chunkRenderUnavailable)
+      return
+
+    if (slot.state !== 'active') {
+      slot.reset()
+      slot.state = 'failed'
+      this._acquiredSlots.delete(slot)
+    }
+
+    this.onCompileFailure?.({ slot, context, error })
   }
 
   /** 借出第一个空闲槽位；槽位不足时绝不扩容。 */
@@ -195,7 +241,7 @@ export default class ChunkRenderSlotPool {
    * 编译真实替换网格，等待完成后再由 guard 决定提交或丢弃。
    * @returns {Promise<boolean>} 是否提交了替换
    */
-  async ensureCapacity(slot, error, guard) {
+  async ensureCapacity(slot, error, guard, { chunkX, chunkZ } = {}) {
     if (!this.slots.includes(slot))
       throw new Error('Cannot resize a chunk render slot owned by another pool')
     if (typeof guard !== 'function')
@@ -208,17 +254,30 @@ export default class ChunkRenderSlotPool {
     this._pendingOverflowCount++
     let committed = false
     try {
-      await this._compileWithRetry(
-        { group: transaction.mesh },
-        {
+      try {
+        await this._compileWithRetry(
+          { group: transaction.mesh },
+          {
+            phase: 'overflow',
+            slotId: slot.id,
+            layer: error.layer,
+            typeId: error.typeId,
+            capacity: transaction.capacity,
+            epoch: this.materialEpoch,
+            chunkX,
+            chunkZ,
+          },
+        )
+      }
+      catch (compileError) {
+        this._markSlotFailed(slot, compileError, compileError.chunkRenderContext ?? {
           phase: 'overflow',
           slotId: slot.id,
-          layer: error.layer,
-          typeId: error.typeId,
-          capacity: transaction.capacity,
-          epoch: this.materialEpoch,
-        },
-      )
+          chunkX,
+          chunkZ,
+        })
+        throw compileError
+      }
 
       if (this._destroyed || !guard())
         return false
@@ -419,6 +478,7 @@ export default class ChunkRenderSlotPool {
       overflowCount: this.overflowCount,
       estimatedBufferBytes: FIXED_INSTANCE_BUFFER_BYTES,
       lastTransitionMs: this.lastTransitionMs,
+      lastCompileMs: this.lastCompileMs,
       startupCompileCount: this.startupCompileCount,
       materialEpoch: this.materialEpoch,
     })

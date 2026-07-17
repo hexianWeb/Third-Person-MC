@@ -38,6 +38,9 @@ export default class Renderer {
     this.ready = false
     this.backendName = 'pending'
     this._initPromise = null
+    this._deviceLost = false
+    this.lastFrameMs = 0
+    this.lastRenderMs = 0
 
     // TSL 后处理管线引用
     this.renderPipeline = null
@@ -158,6 +161,30 @@ export default class Renderer {
     return this._initPromise ?? Promise.resolve()
   }
 
+  isDeviceReady() {
+    return this.ready && !this._deviceLost
+  }
+
+  getFrameDiagnostics() {
+    return Object.freeze({
+      deviceReady: this.isDeviceReady(),
+      lastFrameMs: this.lastFrameMs,
+      lastRenderMs: this.lastRenderMs,
+    })
+  }
+
+  _watchDeviceLoss() {
+    const onDeviceLost = this.instance.onDeviceLost
+    if (typeof onDeviceLost !== 'function')
+      return
+
+    this.instance.onDeviceLost = (info) => {
+      this._deviceLost = true
+      this.ready = false
+      onDeviceLost.call(this.instance, info)
+    }
+  }
+
   /**
    * 异步初始化 WebGPU 设备，并搭建 TSL 后处理管线
    */
@@ -176,6 +203,7 @@ export default class Renderer {
 
       this._setupPostProcessing()
       this.ready = true
+      this._watchDeviceLoss()
 
       // 调试面板需在 TSL uniforms 就绪后创建，才能正确绑定 bloom / 速度线 / 凝视
       if (this.debug.active) {
@@ -499,6 +527,8 @@ export default class Renderer {
     this.renderPipeline.render()
     const renderMs = performance.now() - renderStart
     const frameMs = performance.now() - frameStart
+    this.lastRenderMs = renderMs
+    this.lastFrameMs = frameMs
 
     // 仅记录明显卡顿帧（>=50ms），用于区分 CPU 建 mesh 与 GPU/管线渲染阻塞
     if (frameMs >= 50) {
@@ -579,6 +609,7 @@ export default class Renderer {
   }
 
   destroy() {
+    this._deviceLost = true
     if (this.previewPass) {
       this.previewPass.dispose()
       this.previewPass = null

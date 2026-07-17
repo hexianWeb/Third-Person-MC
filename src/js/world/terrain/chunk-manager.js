@@ -31,6 +31,12 @@ import {
 import TerrainChunk from './terrain-chunk.js'
 import TerrainPersistence from './terrain-persistence.js'
 
+function markPerformance(name) {
+  const performanceApi = globalThis.performance
+  performanceApi?.clearMarks?.(name)
+  performanceApi?.mark?.(name)
+}
+
 export default class ChunkManager {
   constructor(options = {}) {
     this.experience = new Experience()
@@ -72,6 +78,7 @@ export default class ChunkManager {
       resources: this.experience.resources,
       renderParams: this.renderParams,
       waterParams: this.waterParams,
+      onCompileFailure: details => this._handleChunkRenderCompileFailure(details),
     })
 
     this.idleQueue = new IdleQueue()
@@ -129,6 +136,7 @@ export default class ChunkManager {
           this.experience.renderer.instance,
           this.experience.scene,
           this.experience.camera.instance,
+          () => this.experience.renderer.isDeviceReady(),
         ))
         .then(async () => {
           this._renderSlotsReady = true
@@ -157,6 +165,18 @@ export default class ChunkManager {
 
   getRenderDiagnostics() {
     return this.renderSlotPool.getDiagnostics()
+  }
+
+  _handleChunkRenderCompileFailure({ context, error }) {
+    const { chunkX, chunkZ } = context
+    if (!Number.isInteger(chunkX) || !Number.isInteger(chunkZ))
+      return
+
+    emitter.emit('game:chunk-render-failed', {
+      chunkX,
+      chunkZ,
+      reason: error.message,
+    })
   }
 
   _getActiveBlockLayer(chunkKey) {
@@ -275,7 +295,10 @@ export default class ChunkManager {
           overflow = nextError
         }
 
-        const expanded = await this.renderSlotPool.ensureCapacity(stagingSlot, overflow, isCurrent)
+        const expanded = await this.renderSlotPool.ensureCapacity(stagingSlot, overflow, isCurrent, {
+          chunkX: chunk.chunkX,
+          chunkZ: chunk.chunkZ,
+        })
         if (!expanded)
           return false
       }
@@ -288,9 +311,10 @@ export default class ChunkManager {
   }
 
   async _expandActiveSlotInPlace(chunkKey, activeSlot, error, guard) {
+    const [chunkX, chunkZ] = chunkKey.split(',').map(Number)
     let overflow = error
     while (guard()) {
-      const expanded = await this.renderSlotPool.ensureCapacity(activeSlot, overflow, guard)
+      const expanded = await this.renderSlotPool.ensureCapacity(activeSlot, overflow, guard, { chunkX, chunkZ })
       if (!expanded || !guard())
         return false
 
@@ -811,6 +835,7 @@ export default class ChunkManager {
         throw new Error(`Atomic chunk transition requires ${diff.incoming.size} staging slots`)
 
       const transitionStart = globalThis.performance?.now?.() ?? Date.now()
+      markPerformance('chunk-transition:start')
       const incomingKeys = Array.from(diff.incoming).sort((left, right) => {
         const [leftX, leftZ] = left.split(',').map(Number)
         const [rightX, rightZ] = right.split(',').map(Number)
@@ -820,14 +845,22 @@ export default class ChunkManager {
       })
       const stagedSlots = new Map()
 
-      for (const chunkKey of incomingKeys) {
-        if (transitionId !== this._transitionId)
-          break
+      try {
+        for (const chunkKey of incomingKeys) {
+          if (transitionId !== this._transitionId)
+            break
 
-        const slot = await this._stageIncomingChunk(chunkKey, transitionId, center)
-        if (!slot)
-          break
-        stagedSlots.set(chunkKey, slot)
+          const slot = await this._stageIncomingChunk(chunkKey, transitionId, center)
+          if (!slot)
+            break
+          stagedSlots.set(chunkKey, slot)
+        }
+      }
+      catch (error) {
+        this._releaseStaleSlots(stagedSlots.values())
+        if (error.chunkRenderUnavailable || error.chunkRenderContext)
+          return
+        throw error
       }
 
       const isCurrent = !this._destroyed
@@ -839,6 +872,9 @@ export default class ChunkManager {
         this._releaseStaleSlots(stagedSlots.values())
         continue
       }
+
+      markPerformance('chunk-transition:data-ready')
+      markPerformance('chunk-transition:populate-ready')
 
       this._commitTransition({
         center,
@@ -931,7 +967,7 @@ export default class ChunkManager {
             return null
           }
 
-          const expanded = await this.renderSlotPool.ensureCapacity(slot, error, isCurrent)
+          const expanded = await this.renderSlotPool.ensureCapacity(slot, error, isCurrent, { chunkX, chunkZ })
           if (!expanded || !isCurrent()) {
             releaseSlot()
             return null
@@ -958,7 +994,6 @@ export default class ChunkManager {
       nextActiveSlots.set(chunkKey, slot)
     })
 
-    globalThis.performance?.mark?.('chunk-window:commit-start')
     diff.incoming.forEach((chunkKey) => {
       const [chunkX, chunkZ] = chunkKey.split(',').map(Number)
       stagedSlots.get(chunkKey).attach(chunkX, chunkZ)
@@ -971,7 +1006,7 @@ export default class ChunkManager {
       this.renderSlotPool.release(slot)
     })
     this._committedCenter = { ...center }
-    globalThis.performance?.mark?.('chunk-window:commit-end')
+    markPerformance('chunk-transition:commit')
 
     const transitionEnd = globalThis.performance?.now?.() ?? Date.now()
     this.renderSlotPool.lastTransitionMs = transitionEnd - transitionStart
@@ -986,7 +1021,7 @@ export default class ChunkManager {
 
   _releaseStaleSlots(slots) {
     new Set(slots).forEach((slot) => {
-      if (!slot || slot.state === 'active')
+      if (!slot || slot.state === 'active' || slot.state === 'failed')
         return
       slot.assignmentId = ++this._nextAssignmentId
       this.renderSlotPool.release(slot)
