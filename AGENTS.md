@@ -94,7 +94,7 @@ pnpm clean:report     # Remove Playwright test reports
 - **Functions/Methods:** camelCase (`updateCamera`, `debugInit`, `resize`)
 - **Private members:** Underscore prefix (`_adaptiveY`, `_internalState`)
 - **Constants:** UPPER_SNAKE_CASE (`SEED_MAX`, `CHUNK_SIZE`)
-- **Vue Components:** PascalCase file names (`Crosshair.vue`, `MiniMap.vue`)
+- **Vue Components:** PascalCase file names (`Crosshair.vue`, `GameHud.vue`)
 - **Pinia Stores:** camelCase with `use` prefix (`useUiStore`, `useHudStore`)
 
 ### Import Order

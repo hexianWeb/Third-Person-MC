@@ -121,8 +121,7 @@ E:\圖形學\Third-Person-MC\
 ├── src/
 │   ├── components/         # Vue UI components
 │   │   ├── hud/            # In-game HUD (Health, XP, Hotbar, etc.)
-│   │   ├── menu/           # Main Menu, Settings, Loading screens
-│   │   └── MiniMap.vue     # Minimap component
+│   │   └── menu/           # Main Menu, Settings, Loading screens
 │   ├── js/                 # Core logic
 │   │   ├── camera/         # Camera Controller & Rig
 │   │   ├── world/          # Scene elements, Player logic, Terrain system

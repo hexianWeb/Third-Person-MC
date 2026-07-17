@@ -121,8 +121,7 @@ E:\圖形學\Third-Person-MC\
 ├── src/
 │   ├── components/         # Vue UI 组件
 │   │   ├── hud/            # 游戏内 HUD (血条、经验、快捷栏等)
-│   │   ├── menu/           # 主菜单、设置、加载界面
-│   │   └── MiniMap.vue     # 小地图组件
+│   │   └── menu/           # 主菜单、设置、加载界面
 │   ├── js/                 # 核心逻辑
 │   │   ├── camera/         # 相机控制器与 Rig
 │   │   ├── world/          # 场景元素、玩家逻辑、地形系统
