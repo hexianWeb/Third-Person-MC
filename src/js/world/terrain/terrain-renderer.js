@@ -7,7 +7,7 @@ import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-conf
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 
-import { ANIMATION_DEFAULTS, blocks, createMaterials, resources, sharedGeometry } from './blocks-config.js'
+import { ANIMATION_DEFAULTS, blocks, clearSharedMaterialCache, getSharedBlockMaterials, resources, sharedGeometry } from './blocks-config.js'
 import TerrainContainer from './terrain-container.js'
 
 // 将 id -> 配置映射缓存，避免每次遍历 Object.values
@@ -206,14 +206,16 @@ export default class TerrainRenderer {
       if (!blockType || !blockType.visible)
         return
 
-      const materials = createMaterials(blockType, this.resources.items)
+      // 共享材质：所有 chunk 复用同一份，避免重复创建与 WebGPU 管线重复编译
+      const materials = getSharedBlockMaterials(blockType, this.resources.items)
       if (!materials)
         return
 
       // 收集动画材质，供 update() 统一更新时间 uniform
+      // 材质共享后同一实例可能在数组中出现多次（六面侧面），需去重
       const matArray = Array.isArray(materials) ? materials : [materials]
       matArray.forEach((mat) => {
-        if (mat._isAnimated) {
+        if (mat._isAnimated && !this._animatedMaterials.includes(mat)) {
           this._animatedMaterials.push(mat)
         }
       })
@@ -429,12 +431,15 @@ export default class TerrainRenderer {
       max: 1,
       step: 0.01,
     }).on('change', () => {
+      // 材质级参数变更需先清空共享材质缓存，重建时才会生效
+      clearSharedMaterialCache()
       this._rebuildFromContainer()
     })
 
     materialsFolder.addBinding(blocks.treeLeaves, 'transparent', {
       label: '树叶 透明',
     }).on('change', () => {
+      clearSharedMaterialCache()
       this._rebuildFromContainer()
     })
 
@@ -515,12 +520,7 @@ export default class TerrainRenderer {
    */
   _disposeChildren() {
     this._blockMeshes.forEach((mesh) => {
-      if (mesh.material) {
-        if (Array.isArray(mesh.material))
-          mesh.material.forEach(mat => mat?.dispose?.())
-        else
-          mesh.material.dispose()
-      }
+      // 材质为全局共享（getSharedBlockMaterials），不随 chunk 卸载 dispose
       this.group.remove(mesh)
       mesh.dispose?.()
     })

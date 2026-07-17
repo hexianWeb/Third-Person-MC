@@ -93,6 +93,10 @@ export default class IdleQueue {
     this._tasks.sort((a, b) => a.priority - b.priority)
 
     const start = performance.now()
+    let ran = 0
+    const ranKeys = []
+    const didTimeout = deadline?.didTimeout === true
+    const remainBefore = deadline?.timeRemaining?.() ?? null
 
     while (this._tasks.length > 0) {
       const task = this._tasks.shift()
@@ -107,6 +111,8 @@ export default class IdleQueue {
       // 执行任务
       try {
         task.fn()
+        ran++
+        ranKeys.push(task.key)
       }
       finally {
         // 执行完移除
@@ -122,6 +128,15 @@ export default class IdleQueue {
         if (performance.now() - start >= this.timeBudgetMs)
           break
       }
+    }
+
+    const elapsed = performance.now() - start
+    // 单次 idle 批次超过 8ms 才打日志，避免刷屏
+    if (ran > 0 && elapsed >= 8) {
+      console.log(
+        `[idleQueue] batch ${elapsed.toFixed(1)}ms | tasks=${ran} | remain=${remainBefore} | timeout=${didTimeout} | left=${this._taskByKey.size}`,
+        ranKeys,
+      )
     }
 
     // 若还有任务，继续调度下一次

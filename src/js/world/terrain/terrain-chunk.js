@@ -218,7 +218,11 @@ export default class TerrainChunk {
     if (this.state !== 'init')
       return false
 
+    const tag = `chunk:generateData [${this.chunkX},${this.chunkZ}]`
+    console.time(tag)
     this.generator.generate()
+    console.timeEnd(tag)
+
     this.state = 'dataReady'
     return true
   }
@@ -229,6 +233,9 @@ export default class TerrainChunk {
   regenerate(params = {}) {
     if (this.state === 'disposed')
       return
+
+    const tag = `chunk:regenerate [${this.chunkX},${this.chunkZ}]`
+    console.time(tag)
 
     // 更新参数
     this.generator.updateParams(params)
@@ -242,6 +249,8 @@ export default class TerrainChunk {
 
     // 刷新水面
     this.refreshWater()
+
+    console.timeEnd(tag)
   }
 
   /**
@@ -253,9 +262,20 @@ export default class TerrainChunk {
     if (this.state !== 'dataReady')
       return false
 
+    const tag = `chunk:buildMesh [${this.chunkX},${this.chunkZ}]`
+    console.time(tag)
+
+    console.time(`${tag}/blocks`)
     this.renderer._rebuildFromContainer()
+    console.timeEnd(`${tag}/blocks`)
+
     // 构建植物 mesh
+    console.time(`${tag}/plants`)
     this.plantRenderer.build(this.generator.plantData)
+    console.timeEnd(`${tag}/plants`)
+
+    console.timeEnd(tag)
+
     this.state = 'meshReady'
     return true
   }

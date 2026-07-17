@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import Experience from '../../experience.js'
 import {
-  createPlantMaterials,
+  getSharedPlantMaterials,
   PLANT_BY_ID,
   sharedCrossPlaneGeometry,
 } from './blocks-config.js'
@@ -65,7 +65,8 @@ export default class PlantRenderer {
       if (!plantType || !plantType.visible)
         return
 
-      const material = createPlantMaterials(plantType, this.resources.items)
+      // 共享材质：所有 chunk 复用同一份，避免重复创建与 WebGPU 管线重复编译
+      const material = getSharedPlantMaterials(plantType, this.resources.items)
       if (!material)
         return
 
@@ -132,9 +133,7 @@ export default class PlantRenderer {
    */
   _disposeChildren() {
     this._plantMeshes.forEach((mesh) => {
-      if (mesh.material) {
-        mesh.material.dispose?.()
-      }
+      // 材质为全局共享（getSharedPlantMaterials），不随 chunk 卸载 dispose
       this.group.remove(mesh)
       mesh.dispose?.()
     })

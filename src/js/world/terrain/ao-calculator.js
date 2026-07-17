@@ -9,6 +9,14 @@
  */
 import { blocks } from './blocks-config.js'
 
+// id -> 方块配置查找表
+// 热路径（每个可见方块 8 次邻居检查）中禁止 Object.values().find：
+// 每次调用都会分配新数组并线性查找，一个 chunk 累计上百万次
+const BLOCK_BY_ID = Object.values(blocks).reduce((map, item) => {
+  map[item.id] = item
+  return map
+}, {})
+
 /**
  * Check if a block at the given position is solid (causes occlusion)
  * @param {object} container - TerrainContainer instance
@@ -23,8 +31,7 @@ function isSolid(container, x, y, z) {
   if (block.id === blocks.empty.id)
     return false
   // Transparent blocks (leaves, etc.) don't occlude
-  const blockConfig = Object.values(blocks).find(b => b.id === block.id)
-  if (blockConfig?.transparent)
+  if (BLOCK_BY_ID[block.id]?.transparent)
     return false
   return true
 }
@@ -79,8 +86,7 @@ export function computeAllBlocksAO(container) {
     }
 
     // Skip transparent blocks (leaves, plants, etc.)
-    const blockConfig = Object.values(blocks).find(b => b.id === block.id)
-    if (blockConfig?.transparent) {
+    if (BLOCK_BY_ID[block.id]?.transparent) {
       block.ao = null
       return
     }

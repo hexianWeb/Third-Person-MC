@@ -522,18 +522,17 @@ export default class ChunkManager {
       }
     }
 
-    // ===== 碰撞保底：玩家脚下 chunk 强制同步生成（避免出生/边界空洞）=====
-    // 注意：仅对玩家当前 chunk 同步，外围仍异步
+    // ===== 碰撞保底：玩家脚下 chunk 强制同步生成数据（避免出生/边界空洞）=====
+    // 碰撞只依赖数据层，mesh 构建交给队列以最高优先级执行，减少同步阻塞时间
     const currentKey = this._key(pcx, pcz)
     const currentChunk = this.chunks.get(currentKey)
     if (currentChunk?.state === 'init') {
       currentChunk.generator.params.seed = this.seed
       currentChunk.generateData()
-      const built = currentChunk.buildMesh()
-      currentChunk.renderer.group.scale.setScalar(this.renderParams.scale)
-      if (built) {
-        emitter.emit('game:chunk-built', { chunkX: pcx, chunkZ: pcz })
-      }
+      this._applyChunkModifications(currentChunk)
+      // 数据已同步生成，取消排队中的 data 任务，直接排 mesh（priority -1 保证最先执行）
+      this.idleQueue.cancel(`${currentKey}:data`)
+      this._enqueueMeshBuild(currentChunk, -1)
     }
 
     this._updateStats()
@@ -595,17 +594,27 @@ export default class ChunkManager {
       this._applyChunkModifications(chunk)
 
       // 数据完成后排队建网格（同 dist 优先级）
-      this.idleQueue.enqueue(`${key}:mesh`, () => {
-        if (!this.chunks.has(key) || chunk.state === 'disposed')
-          return
-        const built = chunk.buildMesh()
-        if (built) {
-          chunk.renderer.group.scale.setScalar(this.renderParams.scale)
-          emitter.emit('game:chunk-built', { chunkX: chunk.chunkX, chunkZ: chunk.chunkZ })
-        }
-        this._updateStats()
-      }, dist)
+      this._enqueueMeshBuild(chunk, dist)
     }, dist)
+  }
+
+  /**
+   * 排队构建 chunk 的 mesh（数据层已就绪时调用）
+   * @param {TerrainChunk} chunk
+   * @param {number} priority 数字越小优先级越高（玩家脚下 chunk 用负值抢占）
+   */
+  _enqueueMeshBuild(chunk, priority = 0) {
+    const key = this._key(chunk.chunkX, chunk.chunkZ)
+    this.idleQueue.enqueue(`${key}:mesh`, () => {
+      if (!this.chunks.has(key) || chunk.state === 'disposed')
+        return
+      const built = chunk.buildMesh()
+      if (built) {
+        chunk.renderer.group.scale.setScalar(this.renderParams.scale)
+        emitter.emit('game:chunk-built', { chunkX: chunk.chunkX, chunkZ: chunk.chunkZ })
+      }
+      this._updateStats()
+    }, priority)
   }
 
   // #region 调试面板

@@ -458,7 +458,7 @@ export default class TerrainGenerator {
    * 生成矿产：使用 3D 噪声对石层进行覆盖
    */
   generateResources(simplex) {
-    const { width, height } = this.container.getSize()
+    const { width } = this.container.getSize()
     const stats = {}
 
     resources.forEach((res) => {
@@ -468,7 +468,9 @@ export default class TerrainGenerator {
 
       for (let z = 0; z < width; z++) {
         for (let x = 0; x < width; x++) {
-          for (let y = 0; y <= height; y++) {
+          // 石块只存在于地表以下，用 heightMap 限制 y 上限，跳过地表以上的大片空气
+          const surfaceHeight = this.heightMap[z]?.[x] ?? -1
+          for (let y = 0; y <= surfaceHeight; y++) {
             // 仅在石块内部生成矿产，避免替换表层
             const block = this.container.getBlock(x, y, z)
             if (block.id !== blocks.stone.id)

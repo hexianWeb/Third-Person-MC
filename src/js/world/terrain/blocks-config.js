@@ -450,13 +450,15 @@ export function createMaterials(blockType, textureItems) {
     if (!side || !top || !bottom)
       return null
 
+    // 侧面 4 个位置复用同一材质实例，减少材质数量与管线编译
+    const sideMaterial = makeCustomMaterial(side, materialOptions)
     return [
-      makeCustomMaterial(side, materialOptions), // right
-      makeCustomMaterial(side, materialOptions), // left
+      sideMaterial, // right
+      sideMaterial, // left
       makeCustomMaterial(top, materialOptions), // top
       makeCustomMaterial(bottom, materialOptions), // bottom
-      makeCustomMaterial(side, materialOptions), // front
-      makeCustomMaterial(side, materialOptions), // back
+      sideMaterial, // front
+      sideMaterial, // back
     ]
   }
 
@@ -465,6 +467,55 @@ export function createMaterials(blockType, textureItems) {
   if (!mainTexture)
     return null
   return makeCustomMaterial(mainTexture, materialOptions)
+}
+
+// ===== 共享材质缓存 =====
+// 同一种方块的材质在所有 chunk 间完全相同，按 id 全局缓存一份：
+// 1. 避免每个 chunk 重建材质（六面方块一次 3 个）带来的 CPU/内存开销
+// 2. 避免 WebGPU 下新材质首帧触发管线重复编译（新 chunk 出现瞬间卡顿的主要来源）
+const _blockMaterialCache = new Map()
+const _plantMaterialCache = new Map()
+
+/**
+ * 获取共享方块材质（不存在则创建并缓存）
+ * @param {object} blockType 方块配置
+ * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
+ * @returns {THREE.Material|THREE.Material[]|null} 共享材质（或材质数组），缺失纹理时返回 null
+ */
+export function getSharedBlockMaterials(blockType, textureItems) {
+  let materials = _blockMaterialCache.get(blockType.id)
+  if (materials === undefined) {
+    materials = createMaterials(blockType, textureItems)
+    // 纹理缺失时不缓存 null，等资源就绪后重试
+    if (materials)
+      _blockMaterialCache.set(blockType.id, materials)
+  }
+  return materials
+}
+
+/**
+ * 获取共享植物材质（不存在则创建并缓存）
+ * @param {object} plantType 植物配置
+ * @param {Record<string, THREE.Texture>} textureItems 资源管理器加载的纹理
+ * @returns {THREE.Material|null} 共享材质，缺失纹理时返回 null
+ */
+export function getSharedPlantMaterials(plantType, textureItems) {
+  let material = _plantMaterialCache.get(plantType.id)
+  if (material === undefined) {
+    material = createPlantMaterials(plantType, textureItems)
+    if (material)
+      _plantMaterialCache.set(plantType.id, material)
+  }
+  return material
+}
+
+/**
+ * 清空共享材质缓存（调试面板修改 alphaTest/transparent 等材质级参数后调用）
+ * 注意：不主动 dispose 旧材质，由持有方重建时自然替换
+ */
+export function clearSharedMaterialCache() {
+  _blockMaterialCache.clear()
+  _plantMaterialCache.clear()
 }
 
 /**

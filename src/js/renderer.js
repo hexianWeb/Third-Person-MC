@@ -474,6 +474,8 @@ export default class Renderer {
     if (!this.ready || !this.renderPipeline)
       return
 
+    const frameStart = performance.now()
+
     const elapsedSec = this.experience.time.elapsed * 0.001
 
     if (this.speedLineUniforms)
@@ -492,7 +494,18 @@ export default class Renderer {
     }
 
     this._syncPlayerPreview()
+
+    const renderStart = performance.now()
     this.renderPipeline.render()
+    const renderMs = performance.now() - renderStart
+    const frameMs = performance.now() - frameStart
+
+    // 仅记录明显卡顿帧（>=50ms），用于区分 CPU 建 mesh 与 GPU/管线渲染阻塞
+    if (frameMs >= 50) {
+      console.warn(
+        `[renderer] slow frame ${frameMs.toFixed(1)}ms (pipeline.render=${renderMs.toFixed(1)}ms)`,
+      )
+    }
   }
 
   /**
