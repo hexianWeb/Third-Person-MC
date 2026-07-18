@@ -8,7 +8,7 @@ import {
   disposeOwnedSkinTexture,
 } from '../../src/js/world/player/skin-texture-utils.js'
 
-function makeModel(names = ['SimplePlayer.arma', 'SimplePlayer.Body.Layer1', 'SimplePlayer.Body.Layer2']) {
+function makeModel(names = ['SimplePlayerarma', 'SimplePlayerBodyLayer1', 'SimplePlayerBodyLayer2']) {
   const mat1 = { map: null, emissiveMap: null, needsUpdate: false }
   const mat2 = { map: null, emissiveMap: null, needsUpdate: false }
   return {
@@ -25,14 +25,14 @@ function makeModel(names = ['SimplePlayer.arma', 'SimplePlayer.Body.Layer1', 'Si
 
 test('bindCharacterBodyLayers validates fixed hierarchy names', () => {
   const layers = bindCharacterBodyLayers(makeModel())
-  assert.equal(layers.layer1.name, 'SimplePlayer.Body.Layer1')
-  assert.equal(layers.layer2.name, 'SimplePlayer.Body.Layer2')
+  assert.equal(layers.layer1.name, 'SimplePlayerBodyLayer1')
+  assert.equal(layers.layer2.name, 'SimplePlayerBodyLayer2')
 })
 
 test('bindCharacterBodyLayers throws contextual error on mismatch', () => {
   assert.throws(
     () => bindCharacterBodyLayers(makeModel(['Wrong', 'A', 'B'])),
-    /SimplePlayer\.arma/,
+    /SimplePlayerarma/,
   )
 })
 
