@@ -4,7 +4,12 @@ import { useSkinStore } from '../../../pinia/skinStore.js'
 import { CAMERA_RIG_CONFIG } from '../../camera/camera-rig-config.js'
 import { PLAYER_CONFIG } from '../../config/player-config.js'
 import { SHADOW_QUALITY } from '../../config/shadow-config.js'
-import { SKIN_LIST } from '../../config/skin-config.js'
+import {
+  CANONICAL_MODEL_RESOURCE,
+  CUSTOM_SKIN_ID,
+  DEFAULT_SKIN_ID,
+  SKIN_LIST,
+} from '../../config/skin-config.js'
 import Experience from '../../experience.js'
 import { calculateKnockbackDir, createAttackBoxHelper, isInAttackBox, updateAttackBoxHelper } from '../../utils/combat-utils.js'
 import emitter from '../../utils/event/event-bus.js'
@@ -17,6 +22,13 @@ import {
 import { resolveDirectionInput } from './input-resolver.js'
 import { PlayerAnimationController } from './player-animation-controller.js'
 import { PlayerMovementController } from './player-movement-controller.js'
+import {
+  applySkinTextureToLayers,
+  bindCharacterBodyLayers,
+  configureSkinTexture,
+  createTextureFromBlob,
+  disposeOwnedSkinTexture,
+} from './skin-texture-utils.js'
 
 export default class Player {
   constructor() {
@@ -82,26 +94,36 @@ export default class Player {
     this.invulnerabilityDuration = 1.0 // 1 second
     this.invulnerabilityTimer = 0
 
-    // Resource - 使用当前选中的皮肤
-    const skinStore = useSkinStore()
-    this.resource = this._getModelResource(skinStore.currentSkinId)
+    // 统一使用 canonical 模型，运行时只替换纹理
+    this.resource = this.resources.items[CANONICAL_MODEL_RESOURCE]
+    this._skinRequestId = 0
+    this._activeSkinTexture = null
+    this._bodyLayers = null
 
     // Controllers
     this.movement = new PlayerMovementController(this.config)
 
     this.setModel()
+    this._bodyLayers = bindCharacterBodyLayers(this.model)
+    // 首帧隐藏，避免自定义皮肤装备时闪现 GLB 内嵌贴图
+    this.model.visible = false
 
     // Animation Controller needs model
     this.animation = new PlayerAnimationController(this.model, this.resource.animations)
 
     this.setupInputListeners()
 
-    // 监听皮肤变更事件
-    emitter.on('skin:changed', this._handleSkinChange.bind(this))
+    // 监听皮肤变更事件（保留绑定引用以便 destroy 时 off）
+    this._handleSkinChange = this._handleSkinChange.bind(this)
+    emitter.on('skin:changed', this._handleSkinChange)
 
     // Shadow quality event listener
     this._handleShadowQuality = this._handleShadowQuality.bind(this)
     emitter.on('shadow:quality-changed', this._handleShadowQuality)
+
+    // 应用 store 中的初始皮肤
+    const skinStore = useSkinStore()
+    void this._applySkinById(skinStore.currentSkinId, { isInitial: true })
 
     // Debug
     if (this.debug.active) {
@@ -127,37 +149,75 @@ export default class Player {
   }
 
   /**
-   * 根据 skinId 获取模型资源
-   * @param {string} skinId - 皮肤 ID
-   * @returns {object} GLTF resource
+   * 按 skinId 准备贴图（预设共享 Resources；自定义从 Blob 创建并拥有）
+   * @param {string} skinId
+   * @returns {Promise<{ texture: THREE.Texture, owned: boolean }>} 贴图与是否由 Player 拥有
    */
-  _getModelResource(skinId) {
-    const skinConfig = SKIN_LIST.find(s => s.id === skinId)
-    if (!skinConfig)
-      return this.resources.items.playerModel
+  async _prepareSkinTexture(skinId) {
+    if (skinId === CUSTOM_SKIN_ID) {
+      const skinStore = useSkinStore()
+      const blob = skinStore.committedCustomSkin
+      if (!blob)
+        throw new Error('[Player] committedCustomSkin is missing for custom skin')
 
-    // 资源名称约定：skinId + 'Model' (如 steveModel, alexModel)
-    const resourceName = `${skinId}Model`
-    return this.resources.items[resourceName] || this.resources.items.playerModel
+      const { texture } = await createTextureFromBlob(blob, THREE)
+      return { texture, owned: true }
+    }
+
+    const skinConfig = SKIN_LIST.find(s => s.id === skinId)
+    if (!skinConfig?.textureResourceName)
+      throw new Error(`[Player] Unknown preset skin: ${skinId}`)
+
+    const sharedTexture = this.resources.items[skinConfig.textureResourceName]
+    if (!sharedTexture)
+      throw new Error(`[Player] Missing texture resource: ${skinConfig.textureResourceName}`)
+
+    const texture = configureSkinTexture(sharedTexture, { owned: false })
+    return { texture, owned: false }
   }
 
   /**
-   * 切换皮肤模型
-   * @param {{ skinId: string }} payload - 皮肤变更事件参数
+   * 应用皮肤贴图；通过 _skinRequestId 丢弃过期异步结果
+   * @param {string} skinId
+   * @param {{ isInitial?: boolean }} [options]
+   */
+  async _applySkinById(skinId, { isInitial = false } = {}) {
+    const requestId = ++this._skinRequestId
+    try {
+      const prepared = await this._prepareSkinTexture(skinId)
+
+      // 请求已被更新的切换取代：丢弃本次拥有的贴图
+      if (requestId !== this._skinRequestId) {
+        disposeOwnedSkinTexture(prepared.owned ? prepared.texture : null)
+        return
+      }
+
+      const previous = this._activeSkinTexture
+      applySkinTextureToLayers(this._bodyLayers, prepared.texture)
+      this._activeSkinTexture = prepared
+      if (previous?.owned)
+        disposeOwnedSkinTexture(previous.texture)
+
+      this.model.visible = true
+    }
+    catch (error) {
+      console.error('[Player] Failed to apply skin:', skinId, error)
+      // 初始应用失败时回退默认预设一次，再显示模型
+      if (isInitial && skinId !== DEFAULT_SKIN_ID) {
+        await this._applySkinById(DEFAULT_SKIN_ID, { isInitial: true })
+        return
+      }
+      if (isInitial)
+        this.model.visible = true
+    }
+  }
+
+  /**
+   * 皮肤变更：仅换贴图，不重建模型 / 动画控制器
+   * @param {{ skinId: string, revision: number }} payload
    */
   _handleSkinChange({ skinId }) {
-    const resource = this._getModelResource(skinId)
-
-    // 移除旧模型
-    this.movement.group.remove(this.model)
-
-    // 设置新模型资源
-    this.resource = resource
-    this.setModel()
-
-    // 重新初始化动画控制器
-    this.animation.dispose()
-    this.animation = new PlayerAnimationController(this.model, this.resource.animations)
+    void this._applySkinById(skinId)
   }
 
   setModel() {
@@ -824,6 +884,9 @@ export default class Player {
   }
 
   destroy() {
-    // Cleanup
+    emitter.off('skin:changed', this._handleSkinChange)
+    if (this._activeSkinTexture?.owned)
+      disposeOwnedSkinTexture(this._activeSkinTexture.texture)
+    this._activeSkinTexture = null
   }
 }
