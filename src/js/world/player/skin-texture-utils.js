@@ -1,12 +1,14 @@
 import * as THREE from 'three'
 
 /**
- * GLB 角色固定层级名称（与 SimplePlayer 资源一致）
+ * GLB 角色固定层级名称（Three.js 运行时名称）
+ * 资源侧原名为 SimplePlayer.arma / SimplePlayer.Body.Layer1|2；
+ * GLTFLoader 经 PropertyBinding.sanitizeNodeName 会去掉 `.` / `:`，故运行时无点号。
  */
 export const EXPECTED_LAYER_NAMES = {
-  root: 'SimplePlayer.arma',
-  layer1: 'SimplePlayer.Body.Layer1',
-  layer2: 'SimplePlayer.Body.Layer2',
+  root: 'SimplePlayerarma',
+  layer1: 'SimplePlayerBodyLayer1',
+  layer2: 'SimplePlayerBodyLayer2',
 }
 
 /**

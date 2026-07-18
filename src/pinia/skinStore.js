@@ -130,6 +130,7 @@ export function createSkinStoreLogic(deps = {}) {
 
   /**
    * 将当前皮肤 ID 写入 localStorage
+   * @param {string} skinId
    */
   function saveSkinId(skinId) {
     localStorageRef.setItem(STORAGE_KEY, skinId)
@@ -150,6 +151,7 @@ export function createSkinStoreLogic(deps = {}) {
 
   /**
    * 异步水合：读取 localStorage + IndexedDB，不抛出、不 emit
+   * 状态写入必须走 this，以便 Pinia reactive() 包装后能触发视图更新
    * @param {{ storage?: object, localStorage?: Storage }} [options]
    */
   async function initialize(options = {}) {
@@ -161,8 +163,8 @@ export function createSkinStoreLogic(deps = {}) {
     storage = storage ?? createCustomSkinStorage()
     localStorageRef = localStorageRef ?? globalThis.localStorage
 
-    store.isLoading = true
-    store.errorKey = null
+    this.isLoading = true
+    this.errorKey = null
 
     try {
       const savedId = readSavedSkinId()
@@ -176,41 +178,41 @@ export function createSkinStoreLogic(deps = {}) {
         customRecord = await storage.getCustomSkin()
       }
       catch {
-        store.errorKey = 'skin.errorLoad'
-        store.currentSkinId = DEFAULT_SKIN_ID
-        store.previewSkinId = DEFAULT_SKIN_ID
-        store.committedCustomSkin = null
+        this.errorKey = 'skin.errorLoad'
+        this.currentSkinId = DEFAULT_SKIN_ID
+        this.previewSkinId = DEFAULT_SKIN_ID
+        this.committedCustomSkin = null
         return
       }
 
       if (customRecord?.blob) {
-        store.committedCustomSkin = customRecord.blob
+        this.committedCustomSkin = customRecord.blob
       }
       else {
-        store.committedCustomSkin = null
+        this.committedCustomSkin = null
       }
 
       // custom 已保存但无有效 Blob → 回退默认并修复 localStorage
       if (savedId === CUSTOM_SKIN_ID) {
-        if (store.committedCustomSkin) {
-          store.currentSkinId = CUSTOM_SKIN_ID
+        if (this.committedCustomSkin) {
+          this.currentSkinId = CUSTOM_SKIN_ID
         }
         else {
-          store.currentSkinId = DEFAULT_SKIN_ID
+          this.currentSkinId = DEFAULT_SKIN_ID
           saveSkinId(DEFAULT_SKIN_ID)
         }
       }
       else if (savedId && SKIN_LIST.some(s => s.id === savedId)) {
-        store.currentSkinId = savedId
+        this.currentSkinId = savedId
       }
       else {
-        store.currentSkinId = DEFAULT_SKIN_ID
+        this.currentSkinId = DEFAULT_SKIN_ID
       }
 
-      store.previewSkinId = store.currentSkinId
+      this.previewSkinId = this.currentSkinId
     }
     finally {
-      store.isLoading = false
+      this.isLoading = false
     }
   }
 
@@ -218,17 +220,17 @@ export function createSkinStoreLogic(deps = {}) {
    * 进入选择器时同步预览态
    */
   function initPreview() {
-    store.previewSkinId = store.currentSkinId
-    store.pendingCustomSkin = null
-    store.errorKey = null
-    store.isLoading = false
+    this.previewSkinId = this.currentSkinId
+    this.pendingCustomSkin = null
+    this.errorKey = null
+    this.isLoading = false
   }
 
   /**
    * @param {string} skinId
    */
   function setPreviewSkin(skinId) {
-    store.previewSkinId = skinId
+    this.previewSkinId = skinId
   }
 
   /**
@@ -237,25 +239,25 @@ export function createSkinStoreLogic(deps = {}) {
    * @returns {Promise<{ ok: boolean, errorKey?: string }>}
    */
   async function setPendingCustomSkin(file) {
-    store.isLoading = true
+    this.isLoading = true
     try {
       const result = await validate(file, {
         createImageBitmap: globalThis.createImageBitmap,
       })
 
       if (!result.ok) {
-        store.errorKey = result.errorKey
+        this.errorKey = result.errorKey
         return { ok: false, errorKey: result.errorKey }
       }
 
-      store.pendingCustomSkin = file
-      store.previewSkinId = CUSTOM_SKIN_ID
-      store.previewRevision += 1
-      store.errorKey = null
+      this.pendingCustomSkin = file
+      this.previewSkinId = CUSTOM_SKIN_ID
+      this.previewRevision += 1
+      this.errorKey = null
       return { ok: true }
     }
     finally {
-      store.isLoading = false
+      this.isLoading = false
     }
   }
 
@@ -264,72 +266,72 @@ export function createSkinStoreLogic(deps = {}) {
    * @returns {Promise<{ ok: boolean, errorKey?: string }>}
    */
   async function applySkin() {
-    if (!store.hasPreviewChanges) {
+    if (!this.hasPreviewChanges) {
       return { ok: true }
     }
 
-    const targetId = store.previewSkinId
-    store.isLoading = true
+    const targetId = this.previewSkinId
+    this.isLoading = true
 
     try {
       // 自定义 pending：IndexedDB 成功后才提升状态
-      if (targetId === CUSTOM_SKIN_ID && store.pendingCustomSkin) {
+      if (targetId === CUSTOM_SKIN_ID && this.pendingCustomSkin) {
         try {
-          await storage.setCustomSkin(store.pendingCustomSkin)
+          await storage.setCustomSkin(this.pendingCustomSkin)
         }
         catch {
-          store.errorKey = 'skin.errorSave'
+          this.errorKey = 'skin.errorSave'
           return { ok: false, errorKey: 'skin.errorSave' }
         }
 
-        store.committedCustomSkin = store.pendingCustomSkin
-        store.pendingCustomSkin = null
-        store.currentSkinId = CUSTOM_SKIN_ID
-        store.previewSkinId = CUSTOM_SKIN_ID
+        this.committedCustomSkin = this.pendingCustomSkin
+        this.pendingCustomSkin = null
+        this.currentSkinId = CUSTOM_SKIN_ID
+        this.previewSkinId = CUSTOM_SKIN_ID
         saveSkinId(CUSTOM_SKIN_ID)
-        store.committedRevision += 1
-        store.errorKey = null
+        this.committedRevision += 1
+        this.errorKey = null
         await emitSkinChanged({
-          skinId: store.currentSkinId,
-          revision: store.committedRevision,
+          skinId: this.currentSkinId,
+          revision: this.committedRevision,
         })
         return { ok: true }
       }
 
       // 已有 committed custom、无 pending：切回 custom
       if (targetId === CUSTOM_SKIN_ID) {
-        if (!store.committedCustomSkin) {
-          store.errorKey = 'skin.errorSave'
+        if (!this.committedCustomSkin) {
+          this.errorKey = 'skin.errorSave'
           return { ok: false, errorKey: 'skin.errorSave' }
         }
-        store.pendingCustomSkin = null
-        store.currentSkinId = CUSTOM_SKIN_ID
-        store.previewSkinId = CUSTOM_SKIN_ID
+        this.pendingCustomSkin = null
+        this.currentSkinId = CUSTOM_SKIN_ID
+        this.previewSkinId = CUSTOM_SKIN_ID
         saveSkinId(CUSTOM_SKIN_ID)
-        store.committedRevision += 1
-        store.errorKey = null
+        this.committedRevision += 1
+        this.errorKey = null
         await emitSkinChanged({
-          skinId: store.currentSkinId,
-          revision: store.committedRevision,
+          skinId: this.currentSkinId,
+          revision: this.committedRevision,
         })
         return { ok: true }
       }
 
       // 预设路径
-      store.pendingCustomSkin = null
-      store.currentSkinId = targetId
-      store.previewSkinId = targetId
+      this.pendingCustomSkin = null
+      this.currentSkinId = targetId
+      this.previewSkinId = targetId
       saveSkinId(targetId)
-      store.committedRevision += 1
-      store.errorKey = null
+      this.committedRevision += 1
+      this.errorKey = null
       await emitSkinChanged({
-        skinId: store.currentSkinId,
-        revision: store.committedRevision,
+        skinId: this.currentSkinId,
+        revision: this.committedRevision,
       })
       return { ok: true }
     }
     finally {
-      store.isLoading = false
+      this.isLoading = false
     }
   }
 
@@ -337,10 +339,10 @@ export function createSkinStoreLogic(deps = {}) {
    * 取消预览：丢弃 pending，不写持久化、不 emit
    */
   function cancelPreview() {
-    store.pendingCustomSkin = null
-    store.previewSkinId = store.currentSkinId
-    store.errorKey = null
-    store.isLoading = false
+    this.pendingCustomSkin = null
+    this.previewSkinId = this.currentSkinId
+    this.errorKey = null
+    this.isLoading = false
   }
 
   /**
@@ -351,6 +353,7 @@ export function createSkinStoreLogic(deps = {}) {
     return ALL_SKINS.find(s => s.id === skinId)
   }
 
+  // 方法挂到 store 上，经 reactive() 调用时 this 为 Proxy，才能触发 Vue 更新
   store.initialize = initialize
   store.initPreview = initPreview
   store.setPreviewSkin = setPreviewSkin
