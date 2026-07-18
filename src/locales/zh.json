@@ -132,8 +132,16 @@
     "steve": "史蒂夫",
     "alex": "艾莉克斯",
     "player": "经典角色",
+    "custom": "自定义",
+    "upload": "上传 PNG",
+    "uploadHint": "64×64 PNG",
     "equipped": "已装备",
-    "credits": "特别感谢皮肤作者："
+    "credits": "特别感谢皮肤作者：",
+    "errorInvalidType": "请选择 PNG 图片。",
+    "errorInvalidSize": "皮肤必须为精确的 64×64 像素。",
+    "errorDecode": "无法读取该图片。",
+    "errorSave": "无法保存自定义皮肤，请重试。",
+    "errorLoad": "无法加载已保存的自定义皮肤。"
   },
   "anim": {
     "idle": "待机",

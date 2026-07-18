@@ -23,12 +23,15 @@ const ui = useUiStore()
 // 模板引用
 const previewCanvas = ref(null)
 const previewContainer = ref(null)
+const customFileInput = ref(null)
 
 // 预览场景实例
 const previewScene = ref(null)
 
 // 当前播放的动画 ID
 const currentAnim = ref('idle')
+/** 自定义皮肤卡片缩略图 Object URL */
+const customThumbUrl = ref(null)
 let isUnmounted = false
 
 // ----------------------------------------
@@ -76,6 +79,30 @@ function selectSkin(skinId) {
 }
 
 /**
+ * 选择自定义皮肤卡片：已有 blob 则预览，否则打开文件选择
+ */
+function selectCustomSkin() {
+  const hasBlob = skinStore.pendingCustomSkin || skinStore.committedCustomSkin
+  if (hasBlob) {
+    skinStore.setPreviewSkin(CUSTOM_SKIN_ID)
+    return
+  }
+  customFileInput.value?.click()
+}
+
+/**
+ * 自定义 PNG 上传
+ * @param {Event} event
+ */
+async function onCustomFileChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file)
+    return
+  await skinStore.setPendingCustomSkin(file)
+}
+
+/**
  * 按 store 预览状态刷新 3D 贴图（不重载模型）
  */
 async function applyPreviewFromStore() {
@@ -100,9 +127,10 @@ async function applyPreviewFromStore() {
 // 应用 / 取消
 // ----------------------------------------
 
-function apply() {
-  skinStore.applySkin()
-  ui.exitSkinSelector()
+async function apply() {
+  const result = await skinStore.applySkin()
+  if (result?.ok !== false)
+    ui.exitSkinSelector()
 }
 
 function cancel() {
@@ -168,6 +196,12 @@ onUnmounted(() => {
   // 清理预览场景资源
   previewScene.value?.dispose()
   previewScene.value = null
+
+  // 撤销自定义缩略图 URL
+  if (customThumbUrl.value) {
+    URL.revokeObjectURL(customThumbUrl.value)
+    customThumbUrl.value = null
+  }
 })
 
 // ----------------------------------------
@@ -187,6 +221,21 @@ watch(
     await applyPreviewFromStore()
     currentAnim.value = 'idle'
   },
+)
+
+// 同步自定义卡片缩略图（pending 优先）
+watch(
+  () => [skinStore.pendingCustomSkin, skinStore.committedCustomSkin],
+  ([pending, committed]) => {
+    if (customThumbUrl.value) {
+      URL.revokeObjectURL(customThumbUrl.value)
+      customThumbUrl.value = null
+    }
+    const blob = pending || committed
+    if (blob)
+      customThumbUrl.value = URL.createObjectURL(blob)
+  },
+  { immediate: true },
 )
 </script>
 
@@ -267,7 +316,47 @@ watch(
           ✓ {{ $t('skin.equipped') }}
         </span>
       </div>
+
+      <!-- 自定义上传卡片 -->
+      <div
+        class="skin-card"
+        :class="{
+          selected: skinStore.previewSkinId === CUSTOM_SKIN_ID,
+          equipped: skinStore.currentSkinId === CUSTOM_SKIN_ID,
+        }"
+        @click="selectCustomSkin"
+      >
+        <div class="skin-thumb">
+          <img
+            v-if="customThumbUrl"
+            :src="customThumbUrl"
+            :alt="$t('skin.custom')"
+            class="skin-thumbnail"
+          >
+          <span v-else class="skin-upload-label mc-text">{{ $t('skin.upload') }}</span>
+        </div>
+        <span class="skin-name mc-text">{{ $t('skin.custom') }}</span>
+        <span class="skin-upload-hint mc-text">{{ $t('skin.uploadHint') }}</span>
+        <span
+          v-if="skinStore.currentSkinId === CUSTOM_SKIN_ID"
+          class="equipped-badge mc-text"
+        >
+          ✓ {{ $t('skin.equipped') }}
+        </span>
+        <input
+          ref="customFileInput"
+          type="file"
+          accept="image/png"
+          class="skin-file-input"
+          @change="onCustomFileChange"
+          @click.stop
+        >
+      </div>
     </div>
+
+    <p v-if="skinStore.errorKey" class="skin-error mc-text">
+      {{ $t(skinStore.errorKey) }}
+    </p>
 
     <!-- 操作按钮（最下方） -->
     <div class="mc-menu double skin-actions">
@@ -276,7 +365,7 @@ watch(
       </button>
       <button
         class="mc-button half mc-button-large"
-        :disabled="skinStore.previewSkinId === skinStore.currentSkinId"
+        :disabled="!skinStore.hasPreviewChanges || skinStore.isLoading"
         @click="apply"
       >
         <span class="title">{{ $t('common.apply') }}</span>
@@ -602,6 +691,35 @@ watch(
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.3));
+}
+
+.skin-upload-label {
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #3f3f3f;
+  text-align: center;
+  padding: 4px;
+  font-family: 'MinecraftV2', sans-serif;
+}
+
+.skin-upload-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 1px 1px 0 #3f3f3f;
+  font-family: 'MinecraftV2', sans-serif;
+}
+
+.skin-file-input {
+  display: none;
+}
+
+.skin-error {
+  margin: 0;
+  text-align: center;
+  color: #ff6b6b;
+  font-size: 13px;
+  text-shadow: 1px 1px 0 #3f3f3f;
+  font-family: 'MinecraftV2', sans-serif;
 }
 
 .skin-name {

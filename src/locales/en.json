@@ -132,8 +132,16 @@
     "steve": "Steve",
     "alex": "Alex",
     "player": "Classic",
+    "custom": "Custom",
+    "upload": "Upload PNG",
+    "uploadHint": "64×64 PNG",
     "equipped": "Equipped",
-    "credits": "Special thanks to skin creators:"
+    "credits": "Special thanks to skin creators:",
+    "errorInvalidType": "Please choose a PNG image.",
+    "errorInvalidSize": "Skin must be exactly 64×64 pixels.",
+    "errorDecode": "Could not read that image.",
+    "errorSave": "Could not save custom skin. Please try again.",
+    "errorLoad": "Could not load saved custom skin."
   },
   "anim": {
     "idle": "Idle",
