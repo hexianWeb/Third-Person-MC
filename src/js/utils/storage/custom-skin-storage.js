@@ -104,10 +104,10 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
     const db = await open()
     const tx = db.transaction(CUSTOM_SKIN_STORE, 'readwrite')
     const store = tx.objectStore(CUSTOM_SKIN_STORE)
-    // 先挂上 complete/abort，再发起 request，避免竞态漏等提交
+    // 并行等待 request 与 complete，避免 request 失败后 abort 变成未处理拒绝
     const committed = transactionToPromise(tx, operation)
-    await requestToPromise(run(store), operation)
-    await committed
+    const requested = requestToPromise(run(store), operation)
+    await Promise.all([requested, committed])
   }
 
   /**

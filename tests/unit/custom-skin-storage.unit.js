@@ -14,7 +14,8 @@ if (typeof globalThis.Blob === 'undefined') {
 
 /**
  * 最小内存 IndexedDB：仅覆盖 adapter 用到的 open / transaction / get / put / delete
- * 写操作在 transaction complete 时才落库，用于捕获“仅等 request success”的回归
+ * 写操作在 macrotask（setTimeout 0）的 transaction complete 时才落库，
+ * 用于捕获“仅等 request success”的回归
  */
 function createMemoryIndexedDB() {
   /** @type {Map<string, { version: number, stores: Map<string, Map<unknown, unknown>> }>} */
@@ -32,9 +33,9 @@ function createMemoryIndexedDB() {
       try {
         request.result = run()
         if (typeof request.onsuccess === 'function') request.onsuccess({ target: request })
-        // 模拟 IDB：request success 之后下一微任务才 complete 并真正提交
+        // 用宏任务提交：仅 await request 的写路径会在 await 边界后立刻继续，读到未提交数据
         if (typeof afterSuccess === 'function') {
-          queueMicrotask(afterSuccess)
+          setTimeout(afterSuccess, 0)
         }
       }
       catch (error) {
