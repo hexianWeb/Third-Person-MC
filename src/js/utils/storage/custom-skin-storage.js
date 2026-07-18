@@ -28,6 +28,26 @@ function requestToPromise(request, operation) {
 }
 
 /**
+ * 等待事务真正提交；写操作需在 complete 后才保证持久可见
+ * @param {IDBTransaction} tx
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+function transactionToPromise(tx, operation) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onabort = () => {
+      const detail = tx.error?.message || 'aborted'
+      reject(new Error(`custom-skin-storage ${operation} failed: ${detail}`))
+    }
+    tx.onerror = () => {
+      const detail = tx.error?.message || 'unknown error'
+      reject(new Error(`custom-skin-storage ${operation} failed: ${detail}`))
+    }
+  })
+}
+
+/**
  * @param {{ indexedDB?: IDBFactory }} [options]
  */
 export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {}) {
@@ -75,12 +95,19 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
   }
 
   /**
-   * @param {IDBDatabase} db
-   * @param {'readonly' | 'readwrite'} mode
+   * 写路径：同时等待 request success 与 transaction complete
+   * @param {string} operation
+   * @param {(store: IDBObjectStore) => IDBRequest} run
+   * @returns {Promise<void>}
    */
-  function getStore(db, mode) {
-    const tx = db.transaction(CUSTOM_SKIN_STORE, mode)
-    return tx.objectStore(CUSTOM_SKIN_STORE)
+  async function runWrite(operation, run) {
+    const db = await open()
+    const tx = db.transaction(CUSTOM_SKIN_STORE, 'readwrite')
+    const store = tx.objectStore(CUSTOM_SKIN_STORE)
+    // 先挂上 complete/abort，再发起 request，避免竞态漏等提交
+    const committed = transactionToPromise(tx, operation)
+    await requestToPromise(run(store), operation)
+    await committed
   }
 
   /**
@@ -88,7 +115,8 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
    */
   async function getCustomSkin() {
     const db = await open()
-    const store = getStore(db, 'readonly')
+    const tx = db.transaction(CUSTOM_SKIN_STORE, 'readonly')
+    const store = tx.objectStore(CUSTOM_SKIN_STORE)
     const record = await requestToPromise(store.get(CUSTOM_SKIN_KEY), 'get')
     if (!record?.blob) return null
     return {
@@ -103,23 +131,19 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
    * @returns {Promise<void>}
    */
   async function setCustomSkin(blob) {
-    const db = await open()
-    const store = getStore(db, 'readwrite')
     const record = {
       id: CUSTOM_SKIN_KEY,
       blob,
       schemaVersion: CUSTOM_SKIN_SCHEMA_VERSION,
     }
-    await requestToPromise(store.put(record), 'put')
+    await runWrite('put', (store) => store.put(record))
   }
 
   /**
    * @returns {Promise<void>}
    */
   async function clearCustomSkin() {
-    const db = await open()
-    const store = getStore(db, 'readwrite')
-    await requestToPromise(store.delete(CUSTOM_SKIN_KEY), 'delete')
+    await runWrite('delete', (store) => store.delete(CUSTOM_SKIN_KEY))
   }
 
   return {

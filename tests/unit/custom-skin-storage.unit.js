@@ -14,13 +14,13 @@ if (typeof globalThis.Blob === 'undefined') {
 
 /**
  * 最小内存 IndexedDB：仅覆盖 adapter 用到的 open / transaction / get / put / delete
- * Minimal in-memory IndexedDB fake for the adapter API under test.
+ * 写操作在 transaction complete 时才落库，用于捕获“仅等 request success”的回归
  */
 function createMemoryIndexedDB() {
   /** @type {Map<string, { version: number, stores: Map<string, Map<unknown, unknown>> }>} */
   const databases = new Map()
 
-  function createRequest(run) {
+  function createRequest(run, afterSuccess) {
     const request = {
       result: undefined,
       error: null,
@@ -32,6 +32,10 @@ function createMemoryIndexedDB() {
       try {
         request.result = run()
         if (typeof request.onsuccess === 'function') request.onsuccess({ target: request })
+        // 模拟 IDB：request success 之后下一微任务才 complete 并真正提交
+        if (typeof afterSuccess === 'function') {
+          queueMicrotask(afterSuccess)
+        }
       }
       catch (error) {
         request.error = error instanceof Error ? error : new Error(String(error))
@@ -84,31 +88,57 @@ function createMemoryIndexedDB() {
               const storeData = entry.stores.get(storeName)
               if (!storeData) throw new Error(`object store not found: ${storeName}`)
 
-              const objectStore = {
-                get(key) {
-                  return createRequest(() => storeData.get(key))
-                },
-                put(value) {
-                  return createRequest(() => {
-                    const key = value?.id
-                    storeData.set(key, value)
-                    return key
-                  })
-                },
-                delete(key) {
-                  return createRequest(() => {
-                    storeData.delete(key)
-                    return undefined
-                  })
-                },
-              }
+              /** @type {Array<() => void>} */
+              const pendingMutations = []
+              let settled = false
 
-              return {
+              const tx = {
+                mode,
+                error: null,
+                oncomplete: null,
+                onabort: null,
+                onerror: null,
                 objectStore() {
                   return objectStore
                 },
-                mode,
               }
+
+              function commit() {
+                if (settled) return
+                settled = true
+                for (const mutate of pendingMutations) mutate()
+                pendingMutations.length = 0
+                if (typeof tx.oncomplete === 'function') tx.oncomplete()
+              }
+
+              const objectStore = {
+                get(key) {
+                  // 读路径：直接读已提交数据；不触发写提交边界
+                  return createRequest(() => storeData.get(key))
+                },
+                put(value) {
+                  return createRequest(
+                    () => {
+                      const key = value?.id
+                      // 仅排队，complete 时才写入 store
+                      pendingMutations.push(() => storeData.set(key, value))
+                      return key
+                    },
+                    commit,
+                  )
+                },
+                delete(key) {
+                  return createRequest(
+                    () => {
+                      pendingMutations.push(() => storeData.delete(key))
+                      return undefined
+                    },
+                    commit,
+                  )
+                },
+              }
+
+              return tx
             },
           }
 
