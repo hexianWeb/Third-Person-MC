@@ -1,4 +1,5 @@
 <script setup>
+import { useSkinStore } from '@pinia/skinStore.js'
 import Experience from '@three/experience.js'
 import Crosshair from '@ui-components/Crosshair.vue'
 import EventMonitorPanel from '@ui-components/debug/EventMonitorPanel.vue'
@@ -9,8 +10,10 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const threeCanvas = ref(null)
 let experience = null
-onMounted(() => {
-  // 初始化 three.js 场景
+onMounted(async () => {
+  // 先完成皮肤状态水合，再创建 Experience，避免首帧读到未初始化皮肤
+  const skinStore = useSkinStore()
+  await skinStore.initialize()
   experience = new Experience(threeCanvas.value)
 })
 
