@@ -118,7 +118,8 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
     const tx = db.transaction(CUSTOM_SKIN_STORE, 'readonly')
     const store = tx.objectStore(CUSTOM_SKIN_STORE)
     const record = await requestToPromise(store.get(CUSTOM_SKIN_KEY), 'get')
-    if (!record?.blob) return null
+    if (!record?.blob)
+      return null
     return {
       blob: record.blob,
       schemaVersion: record.schemaVersion,
@@ -136,14 +137,14 @@ export function createCustomSkinStorage({ indexedDB = globalThis.indexedDB } = {
       blob,
       schemaVersion: CUSTOM_SKIN_SCHEMA_VERSION,
     }
-    await runWrite('put', (store) => store.put(record))
+    await runWrite('put', store => store.put(record))
   }
 
   /**
    * @returns {Promise<void>}
    */
   async function clearCustomSkin() {
-    await runWrite('delete', (store) => store.delete(CUSTOM_SKIN_KEY))
+    await runWrite('delete', store => store.delete(CUSTOM_SKIN_KEY))
   }
 
   return {

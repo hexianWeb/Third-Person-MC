@@ -26,7 +26,8 @@ let defaultEmitterLoad = null
  * @returns {Promise<{ emit: (type: string, payload?: unknown) => void }>}
  */
 async function resolveDefaultEmitter() {
-  if (cachedDefaultEmitter) return cachedDefaultEmitter
+  if (cachedDefaultEmitter)
+    return cachedDefaultEmitter
   if (!defaultEmitterLoad) {
     defaultEmitterLoad = import('../js/utils/event/event-bus.js')
       .then((mod) => {
@@ -152,8 +153,10 @@ export function createSkinStoreLogic(deps = {}) {
    * @param {{ storage?: object, localStorage?: Storage }} [options]
    */
   async function initialize(options = {}) {
-    if (options.storage !== undefined) storage = options.storage
-    if (options.localStorage !== undefined) localStorageRef = options.localStorage
+    if (options.storage !== undefined)
+      storage = options.storage
+    if (options.localStorage !== undefined)
+      localStorageRef = options.localStorage
 
     storage = storage ?? createCustomSkinStorage()
     localStorageRef = localStorageRef ?? globalThis.localStorage
@@ -380,13 +383,13 @@ export const useSkinStore = defineStore('skin', () => {
       () => logic.previewSkinId !== logic.currentSkinId || logic.pendingCustomSkin != null,
     ),
 
-    initialize: (options) => logic.initialize(options),
+    initialize: options => logic.initialize(options),
     initPreview: () => logic.initPreview(),
-    setPreviewSkin: (skinId) => logic.setPreviewSkin(skinId),
-    setPendingCustomSkin: (file) => logic.setPendingCustomSkin(file),
+    setPreviewSkin: skinId => logic.setPreviewSkin(skinId),
+    setPendingCustomSkin: file => logic.setPendingCustomSkin(file),
     applySkin: () => logic.applySkin(),
     cancelPreview: () => logic.cancelPreview(),
-    getSkinConfig: (skinId) => logic.getSkinConfig(skinId),
+    getSkinConfig: skinId => logic.getSkinConfig(skinId),
 
     // 兼容旧调用方（Tasks 5/8 前仍可能引用）
     loadSkin: () => {},
