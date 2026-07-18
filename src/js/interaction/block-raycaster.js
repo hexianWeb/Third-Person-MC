@@ -148,14 +148,18 @@ Dist: ${info.distance?.toFixed(2) || 'N/A'}`
 
   /**
    * 收集当前可拾取的目标对象
-   * - 使用每个 chunk 的 renderer.group 作为根对象（true 递归即可）
+   * - 渲染已迁到 ChunkRenderSlot：从 activeSlots 取已挂载的 group
+   * - TerrainChunk 不再持有 renderer（数据与渲染分离）
    */
   _collectTargets() {
     const groups = []
-    for (const chunk of this.chunkManager.chunks.values()) {
-      const g = chunk?.renderer?.group
-      if (g)
-        groups.push(g)
+    const activeSlots = this.chunkManager.activeSlots
+    if (!activeSlots)
+      return groups
+
+    for (const slot of activeSlots.values()) {
+      if (slot?.state === 'active' && slot.group)
+        groups.push(slot.group)
     }
     return groups
   }
@@ -173,7 +177,7 @@ Dist: ${info.distance?.toFixed(2) || 'N/A'}`
     if (instanceId === undefined || instanceId === null)
       return null
 
-    // chunk 信息：由 TerrainChunk 写入 group.userData
+    // chunk 信息：由 ChunkRenderSlot.attach() 写入 group.userData
     const group = mesh.parent
     const chunkX = group?.userData?.chunkX ?? null
     const chunkZ = group?.userData?.chunkZ ?? null

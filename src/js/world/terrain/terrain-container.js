@@ -7,6 +7,13 @@ import { blocks } from './blocks-config.js'
 
 let instance = null
 
+// 越界查询共享同一个冻结空方块，避免热路径（遮挡判断/AO）每次越界都分配新对象
+const EMPTY_BLOCK = Object.freeze({
+  id: blocks.empty.id,
+  instanceId: null,
+  ao: null,
+})
+
 export default class TerrainContainer {
   /**
    * @param {{ width: number, height: number }} size 地图尺寸（x/z 方向 width，高度 height）
@@ -69,14 +76,11 @@ export default class TerrainContainer {
   }
 
   /**
-   * 获取方块，越界时返回空方块数据
+   * 获取方块，越界时返回共享的冻结空方块（只读，禁止修改返回值）
    */
   getBlock(x, y, z) {
     if (!this._inBounds(x, y, z)) {
-      return {
-        id: blocks.empty.id,
-        instanceId: null,
-      }
+      return EMPTY_BLOCK
     }
     return this.data[x][y][z]
   }
@@ -119,9 +123,30 @@ export default class TerrainContainer {
 
   /**
    * 清空容器，重置为空气
+   * 尺寸匹配时原地重置方块字段，避免每次生成都重新分配十余万个方块对象
    */
   clear() {
-    this.initialize(this.size)
+    const sizeMatches = this.data
+      && this.data.length === this.size.width
+      && this.data[0]?.length === this.size.height
+      && this.data[0]?.[0]?.length === this.size.width
+
+    if (!sizeMatches) {
+      this.initialize(this.size)
+      return
+    }
+
+    for (let x = 0; x < this.size.width; x++) {
+      for (let y = 0; y < this.size.height; y++) {
+        const row = this.data[x][y]
+        for (let z = 0; z < this.size.width; z++) {
+          const block = row[z]
+          block.id = blocks.empty.id
+          block.instanceId = null
+          block.ao = null
+        }
+      }
+    }
   }
 
   /**

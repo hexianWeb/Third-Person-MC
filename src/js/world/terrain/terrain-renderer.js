@@ -94,6 +94,8 @@ export default class TerrainRenderer {
     }
 
     mesh.count = 0
+    // 空网格不参与每帧场景遍历与阴影 pass，有实例时才显示
+    mesh.visible = false
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.castShadow = shouldTerrainCastShadow(SHADOW_CONFIG.quality, type.id)
     mesh.receiveShadow = true
@@ -189,7 +191,10 @@ export default class TerrainRenderer {
         mesh.computeBoundingSphere()
     })
 
-    this._blockMeshes.forEach(({ mesh }) => this._markUpdates(mesh, mesh.count))
+    this._blockMeshes.forEach(({ mesh }) => {
+      mesh.visible = mesh.count > 0
+      this._markUpdates(mesh, mesh.count)
+    })
     this.parent.scale.setScalar(this.params.scale ?? 1)
     this.container = container
   }
@@ -203,6 +208,7 @@ export default class TerrainRenderer {
       container?.clearInstanceIds()
     this._blockMeshes.forEach(({ mesh }) => {
       mesh.count = 0
+      mesh.visible = false
       mesh.userData.instanceToGrid.length = 0
       this._markUpdates(mesh, 0)
     })
@@ -291,6 +297,7 @@ export default class TerrainRenderer {
     if (removedGrid)
       this.container?.setBlockInstanceId(removedGrid.x, removedGrid.y, removedGrid.z, null)
     mesh.count = lastIndex
+    mesh.visible = mesh.count > 0
     this._markUpdates(mesh, mesh.count)
     if (mesh.count > 0)
       mesh.computeBoundingSphere()
@@ -328,6 +335,7 @@ export default class TerrainRenderer {
     mesh.userData.instanceToGrid[instanceId] = { x, y, z }
     this.container.setBlockInstanceId(x, y, z, instanceId)
     mesh.count++
+    mesh.visible = true
     this._markUpdates(mesh, mesh.count)
     mesh.computeBoundingSphere()
   }

@@ -9,9 +9,19 @@ import ChunkRenderSlot from './chunk-render-slot.js'
 
 const WATER_COLOR = 0x3399CC
 const COMPILE_RETRY_DELAY_MS = 250
+const WARM_IDENTITY_MATRIX = new THREE.Matrix4()
 
 function defaultDelay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+function defaultWaitFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function')
+      requestAnimationFrame(() => resolve())
+    else
+      setTimeout(resolve, 0)
+  })
 }
 
 function markPerformance(name) {
@@ -32,6 +42,7 @@ export default class ChunkRenderSlotPool {
    * @param {object} options.waterParams 共享水面参数
    * @param {typeof ChunkRenderSlot} [options.slotFactory] 槽位工厂
    * @param {(milliseconds: number) => Promise<void>} [options.delay] 重试延时函数
+   * @param {() => Promise<void>} [options.waitFrame] 槽位间让帧函数
    * @param {(details: { slot: ChunkRenderSlot, context: object, error: Error }) => void} [options.onCompileFailure] 编译失败回调
    */
   constructor({
@@ -40,6 +51,7 @@ export default class ChunkRenderSlotPool {
     waterParams = {},
     slotFactory = ChunkRenderSlot,
     delay = defaultDelay,
+    waitFrame = defaultWaitFrame,
     onCompileFailure = null,
   }) {
     this.resources = resources
@@ -47,6 +59,7 @@ export default class ChunkRenderSlotPool {
     this.waterParams = waterParams
     this.SlotFactory = slotFactory
     this.delay = delay
+    this.waitFrame = waitFrame
     this.onCompileFailure = onCompileFailure
 
     this.slots = []
@@ -71,10 +84,18 @@ export default class ChunkRenderSlotPool {
     this._sharedWaterMaterial = null
     this._destroyed = false
     this._canSubmit = () => true
+    this._renderFrameCallback = null
   }
 
-  /** 绑定一次实时 WebGPU 上下文并启动十四个槽位的串行预编译。 */
-  initialize(renderer, scene, camera, canSubmit = () => true) {
+  /**
+   * 绑定一次实时 WebGPU 上下文并启动十四个槽位的串行预热。
+   * @param {object} renderer WebGPU 渲染器实例（保留用于诊断，不再用于 compileAsync）
+   * @param {THREE.Scene} scene 真实场景
+   * @param {THREE.Camera} camera 真实相机
+   * @param {() => boolean} [canSubmit] 设备可用性检查
+   * @param {() => void} [renderFrame] 真实渲染管线的一帧渲染（通常是 renderPipeline.render）
+   */
+  initialize(renderer, scene, camera, canSubmit = () => true, renderFrame = null) {
     if (this._readyPromise)
       return this._readyPromise
     if (this._destroyed)
@@ -84,6 +105,9 @@ export default class ChunkRenderSlotPool {
     this.scene = scene
     this.camera = camera
     this._canSubmit = canSubmit
+    this._renderFrameCallback = typeof renderFrame === 'function' ? renderFrame : null
+    if (!this._renderFrameCallback)
+      console.warn('[ChunkRenderSlotPool] initialize 缺少 renderFrame：预热不会真正渲染，槽位将在首次真实渲染时同步编译')
     this._readyPromise = this._initializeSlots()
     return this._readyPromise
   }
@@ -138,7 +162,7 @@ export default class ChunkRenderSlotPool {
 
       slot.prepareForCompile()
       try {
-        await this._compileWithRetry(slot, { phase: 'startup', slotId: slot.id })
+        await this._warmWithRealRender(slot.group, { phase: 'startup', slotId: slot.id })
         if (this._destroyed)
           throw new Error('Chunk render slot pool was disposed during prewarm')
         this.compileCount++
@@ -152,6 +176,8 @@ export default class ChunkRenderSlotPool {
           this._markSlotFailed(slot, error, { phase: 'startup', slotId: slot.id })
         throw error
       }
+      // 逐槽位让出主线程：菜单保持响应，异步管线在后续帧后台解析
+      await this.waitFrame()
     }
 
     // 启动期创建和编译单独计数，运行期计数从游戏可见前重新开始。
@@ -160,16 +186,34 @@ export default class ChunkRenderSlotPool {
     this.lastCompileMs = 0
   }
 
-  async _compileWithRetry(slot, context) {
-    const compileStart = getNow()
+  /** 通过真实渲染管线渲染一帧，在运行时 render context 中编译当前挂接的对象。 */
+  _renderFrame() {
+    return this._renderFrameCallback?.()
+  }
+
+  /**
+   * 将对象挂到真实场景并渲染一帧，在运行时 render context 中完成编译。
+   * 不能用 renderer.compileAsync：它使用独立的 render context（renderTarget 与
+   * callDepth 都与 RenderPipeline 的实际场景渲染不同），其缓存运行时永远不会命中。
+   */
+  async _warmWithRealRender(object, context) {
+    const warmStart = getNow()
     markPerformance('chunk-slot:compile-start')
+    // dispose 会将 this.scene 置空，预热途中销毁时仍需从原场景摘除对象
+    const scene = this.scene
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         if (!this._canSubmit())
           throw this._createRendererUnavailableError(context)
 
         try {
-          await this.renderer.compileAsync(slot.group, this.camera, this.scene)
+          scene.add(object)
+          try {
+            await this._renderFrame()
+          }
+          finally {
+            scene.remove(object)
+          }
           if (!this._canSubmit())
             throw this._createRendererUnavailableError(context)
           return
@@ -188,9 +232,30 @@ export default class ChunkRenderSlotPool {
       throw error
     }
     finally {
-      this.lastCompileMs = getNow() - compileStart
+      this.lastCompileMs = getNow() - warmStart
       markPerformance('chunk-slot:compile-end')
     }
+  }
+
+  /** 为溢出替换网格准备预热姿态（一个有效实例并关闭视锥剔除），返回恢复快照。 */
+  _prepareMeshForWarm(mesh) {
+    if (!mesh?.isInstancedMesh)
+      return null
+
+    const snapshot = { count: mesh.count, frustumCulled: mesh.frustumCulled }
+    mesh.setMatrixAt(0, WARM_IDENTITY_MATRIX)
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.count = 1
+    mesh.frustumCulled = false
+    return snapshot
+  }
+
+  _restoreMeshAfterWarm(mesh, snapshot) {
+    if (!snapshot)
+      return
+
+    mesh.count = snapshot.count
+    mesh.frustumCulled = snapshot.frustumCulled
   }
 
   _createRendererUnavailableError(context) {
@@ -253,21 +318,19 @@ export default class ChunkRenderSlotPool {
     const transaction = slot.replaceOverflowMesh(error)
     this._pendingOverflowCount++
     let committed = false
+    const warmSnapshot = this._prepareMeshForWarm(transaction.mesh)
     try {
       try {
-        await this._compileWithRetry(
-          { group: transaction.mesh },
-          {
-            phase: 'overflow',
-            slotId: slot.id,
-            layer: error.layer,
-            typeId: error.typeId,
-            capacity: transaction.capacity,
-            epoch: this.materialEpoch,
-            chunkX,
-            chunkZ,
-          },
-        )
+        await this._warmWithRealRender(transaction.mesh, {
+          phase: 'overflow',
+          slotId: slot.id,
+          layer: error.layer,
+          typeId: error.typeId,
+          capacity: transaction.capacity,
+          epoch: this.materialEpoch,
+          chunkX,
+          chunkZ,
+        })
       }
       catch (compileError) {
         this._markSlotFailed(slot, compileError, compileError.chunkRenderContext ?? {
@@ -277,6 +340,9 @@ export default class ChunkRenderSlotPool {
           chunkZ,
         })
         throw compileError
+      }
+      finally {
+        this._restoreMeshAfterWarm(transaction.mesh, warmSnapshot)
       }
 
       if (this._destroyed || !guard())
@@ -397,7 +463,9 @@ export default class ChunkRenderSlotPool {
       for (const transaction of transactions) {
         if (!transaction.hasReplacements)
           continue
-        await this._compileWithRetry(transaction, {
+        // 预热预览网格以在真实 context 中验证材质可编译；
+        // 真实网格与新材质的组合在提交后的首次自然渲染中建立（对象身份与预览不同）
+        await this._warmWithRealRender(transaction.group, {
           phase: 'material',
           typeId,
           epoch,

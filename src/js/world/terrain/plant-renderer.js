@@ -67,6 +67,8 @@ export default class PlantRenderer {
     }
 
     mesh.count = 0
+    // 空网格不参与每帧场景遍历，有实例时才显示
+    mesh.visible = false
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.castShadow = false
     mesh.receiveShadow = false
@@ -124,7 +126,10 @@ export default class PlantRenderer {
         mesh.computeBoundingSphere()
     })
 
-    this._plantMeshes.forEach(({ mesh }) => this._markUpdates(mesh, mesh.count))
+    this._plantMeshes.forEach(({ mesh }) => {
+      mesh.visible = mesh.count > 0
+      this._markUpdates(mesh, mesh.count)
+    })
     this.parent.scale.setScalar(this.params.scale ?? 1)
   }
 
@@ -132,6 +137,7 @@ export default class PlantRenderer {
   reset() {
     this._plantMeshes.forEach(({ mesh }) => {
       mesh.count = 0
+      mesh.visible = false
       this._markUpdates(mesh, 0)
     })
   }

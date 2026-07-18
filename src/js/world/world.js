@@ -42,7 +42,7 @@ export default class World {
       this._initBlockInteraction()
       this._initEffects()
       this._setupSettingsListeners()
-      this._initEnemies()
+      // this._initEnemies()
       this._initAchievements()
     })
   }

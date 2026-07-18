@@ -54,6 +54,22 @@ function createFakeSlot({ id, onMeshCreated }) {
   }
 }
 
+function createFakeScene() {
+  return {
+    attached: new Set(),
+    lastAdded: null,
+    add(object) {
+      this.attached.add(object)
+      this.lastAdded = object
+    },
+    remove(object) {
+      this.attached.delete(object)
+      if (this.lastAdded === object)
+        this.lastAdded = null
+    },
+  }
+}
+
 function createPool(overrides = {}) {
   return new ChunkRenderSlotPool({
     resources: {},
@@ -61,44 +77,45 @@ function createPool(overrides = {}) {
     waterParams: {},
     slotFactory: createFakeSlot,
     delay: () => Promise.resolve(),
+    waitFrame: () => Promise.resolve(),
     ...overrides,
   })
 }
 
-async function initializePool(pool, renderer = { compileAsync: async () => {} }) {
-  await pool.initialize(renderer, {}, {})
+async function initializePool(pool, renderFrame = async () => {}, scene = createFakeScene()) {
+  await pool.initialize({}, scene, {}, undefined, renderFrame)
   return pool
 }
 
-test('prewarms exactly fourteen slots serially with the live compile context', async () => {
+test('prewarms exactly fourteen slots serially with the live render context', async () => {
   let inFlight = 0
   let maxInFlight = 0
-  const scene = {}
-  const camera = {}
-  const compileCalls = []
+  const scene = createFakeScene()
+  const warmCalls = []
   let pool
-  const renderer = {
-    async compileAsync(group, receivedCamera, receivedScene) {
-      assert.equal(pool.slots.length, 14)
-      inFlight++
-      maxInFlight = Math.max(maxInFlight, inFlight)
-      compileCalls.push({ group, receivedCamera, receivedScene })
-      await Promise.resolve()
-      inFlight--
-    },
+  const renderFrame = async () => {
+    assert.equal(pool.slots.length, 14)
+    inFlight++
+    maxInFlight = Math.max(maxInFlight, inFlight)
+    warmCalls.push([...scene.attached])
+    await Promise.resolve()
+    inFlight--
   }
 
   pool = createPool()
-  const ready = pool.initialize(renderer, scene, camera)
+  const ready = pool.initialize({}, scene, {}, undefined, renderFrame)
 
   assert.equal(pool.whenReady(), ready)
   await ready
 
   assert.equal(pool.slots.length, 14)
-  assert.equal(compileCalls.length, 14)
+  assert.equal(warmCalls.length, 14)
   assert.equal(maxInFlight, 1)
-  assert.ok(compileCalls.every(({ receivedCamera }) => receivedCamera === camera))
-  assert.ok(compileCalls.every(({ receivedScene }) => receivedScene === scene))
+  assert.ok(warmCalls.every(attached => attached.length === 1))
+  assert.deepEqual(
+    new Set(warmCalls.map(([object]) => object)),
+    new Set(pool.slots.map(slot => slot.group)),
+  )
   assert.ok(pool.slots.every(slot => slot.finishEpochs[0] === 0))
   assert.equal(pool.getDiagnostics().freeSlots, 14)
   assert.equal(pool.getDiagnostics().startupCompileCount, 14)
@@ -108,14 +125,14 @@ test('prewarms exactly fourteen slots serially with the live compile context', a
 test('retries compilation once and never creates a fifteenth slot', async () => {
   let firstSlotAttempts = 0
   let delayCalls = 0
-  const renderer = {
-    async compileAsync(group) {
-      if (group.slotId !== 0)
-        return
-      firstSlotAttempts++
-      if (firstSlotAttempts === 1)
-        throw new Error('transient compile failure')
-    },
+  const scene = createFakeScene()
+  const renderFrame = async () => {
+    const target = scene.lastAdded
+    if (target.slotId !== 0)
+      return
+    firstSlotAttempts++
+    if (firstSlotAttempts === 1)
+      throw new Error('transient compile failure')
   }
   const pool = createPool({
     delay: async (milliseconds) => {
@@ -124,7 +141,7 @@ test('retries compilation once and never creates a fifteenth slot', async () => 
     },
   })
 
-  await pool.initialize(renderer, {}, {})
+  await pool.initialize({}, scene, {}, undefined, renderFrame)
 
   assert.equal(firstSlotAttempts, 2)
   assert.equal(delayCalls, 1)
@@ -134,6 +151,7 @@ test('retries compilation once and never creates a fifteenth slot', async () => 
 test('reports a twice-failed prewarm compile without expanding the fixed slot pool', async () => {
   let attempts = 0
   const failures = []
+  const scene = createFakeScene()
   const pool = createPool({
     onCompileFailure: ({ context, error }) => {
       failures.push({
@@ -145,14 +163,13 @@ test('reports a twice-failed prewarm compile without expanding the fixed slot po
   })
 
   await assert.rejects(
-    pool.initialize({
-      async compileAsync(group) {
-        if (group.slotId !== 0)
-          return
-        attempts++
-        throw new Error('permanent compile failure')
-      },
-    }, {}, {}),
+    pool.initialize({}, scene, {}, undefined, async () => {
+      const target = scene.lastAdded
+      if (target.slotId !== 0)
+        return
+      attempts++
+      throw new Error('permanent compile failure')
+    }),
     /permanent compile failure/,
   )
 
@@ -168,43 +185,37 @@ test('reports a twice-failed prewarm compile without expanding the fixed slot po
 })
 
 test('stops prewarm submissions when the renderer is unavailable', async () => {
-  let compileCalls = 0
+  let warmCalls = 0
   const failures = []
   const pool = createPool({
     onCompileFailure: failure => failures.push(failure),
   })
 
   await assert.rejects(
-    pool.initialize({
-      async compileAsync() {
-        compileCalls++
-      },
-    }, {}, {}, () => false),
+    pool.initialize({}, createFakeScene(), {}, () => false, async () => {
+      warmCalls++
+    }),
     /Renderer is unavailable/,
   )
 
-  assert.equal(compileCalls, 0)
+  assert.equal(warmCalls, 0)
   assert.equal(pool.slots[0].state, 'free')
   assert.deepEqual(failures, [])
 })
 
 test('initialize binds the first renderer, scene, and camera exactly once', async () => {
-  let compileCalls = 0
+  let warmCalls = 0
   const pool = createPool()
-  const first = pool.initialize({
-    async compileAsync() {
-      compileCalls++
-    },
-  }, {}, {})
-  const second = pool.initialize({
-    async compileAsync() {
-      assert.fail('second renderer must not be bound')
-    },
-  }, {}, {})
+  const first = pool.initialize({}, createFakeScene(), {}, undefined, async () => {
+    warmCalls++
+  })
+  const second = pool.initialize({}, createFakeScene(), {}, undefined, async () => {
+    assert.fail('second renderFrame must not be bound')
+  })
 
   assert.equal(second, first)
   await second
-  assert.equal(compileCalls, 14)
+  assert.equal(warmCalls, 14)
 })
 
 test('acquire is bounded and release resets a slot without disposing it', async () => {
@@ -251,21 +262,21 @@ test('diagnostics are fresh frozen snapshots with the fixed memory estimate', as
 })
 
 test('overflow compiles the actual replacement before evaluating and committing the guard', async () => {
-  let finishCompile
-  const compileGate = new Promise((resolve) => {
-    finishCompile = resolve
+  let finishWarm
+  const warmGate = new Promise((resolve) => {
+    finishWarm = resolve
   })
-  let replacementCompileStarted = false
+  let replacementWarmStarted = false
   let guardCalls = 0
-  const renderer = {
-    async compileAsync(target) {
-      if (!target.replacementFor && target.replacementFor !== 0)
-        return
-      replacementCompileStarted = true
-      await compileGate
-    },
+  const scene = createFakeScene()
+  const renderFrame = async () => {
+    const target = scene.lastAdded
+    if (target?.replacementFor === undefined)
+      return
+    replacementWarmStarted = true
+    await warmGate
   }
-  const pool = await initializePool(createPool(), renderer)
+  const pool = await initializePool(createPool(), renderFrame, scene)
   const slot = pool.acquire()
   const error = { layer: 'blocks', typeId: 'grass', required: 5 }
   const pending = pool.ensureCapacity(slot, error, () => {
@@ -275,11 +286,11 @@ test('overflow compiles the actual replacement before evaluating and committing 
 
   await Promise.resolve()
   const { transaction } = slot.transactions[0]
-  assert.equal(replacementCompileStarted, true)
+  assert.equal(replacementWarmStarted, true)
   assert.equal(guardCalls, 0)
   assert.equal(transaction.commitCalls, 0)
 
-  finishCompile()
+  finishWarm()
   assert.equal(await pending, true)
   assert.equal(guardCalls, 1)
   assert.equal(transaction.commitCalls, 1)
@@ -313,13 +324,13 @@ test('a failed overflow retry disposes the replacement without evaluating the gu
   let replacementAttempts = 0
   let guardCalls = 0
   const failures = []
-  const renderer = {
-    async compileAsync(target) {
-      if (!target.replacementFor && target.replacementFor !== 0)
-        return
-      replacementAttempts++
-      throw new Error('replacement compile failure')
-    },
+  const scene = createFakeScene()
+  const renderFrame = async () => {
+    const target = scene.lastAdded
+    if (target?.replacementFor === undefined)
+      return
+    replacementAttempts++
+    throw new Error('replacement compile failure')
   }
   const pool = await initializePool(createPool({
     onCompileFailure: ({ context, error }) => failures.push({
@@ -327,7 +338,7 @@ test('a failed overflow retry disposes the replacement without evaluating the gu
       chunkZ: context.chunkZ,
       reason: error.message,
     }),
-  }), renderer)
+  }), renderFrame, scene)
   const slot = pool.acquire()
 
   await assert.rejects(
@@ -394,26 +405,24 @@ test('update advances each shared animated material only once per frame', async 
 })
 
 test('dispose during prewarm prevents late completion from mutating disposed slots', async () => {
-  let finishCompile
-  const compileGate = new Promise((resolve) => {
-    finishCompile = resolve
+  let finishWarm
+  const warmGate = new Promise((resolve) => {
+    finishWarm = resolve
   })
-  let compileStarted
+  let warmStarted
   const started = new Promise((resolve) => {
-    compileStarted = resolve
+    warmStarted = resolve
   })
   const pool = createPool()
-  const ready = pool.initialize({
-    async compileAsync() {
-      compileStarted()
-      await compileGate
-    },
-  }, {}, {})
+  const ready = pool.initialize({}, createFakeScene(), {}, undefined, async () => {
+    warmStarted()
+    await warmGate
+  })
 
   await started
   const firstSlot = pool.slots[0]
   pool.dispose()
-  finishCompile()
+  finishWarm()
 
   await assert.rejects(ready, /disposed during prewarm/)
   assert.equal(firstSlot.disposeCalls, 1)
@@ -485,12 +494,12 @@ function createStagedMaterialGeneration() {
 
 test('failed material generation retains the active generation and disposes staged ownership once', async () => {
   const generation = createStagedMaterialGeneration()
-  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
-    async compileAsync(target) {
-      if (target.materialPreviewFor !== undefined)
-        throw new Error('material compile failed')
-    },
-  })
+  const scene = createFakeScene()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), async () => {
+    const target = scene.lastAdded
+    if (target?.materialPreviewFor !== undefined)
+      throw new Error('material compile failed')
+  }, scene)
 
   const originalWarn = console.warn
   const warnings = []
@@ -537,22 +546,22 @@ test('a committed material generation disposes a shared active material once', a
 })
 
 test('stale material generation disposes staged ownership without changing the active generation', async () => {
-  let finishCompile
-  const compileGate = new Promise((resolve) => {
-    finishCompile = resolve
+  let finishWarm
+  const warmGate = new Promise((resolve) => {
+    finishWarm = resolve
   })
   const generation = createStagedMaterialGeneration()
-  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
-    async compileAsync(target) {
-      if (target.materialPreviewFor !== undefined)
-        await compileGate
-    },
-  })
+  const scene = createFakeScene()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), async () => {
+    const target = scene.lastAdded
+    if (target?.materialPreviewFor !== undefined)
+      await warmGate
+  }, scene)
 
   const pending = pool.invalidateMaterialType('grass', generation)
   await Promise.resolve()
   pool.invalidateMaterialType('stone')
-  finishCompile()
+  finishWarm()
 
   assert.equal(await pending, false)
   assert.equal(generation.commitCalls, 0)
@@ -562,29 +571,29 @@ test('stale material generation disposes staged ownership without changing the a
 })
 
 test('destroy and overflow both invalidate a pending material generation before it can commit', async () => {
-  let finishCompile
-  const compileGate = new Promise((resolve) => {
-    finishCompile = resolve
+  let finishWarm
+  const warmGate = new Promise((resolve) => {
+    finishWarm = resolve
   })
-  let materialCompileStarted
+  let materialWarmStarted
   const materialStarted = new Promise((resolve) => {
-    materialCompileStarted = resolve
+    materialWarmStarted = resolve
   })
   const generation = createStagedMaterialGeneration()
-  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
-    async compileAsync(target) {
-      if (target.materialPreviewFor !== undefined) {
-        materialCompileStarted()
-        await compileGate
-      }
-    },
-  })
+  const scene = createFakeScene()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), async () => {
+    const target = scene.lastAdded
+    if (target?.materialPreviewFor !== undefined) {
+      materialWarmStarted()
+      await warmGate
+    }
+  }, scene)
 
   const pending = pool.invalidateMaterialType('grass', generation)
   await materialStarted
   const slot = pool.acquire()
   assert.equal(await pool.ensureCapacity(slot, { layer: 'blocks', typeId: 'grass', required: 5 }, () => true), true)
-  finishCompile()
+  finishWarm()
 
   assert.equal(await pending, false)
   assert.equal(generation.commitCalls, 0)
@@ -602,22 +611,22 @@ test('destroy and overflow both invalidate a pending material generation before 
 })
 
 test('a material generation started during overflow cannot commit onto the outgoing mesh', async () => {
-  let releaseOverflowCompile
-  const overflowCompileGate = new Promise((resolve) => {
-    releaseOverflowCompile = resolve
+  let releaseOverflowWarm
+  const overflowWarmGate = new Promise((resolve) => {
+    releaseOverflowWarm = resolve
   })
-  let overflowCompileStarted
+  let overflowWarmStarted
   const overflowStarted = new Promise((resolve) => {
-    overflowCompileStarted = resolve
+    overflowWarmStarted = resolve
   })
-  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), {
-    async compileAsync(target) {
-      if (target.replacementFor !== undefined) {
-        overflowCompileStarted()
-        await overflowCompileGate
-      }
-    },
-  })
+  const scene = createFakeScene()
+  const pool = await initializePool(createPool({ slotFactory: createMaterialSlot }), async () => {
+    const target = scene.lastAdded
+    if (target?.replacementFor !== undefined) {
+      overflowWarmStarted()
+      await overflowWarmGate
+    }
+  }, scene)
   const slot = pool.acquire()
   const overflow = pool.ensureCapacity(slot, { layer: 'blocks', typeId: 'grass', required: 5 }, () => true)
 
@@ -625,7 +634,7 @@ test('a material generation started during overflow cannot commit onto the outgo
   const generation = createStagedMaterialGeneration()
   const pending = pool.invalidateMaterialType('grass', generation)
   await new Promise(resolve => setImmediate(resolve))
-  releaseOverflowCompile()
+  releaseOverflowWarm()
 
   assert.equal(await overflow, true)
   assert.equal(await pending, false)

@@ -140,10 +140,12 @@ export default class ChunkRenderSlot {
     if (!this._compileSnapshot)
       return
 
-    this._compileSnapshot.forEach(({ count, frustumCulled }, object) => {
+    this._compileSnapshot.forEach(({ count, frustumCulled, visible }, object) => {
       if (count !== undefined)
         object.count = count
       object.frustumCulled = frustumCulled
+      if (visible !== undefined)
+        object.visible = visible
     })
     this._compileSnapshot = null
   }
@@ -187,6 +189,7 @@ export default class ChunkRenderSlot {
       this._compileSnapshot.set(object, {
         count: object.count,
         frustumCulled: object.frustumCulled,
+        visible: object.visible,
       })
       if (object.isInstancedMesh) {
         object.setMatrixAt(0, identity)
@@ -195,6 +198,8 @@ export default class ChunkRenderSlot {
       if (object.count !== undefined)
         object.count = 1
       object.frustumCulled = false
+      // 空网格平时隐藏，预热时必须强制渲染才能编译到全部网格
+      object.visible = true
     })
     this.state = 'compiling'
   }

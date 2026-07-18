@@ -137,6 +137,8 @@ export default class ChunkManager {
           this.experience.scene,
           this.experience.camera.instance,
           () => this.experience.renderer.isDeviceReady(),
+          // 预热必须走真实渲染管线：compileAsync 的 render context 与运行时不同，缓存不会命中
+          () => this.experience.renderer.renderPipeline?.render(),
         ))
         .then(async () => {
           this._renderSlotsReady = true
