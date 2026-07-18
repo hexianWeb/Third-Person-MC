@@ -79,11 +79,14 @@ function selectSkin(skinId) {
 }
 
 /**
- * 选择自定义皮肤卡片：已有 blob 则预览，否则打开文件选择
+ * 选择自定义皮肤卡片：
+ * - 无 blob → 打开文件选择
+ * - 有 blob 且未预览 custom → 选中预览
+ * - 已预览 custom → 再次打开文件选择（允许重新上传）
  */
 function selectCustomSkin() {
   const hasBlob = skinStore.pendingCustomSkin || skinStore.committedCustomSkin
-  if (hasBlob) {
+  if (hasBlob && skinStore.previewSkinId !== CUSTOM_SKIN_ID) {
     skinStore.setPreviewSkin(CUSTOM_SKIN_ID)
     return
   }
@@ -220,6 +223,7 @@ watch(
       return
     await applyPreviewFromStore()
     currentAnim.value = 'idle'
+    previewScene.value?.playAnimation('idle')
   },
 )
 

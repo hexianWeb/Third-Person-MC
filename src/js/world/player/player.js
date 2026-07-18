@@ -884,6 +884,8 @@ export default class Player {
   }
 
   destroy() {
+    // 先使在途 _applySkinById 失效，避免 dispose 后异步回调再次贴图
+    this._skinRequestId++
     emitter.off('skin:changed', this._handleSkinChange)
     if (this._activeSkinTexture?.owned)
       disposeOwnedSkinTexture(this._activeSkinTexture.texture)
