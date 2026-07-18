@@ -27,26 +27,32 @@ export default [
     type: 'texture',
     path: 'textures/background/morning.png',
   },
-  // ===== 玩家皮肤模型 =====
-  {
-    name: 'steveModel',
-    type: 'gltfModel',
-    path: 'models/character/steve.glb',
-  },
+  // ===== 角色模型与皮肤纹理 =====
+  // 统一使用 playerModel；预设皮肤通过独立纹理切换
   {
     name: 'zombieModel',
     type: 'gltfModel',
     path: 'models/character/zombie.glb',
   },
   {
-    name: 'alexModel',
-    type: 'gltfModel',
-    path: 'models/character/alex.glb',
-  },
-  {
     name: 'playerModel',
     type: 'gltfModel',
     path: 'models/character/player.glb',
+  },
+  {
+    name: 'steveSkinTexture',
+    type: 'texture',
+    path: 'textures/skins/steve.png',
+  },
+  {
+    name: 'alexSkinTexture',
+    type: 'texture',
+    path: 'textures/skins/alex.png',
+  },
+  {
+    name: 'playerSkinTexture',
+    type: 'texture',
+    path: 'textures/skins/player.png',
   },
   {
     name: 'grass_block_top_texture',
