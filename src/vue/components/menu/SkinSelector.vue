@@ -3,7 +3,12 @@ import { useSkinStore } from '@pinia/skinStore.js'
 import { useUiStore } from '@pinia/uiStore.js'
 import { mountSkinPreview } from '@three/components/skin-preview-lifecycle.js'
 import SkinPreviewScene from '@three/components/skin-preview-scene.js'
-import { ANIMATION_BUTTONS, SKIN_LIST } from '@three/config/skin-config.js'
+import {
+  ANIMATION_BUTTONS,
+  CANONICAL_MODEL_PATH,
+  CUSTOM_SKIN_ID,
+  SKIN_LIST,
+} from '@three/config/skin-config.js'
 /**
  * SkinSelector - 皮肤选择界面
  * - 上方: 3D 预览区域（左侧动画按钮组 + 旋转控制）
@@ -70,6 +75,27 @@ function selectSkin(skinId) {
   skinStore.setPreviewSkin(skinId)
 }
 
+/**
+ * 按 store 预览状态刷新 3D 贴图（不重载模型）
+ */
+async function applyPreviewFromStore() {
+  const preview = previewScene.value
+  if (!preview)
+    return
+
+  const id = skinStore.previewSkinId
+  if (id === CUSTOM_SKIN_ID) {
+    const blob = skinStore.pendingCustomSkin || skinStore.committedCustomSkin
+    if (blob)
+      await preview.applyCustomBlob(blob)
+    return
+  }
+
+  const skin = SKIN_LIST.find(s => s.id === id)
+  if (skin?.texturePath)
+    await preview.applyPresetTextureFromUrl(skin.texturePath)
+}
+
 // ----------------------------------------
 // 应用 / 取消
 // ----------------------------------------
@@ -122,9 +148,11 @@ onMounted(async () => {
     updateCanvasSize()
     window.addEventListener('resize', updateCanvasSize)
 
-    const skin = SKIN_LIST.find(s => s.id === skinStore.previewSkinId)
-    if (skin)
-      await preview.loadModel(skin.modelPath)
+    // 只加载一次 canonical 模型，再按 store 换贴图
+    await preview.loadCanonicalModel(CANONICAL_MODEL_PATH)
+    if (isUnmounted)
+      return
+    await applyPreviewFromStore()
   }
   catch (error) {
     console.error('[SkinSelector] Failed to initialize WebGPU preview:', error)
@@ -143,18 +171,21 @@ onUnmounted(() => {
 })
 
 // ----------------------------------------
-// 监听预览皮肤变化
+// 监听预览皮肤变化（贴图替换，不重载 GLB）
 // ----------------------------------------
 
 watch(
-  () => skinStore.previewSkinId,
-  (skinId) => {
-    const skin = SKIN_LIST.find(s => s.id === skinId)
-    if (skin && previewScene.value) {
-      previewScene.value.loadModel(skin.modelPath)
-      // 切换皮肤时重置动画到 idle
-      currentAnim.value = 'idle'
-    }
+  () => [
+    skinStore.previewSkinId,
+    skinStore.previewRevision,
+    skinStore.pendingCustomSkin,
+    skinStore.committedCustomSkin,
+  ],
+  async () => {
+    if (!previewScene.value)
+      return
+    await applyPreviewFromStore()
+    currentAnim.value = 'idle'
   },
 )
 </script>

@@ -4,7 +4,16 @@
  * 不依赖 Experience 单例，可独立运行
  *
  * Phase 4：独立 WebGPURenderer，通过 create() 等待异步初始化。
+ * 模型仅加载一次 canonical GLB，皮肤切换只替换贴图。
  */
+import { CANONICAL_MODEL_PATH } from '@three/config/skin-config.js'
+import {
+  applySkinTextureToLayers,
+  bindCharacterBodyLayers,
+  configureSkinTexture,
+  createTextureFromBlob,
+  disposeOwnedSkinTexture,
+} from '@three/world/player/skin-texture-utils.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as THREE from 'three/webgpu'
 
@@ -67,6 +76,15 @@ export default class SkinPreviewScene {
     this.animations = [] // 存储所有动画 clips
     this.mixer = null
     this.currentAction = null
+
+    // 身体双层绑定（canonical 模型加载后固定）
+    this._bodyLayers = null
+    // 当前预览拥有的皮肤贴图（isolated renderer，一律 owned）
+    this._activeSkinTexture = null
+    // 贴图请求序号（丢弃过期异步结果）
+    this._textureRequestId = 0
+    // 进行中的 Object URL（dispose 时 revoke 残留）
+    this._pendingObjectUrls = new Set()
 
     // 旋转控制
     this.modelRotation = 0 // 初始朝向（面向相机）
@@ -276,60 +294,54 @@ export default class SkinPreviewScene {
   }
 
   /**
-   * 加载并显示皮肤模型
-   * @param {string} modelPath - 模型路径（相对于 public 目录）
+   * 加载 canonical 角色模型（仅首次生效；皮肤切换请用贴图 API）
+   * @param {string} [modelPath] - 模型路径（相对于 public 目录）
    * @returns {Promise<void>}
    */
-  async loadModel(modelPath) {
-    // 生成新的加载 ID
+  async loadCanonicalModel(modelPath = CANONICAL_MODEL_PATH) {
+    // 已加载则复用，不因换肤重载 GLB
+    if (this.currentModel && this._bodyLayers)
+      return
+
     this.loadingId++
     const currentLoadId = this.loadingId
 
-    // 移除旧模型
-    if (this.currentModel) {
-      this.scene.remove(this.currentModel)
-
-      // 停止并清理动画混合器
-      if (this.mixer) {
-        this.mixer.stopAllAction()
-        this.mixer = null
-      }
-
-      // 释放旧模型资源
-      this._disposeModel(this.currentModel)
-
-      this.currentModel = null
-      this.animations = []
-      this.currentAction = null
-    }
-
     try {
-      // 加载新模型
       const gltf = await this.loader.loadAsync(modelPath)
 
-      // 检查是否是最新的加载请求（防止并发加载导致重复模型）
-      if (currentLoadId !== this.loadingId) {
-        // 这不是最新的加载请求，释放已加载的模型并返回
+      // 并发加载：丢弃过期结果
+      if (currentLoadId !== this.loadingId || this._disposed) {
         this._disposeModel(gltf.scene)
         return
       }
 
+      // 若已有模型（极端竞态），先清理
+      if (this.currentModel) {
+        this.scene.remove(this.currentModel)
+        if (this.mixer) {
+          this.mixer.stopAllAction()
+          this.mixer = null
+        }
+        this._disposeModel(this.currentModel)
+        this.currentModel = null
+        this.animations = []
+        this.currentAction = null
+        this._bodyLayers = null
+      }
+
       this.currentLoadingId = currentLoadId
       this.currentModel = gltf.scene
+      this._bodyLayers = bindCharacterBodyLayers(this.currentModel)
 
       // 设置初始旋转
       this.currentModel.rotation.y = this.modelRotation
 
-      // 添加到场景
       this.scene.add(this.currentModel)
 
-      // 存储动画 clips
       this.animations = gltf.animations
 
-      // 初始化动画混合器
       if (this.animations.length > 0) {
         this.mixer = new THREE.AnimationMixer(this.currentModel)
-        // 默认播放 idle 动画
         this.playAnimation('idle')
       }
     }
@@ -337,6 +349,100 @@ export default class SkinPreviewScene {
       console.error('加载皮肤模型失败:', error)
       throw error
     }
+  }
+
+  /**
+   * @deprecated 请使用 loadCanonicalModel；保留为薄包装避免旧调用崩溃
+   * @param {string} [modelPath]
+   * @returns {Promise<void>}
+   */
+  async loadModel(modelPath = CANONICAL_MODEL_PATH) {
+    return this.loadCanonicalModel(modelPath)
+  }
+
+  /**
+   * 从 public 路径加载预设 PNG 并应用到预览（预览自有贴图，不共享 Experience Resources）
+   * @param {string} texturePath - 如 textures/skins/steve.png
+   * @returns {Promise<void>}
+   */
+  async applyPresetTextureFromUrl(texturePath) {
+    const requestId = ++this._textureRequestId
+    try {
+      const loader = new THREE.TextureLoader()
+      const texture = await loader.loadAsync(texturePath)
+      configureSkinTexture(texture, { owned: true }, THREE)
+
+      if (requestId !== this._textureRequestId || this._disposed) {
+        disposeOwnedSkinTexture(texture)
+        return
+      }
+
+      this._bindPreparedSkinTexture(texture)
+    }
+    catch (error) {
+      if (requestId === this._textureRequestId)
+        console.error('[SkinPreview] 加载预设皮肤贴图失败:', texturePath, error)
+      throw error
+    }
+  }
+
+  /**
+   * 从 Blob 创建贴图并应用到预览（预览自有）
+   * @param {Blob} blob
+   * @returns {Promise<void>}
+   */
+  async applyCustomBlob(blob) {
+    const requestId = ++this._textureRequestId
+    let objectUrl = null
+    try {
+      // 自行跟踪 Object URL，以便 dispose 中途撤销残留
+      const createObjectURL = (value) => {
+        objectUrl = URL.createObjectURL(value)
+        this._pendingObjectUrls.add(objectUrl)
+        return objectUrl
+      }
+      const revokeObjectURL = (url) => {
+        URL.revokeObjectURL(url)
+        this._pendingObjectUrls.delete(url)
+      }
+
+      const { texture } = await createTextureFromBlob(blob, THREE, {
+        createObjectURL,
+        revokeObjectURL,
+      })
+      objectUrl = null
+
+      if (requestId !== this._textureRequestId || this._disposed) {
+        disposeOwnedSkinTexture(texture)
+        return
+      }
+
+      this._bindPreparedSkinTexture(texture)
+    }
+    catch (error) {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+        this._pendingObjectUrls.delete(objectUrl)
+      }
+      if (requestId === this._textureRequestId)
+        console.error('[SkinPreview] 应用自定义皮肤失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 将已配置的贴图绑定到身体层，并释放上一张预览自有贴图
+   * @param {THREE.Texture} texture
+   */
+  _bindPreparedSkinTexture(texture) {
+    if (!this._bodyLayers)
+      throw new Error('[SkinPreview] body layers not bound; call loadCanonicalModel first')
+
+    const previous = this._activeSkinTexture
+    applySkinTextureToLayers(this._bodyLayers, texture)
+    this._activeSkinTexture = { texture, owned: true }
+    if (previous?.owned)
+      disposeOwnedSkinTexture(previous.texture)
   }
 
   /**
@@ -482,13 +588,17 @@ export default class SkinPreviewScene {
 
   /**
    * 释放材质资源
+   * 跳过 skinOwned === false（共享贴图）与 skinOwned === true（由 _activeSkinTexture 统一释放）
    * @param {THREE.Material} material - 要释放的材质
    */
   _disposeMaterial(material) {
-    // 释放材质中的所有纹理
     for (const key of Object.keys(material)) {
       const value = material[key]
       if (value && value.isTexture) {
+        const skinOwned = value.userData?.skinOwned
+        // 共享贴图不可 dispose；预览自有贴图走 disposeOwnedSkinTexture
+        if (skinOwned === false || skinOwned === true)
+          continue
         value.dispose()
       }
     }
@@ -503,6 +613,10 @@ export default class SkinPreviewScene {
     if (this._disposed)
       return
     this._disposed = true
+
+    // 使进行中的贴图请求失效
+    this._textureRequestId++
+    this.loadingId++
 
     // 停止渲染循环
     if (this.animationFrameId) {
@@ -532,12 +646,25 @@ export default class SkinPreviewScene {
       window.removeEventListener('touchend', this._onTouchEnd)
     }
 
+    // 先释放预览自有皮肤贴图
+    if (this._activeSkinTexture) {
+      disposeOwnedSkinTexture(this._activeSkinTexture.texture)
+      this._activeSkinTexture = null
+    }
+
+    // 撤销残留 Object URL
+    for (const url of this._pendingObjectUrls) {
+      URL.revokeObjectURL(url)
+    }
+    this._pendingObjectUrls.clear()
+
     // 释放当前模型
     if (this.currentModel) {
       this.scene.remove(this.currentModel)
       this._disposeModel(this.currentModel)
       this.currentModel = null
     }
+    this._bodyLayers = null
 
     // 释放背景纹理
     if (this.scene.background && this.scene.background.isTexture) {
