@@ -45,6 +45,9 @@ export default class BlockMiningController {
   _onMouseDown(event) {
     if (!this.params.enabled || event.button !== 0)
       return
+    // 蜗牛等更高优先级交互已消费本次左键时，不启动挖矿
+    if (event.handled)
+      return
 
     const raycaster = this.experience.world?.blockRaycaster
     if (!raycaster || !raycaster.current)

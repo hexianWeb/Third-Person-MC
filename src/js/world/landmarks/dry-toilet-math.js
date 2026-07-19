@@ -29,7 +29,7 @@ export function isValidAabbSize(size) {
  * 根据未变换 AABB 尺寸计算等比缩放与偏移，使最长 X/Z 边适配 targetBaseSize，
  * X/Z 中心对齐世界原点，缩放后 minY 抬至 0（调用方再叠加 platformTopY）
  * @param {{ x: number, y: number, z: number }} size
- * @param {number} [targetBaseSize=2]
+ * @param {number} [targetBaseSize]
  * @returns {{ scale: number, offset: { x: number, y: number, z: number } }}
  */
 export function computeToiletFitTransform(size, targetBaseSize = 2) {
@@ -215,4 +215,13 @@ export function snailFsmUpdate(fsm, dtMs) {
     fsm.state = SNAIL_STATES.CRAWLING
     fsm.timerMs = 0
   }
+}
+
+/**
+ * 是否应消费本次左键（阻止挖矿）
+ * @param {{ hitSnail: boolean, distance: number, maxDistance: number }} params
+ * @returns {boolean}
+ */
+export function shouldConsumeMiningClick({ hitSnail, distance, maxDistance }) {
+  return Boolean(hitSnail) && distance <= maxDistance
 }

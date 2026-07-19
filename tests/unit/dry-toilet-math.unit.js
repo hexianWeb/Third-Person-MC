@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { DRY_TOILET_SNAILS_CONFIG } from '../../src/js/config/dry-toilet-snails-config.js'
+import { RNG } from '../../src/js/tools/rng.js'
 import {
   buildPlatformPlan,
   computePlatformTargetY,
@@ -9,15 +10,14 @@ import {
   createSnailFsm,
   generateSnailSpawnPoints,
   isValidAabbSize,
+  SNAIL_STATES,
   snailFsmOnClick,
   snailFsmUpdate,
-  SNAIL_STATES,
 } from '../../src/js/world/landmarks/dry-toilet-math.js'
-import { RNG } from '../../src/js/tools/rng.js'
 
 test('rejects invalid aabb sizes', () => {
   assert.equal(isValidAabbSize({ x: 1, y: 1, z: 0 }), false)
-  assert.equal(isValidAabbSize({ x: 1, y: NaN, z: 1 }), false)
+  assert.equal(isValidAabbSize({ x: 1, y: Number.NaN, z: 1 }), false)
   assert.equal(isValidAabbSize({ x: 0.5, y: 0.9, z: 0.7 }), true)
 })
 

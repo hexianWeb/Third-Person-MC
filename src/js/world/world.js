@@ -19,6 +19,8 @@ import emitter from '../utils/event/event-bus.js'
 import Fireflies from './effects/fireflies.js'
 import EnemyManager from './enemies/enemy-manager.js'
 import Environment from './environment.js'
+import DryToiletLandmark from './landmarks/dry-toilet-landmark.js'
+import SnailManager from './landmarks/snail-manager.js'
 import Player from './player/player.js'
 import ChunkManager from './terrain/chunk-manager.js'
 
@@ -39,12 +41,20 @@ export default class World {
       this._initPlayerAndCamera()
 
       this._initEnvironment()
+      // 蜗牛管理器需先于挖矿控制器注册 input:mouse_down，才能优先消费左键
+      this._initLandmarks()
       this._initBlockInteraction()
       this._initEffects()
       this._setupSettingsListeners()
       // this._initEnemies()
       this._initAchievements()
     })
+  }
+
+  /** 旱厕地标 + 蜗牛（点击仲裁依赖注册顺序） */
+  _initLandmarks() {
+    this.dryToiletLandmark = new DryToiletLandmark()
+    this.snailManager = new SnailManager({ landmark: this.dryToiletLandmark })
   }
 
   _initAchievements() {
@@ -146,6 +156,14 @@ export default class World {
     }
     if (this.chunkManager)
       this.chunkManager.update()
+
+    // time.delta 为毫秒
+    const dtSec = this.experience.time.delta / 1000
+    if (this.dryToiletLandmark)
+      this.dryToiletLandmark.update()
+    if (this.snailManager)
+      this.snailManager.update(dtSec)
+
     if (this.blockMiningController)
       this.blockMiningController.update()
     if (this.player)
@@ -188,6 +206,10 @@ export default class World {
       forceSyncCenterChunk: true,
     })
 
+    // 世界重置后地标/蜗牛回到等待态，地形就绪后再重建
+    this.snailManager?.reset()
+    this.dryToiletLandmark?.reset()
+
     // Reset player position to safe spawn point (Strategy A)
     if (this.player) {
       // 触发一次重生，它内部会通过最新的 chunkManager 数据计算正确的高度
@@ -200,7 +222,9 @@ export default class World {
   }
 
   destroy() {
-    // Destroy child components
+    // Destroy child components（蜗牛 → 地标 → 其余）
+    this.snailManager?.destroy()
+    this.dryToiletLandmark?.destroy()
     this.blockMiningOverlay?.dispose()
     this.blockInteractionManager?.destroy()
     this.blockMiningController?.destroy()
