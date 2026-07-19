@@ -50,7 +50,7 @@ test('platform plan fills, cuts, clears vegetation, and is idempotent', () => {
   const plan = buildPlatformPlan({ columns, targetY, fillBlockId: 1 })
   assert.ok(plan.ops.some(op => op.type === 'remove' && op.y === 11 && op.x === 0 && op.z === 0))
   assert.ok(plan.ops.some(op => op.type === 'add' && op.x === -1 && op.z === -1 && op.y === 9))
-  assert.deepEqual(plan.clearPlantColumns, DRY_TOILET_SNAILS_CONFIG.footprint)
+  assert.deepEqual(plan.clearPlantColumns, columns.map(({ x, z }) => ({ x, z })))
 
   const doneColumns = columns.map(c => ({
     ...c,

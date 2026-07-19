@@ -1,12 +1,14 @@
 /** 旱厕地标与蜗牛交互的稳定配置参数 */
 export const DRY_TOILET_SNAILS_CONFIG = {
   resourceName: 'cesuoModel',
-  center: { x: 0, z: 0 },
+  // 地标世界中心（方块格）
+  center: { x: 32, z: 32 },
+  // 2×2 底座脚印（覆盖 center 与其 -1 邻格）
   footprint: [
-    { x: -1, z: -1 },
-    { x: -1, z: 0 },
-    { x: 0, z: -1 },
-    { x: 0, z: 0 },
+    { x: 31, z: 31 },
+    { x: 31, z: 32 },
+    { x: 32, z: 31 },
+    { x: 32, z: 32 },
   ],
   targetBaseSize: 2,
   snailCount: 12,
@@ -24,4 +26,6 @@ export const DRY_TOILET_SNAILS_CONFIG = {
   retractMs: 700,
   holdMs: 1600,
   emergeMs: 700,
+  // 参考体素蜗牛未缩放本地长度（腹足+头部），用于映射到 snailLength*
+  snailRefLocalLength: 14,
 }

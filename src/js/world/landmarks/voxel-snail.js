@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 import { DRY_TOILET_SNAILS_CONFIG as CFG } from '../../config/dry-toilet-snails-config.js'
 import Experience from '../../experience.js'
@@ -10,86 +9,178 @@ import {
   snailFsmUpdate,
 } from './dry-toilet-math.js'
 
-const COLORS = {
-  bodyLight: new THREE.Color('#b8c86a'),
-  bodyDark: new THREE.Color('#718341'),
-  shellLight: new THREE.Color('#c47a3a'),
-  shellDark: new THREE.Color('#754126'),
-  eye: new THREE.Color('#16130f'),
-}
-
-function colorGeometry(geometry, color) {
-  const colors = new Float32Array(geometry.getAttribute('position').count * 3)
-  for (let i = 0; i < colors.length; i += 3) {
-    colors[i] = color.r
-    colors[i + 1] = color.g
-    colors[i + 2] = color.b
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  return geometry
-}
-
-function makeBox(width, height, depth, x, y, z, color) {
-  const geometry = colorGeometry(new THREE.BoxGeometry(width, height, depth), color)
-  geometry.translate(x, y, z)
-  return geometry
-}
-
-function mergeBoxes(boxes) {
-  const geometry = mergeGeometries(boxes, false)
-  boxes.forEach(box => box.dispose())
-  return geometry
+/** 参考原型动画参数（体素局部空间） */
+const ANIM = {
+  speed: 1,
+  stride: 0.18,
+  shellWobble: 0.075,
+  tentacleSwing: 0.16,
+  headTurn: 0.22,
 }
 
 /**
- * 创建所有蜗牛实例复用的几何体与材质。
- * @returns {{ geometries: Record<string, THREE.BufferGeometry>, materials: Record<string, THREE.Material>, dispose: () => void }} 可复用资源与统一销毁入口
+ * @param {number} seed
+ * @returns {() => number}
  */
-export function createSharedSnailAssets() {
-  const geometries = {
-    body: mergeBoxes([
-      makeBox(0.26, 0.13, 0.24, 0, 0.075, 0, COLORS.bodyLight),
-      makeBox(0.22, 0.045, 0.18, 0, 0.0225, 0.02, COLORS.bodyDark),
-    ]),
-    head: mergeBoxes([
-      makeBox(0.28, 0.17, 0.24, 0, 0.105, 0, COLORS.bodyLight),
-      makeBox(0.22, 0.055, 0.09, 0, 0.055, 0.085, COLORS.bodyDark),
-    ]),
-    shell: mergeBoxes([
-      makeBox(0.42, 0.30, 0.34, 0, 0.25, 0, COLORS.shellLight),
-      makeBox(0.34, 0.39, 0.26, 0, 0.255, 0, COLORS.shellLight),
-      makeBox(0.22, 0.23, 0.36, 0, 0.27, 0, COLORS.shellDark),
-    ]),
-    antenna: makeBox(0.035, 0.23, 0.035, 0, 0.115, 0, COLORS.bodyDark),
-    eye: makeBox(0.065, 0.065, 0.065, 0, 0, 0, COLORS.eye),
+function mulberry32(seed) {
+  return function () {
+    let t = seed += 0x6D2B79F5
+    t = Math.imul(t ^ t >>> 15, t | 1)
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61)
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
   }
-  const materials = {
-    voxel: new THREE.MeshStandardMaterial({
-      roughness: 0.9,
-      metalness: 0,
-      vertexColors: true,
-    }),
+}
+
+/**
+ * @param {THREE.Texture} texture
+ * @returns {THREE.Texture}
+ */
+function applyPixelTextureSettings(texture) {
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.magFilter = THREE.NearestFilter
+  texture.minFilter = THREE.NearestFilter
+  texture.generateMipmaps = false
+  texture.needsUpdate = true
+  return texture
+}
+
+/**
+ * @param {{ base: string, dark: string, light: string, seed?: number, pattern?: string }} options
+ * @returns {THREE.CanvasTexture}
+ */
+function createPixelTexture({ base, dark, light, seed = 1, pattern = 'speckle' }) {
+  const size = 16
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const random = mulberry32(seed)
+
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, size, size)
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const chance = random()
+      let color = null
+      if (pattern === 'flesh') {
+        if (chance > 0.78)
+          color = light
+        else if (chance < 0.16)
+          color = dark
+      }
+      else {
+        if (chance > 0.8)
+          color = light
+        else if (chance < 0.18)
+          color = dark
+      }
+      if (color) {
+        ctx.fillStyle = color
+        ctx.fillRect(x, y, 1, 1)
+      }
+    }
   }
 
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = random() > 0.5 ? dark : light
+    ctx.fillRect(Math.floor(random() * 15), Math.floor(random() * 16), 2, 1)
+  }
+
+  return applyPixelTextureSettings(new THREE.CanvasTexture(canvas))
+}
+
+/**
+ * @param {number} seed
+ * @param {string} base
+ * @param {string} dark
+ * @param {string} light
+ * @returns {THREE.CanvasTexture}
+ */
+function createShellTexture(seed = 21, base = '#78431f', dark = '#4e2a16', light = '#a7612d') {
+  const size = 16
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const random = mulberry32(seed)
+
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, size, size)
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const chance = random()
+      const band = Math.floor((x + y * 0.35) / 3) % 2
+      let color = null
+      if (band === 0 && chance > 0.36)
+        color = dark
+      else if (chance > 0.82)
+        color = light
+      if (color) {
+        ctx.fillStyle = color
+        ctx.fillRect(x, y, 1, 1)
+      }
+    }
+  }
+
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = random() > 0.5 ? dark : light
+    ctx.fillRect(Math.floor(random() * 15), Math.floor(random() * 16), 2, 1)
+  }
+
+  return applyPixelTextureSettings(new THREE.CanvasTexture(canvas))
+}
+
+function materialFromTexture(texture) {
+  return new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.92,
+    metalness: 0,
+  })
+}
+
+function smoothRange(value, min, max) {
+  const t = THREE.MathUtils.clamp((value - min) / (max - min), 0, 1)
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * 创建所有蜗牛共享的几何体与像素材质（参考原型样式）
+ * @returns {{ cubeGeometry: THREE.BoxGeometry, materials: Record<string, THREE.Material>, textures: Record<string, THREE.Texture>, dispose: () => void }}
+ */
+export function createSharedSnailAssets() {
+  const textures = {
+    body: createPixelTexture({ base: '#cbb38c', dark: '#a88c65', light: '#dfc9a4', seed: 11, pattern: 'flesh' }),
+    bodyDark: createPixelTexture({ base: '#b99c75', dark: '#947756', light: '#ceb28b', seed: 12, pattern: 'flesh' }),
+    eye: createPixelTexture({ base: '#171717', dark: '#050505', light: '#3d3d3d', seed: 31, pattern: 'speckle' }),
+    shell: createShellTexture(21, '#78431f', '#4e2a16', '#a7612d'),
+    shellDark: createShellTexture(22, '#5e341c', '#3d2112', '#844922'),
+  }
+  const materials = {
+    body: materialFromTexture(textures.body),
+    bodyDark: materialFromTexture(textures.bodyDark),
+    eye: materialFromTexture(textures.eye),
+    shell: materialFromTexture(textures.shell),
+    shellDark: materialFromTexture(textures.shellDark),
+  }
+  const cubeGeometry = new THREE.BoxGeometry(1, 1, 1)
+
   return {
-    geometries,
+    cubeGeometry,
     materials,
+    textures,
+    // 兼容旧接口字段
+    geometries: { cube: cubeGeometry },
     dispose() {
-      Object.values(geometries).forEach(geometry => geometry.dispose())
+      cubeGeometry.dispose()
       Object.values(materials).forEach(material => material.dispose())
+      Object.values(textures).forEach(texture => texture.dispose())
     },
   }
 }
 
-function smoothstep(value) {
-  const t = THREE.MathUtils.clamp(value, 0, 1)
-  return t * t * (3 - 2 * t)
-}
-
-function stageVisibility(progress, stage) {
-  return 1 - smoothstep(progress * 3 - stage)
-}
-
+/**
+ * 参考原型体素蜗牛：共享 cube/材质，实例自建部件层级
+ */
 export default class VoxelSnail {
   constructor({ shared, length, x, z, yaw, terrainProvider, activityCenter, footprint }) {
     this.experience = new Experience()
@@ -99,60 +190,24 @@ export default class VoxelSnail {
     this.footprint = footprint
     this.length = length
     this.fsm = createSnailFsm(CFG)
+    this.shared = shared
 
     this.group = new THREE.Group()
     this.group.name = 'VoxelSnail'
     this.group.position.set(x, 0, z)
+    // 模型本地朝向 +X，yaw=0 时朝世界 +X
     this.group.rotation.y = yaw
-    this.group.scale.setScalar(length)
 
-    this.bodyPivots = [-0.40, -0.16, 0.08].map((bodyZ) => {
-      const pivot = new THREE.Group()
-      pivot.userData.baseZ = bodyZ
-      pivot.position.z = bodyZ
-      return pivot
-    })
-    this.headPivot = new THREE.Group()
-    this.shellPivot = new THREE.Group()
-    this.leftAntennaPivot = new THREE.Group()
-    this.rightAntennaPivot = new THREE.Group()
+    this.snail = new THREE.Group()
+    this.group.add(this.snail)
 
-    this.headPivot.position.set(0, 0, 0.34)
-    this.shellPivot.position.set(0, 0, -0.15)
-    this.leftAntennaPivot.position.set(-0.09, 0.17, 0.10)
-    this.rightAntennaPivot.position.set(0.09, 0.17, 0.10)
+    this._clickMeshes = []
+    this._buildFromReference(shared)
 
-    this.bodyMeshes = this.bodyPivots.map(() => this._makeMesh(shared.geometries.body, shared.materials.voxel))
-    this.headMesh = this._makeMesh(shared.geometries.head, shared.materials.voxel)
-    this.shellMesh = this._makeMesh(shared.geometries.shell, shared.materials.voxel)
-    this.leftAntennaMesh = this._makeMesh(shared.geometries.antenna, shared.materials.voxel)
-    this.rightAntennaMesh = this._makeMesh(shared.geometries.antenna, shared.materials.voxel)
-    this.leftEyeMesh = this._makeMesh(shared.geometries.eye, shared.materials.voxel)
-    this.rightEyeMesh = this._makeMesh(shared.geometries.eye, shared.materials.voxel)
-
-    this.leftEyeMesh.position.y = 0.23
-    this.rightEyeMesh.position.y = 0.23
-    this.leftAntennaPivot.add(this.leftAntennaMesh, this.leftEyeMesh)
-    this.rightAntennaPivot.add(this.rightAntennaMesh, this.rightEyeMesh)
-    this.headPivot.add(this.headMesh, this.leftAntennaPivot, this.rightAntennaPivot)
-    this.bodyPivots.forEach((pivot, index) => {
-      pivot.add(this.bodyMeshes[index])
-    })
-    this.shellPivot.add(this.shellMesh)
-    this.group.add(...this.bodyPivots, this.headPivot, this.shellPivot)
-
-    this._clickMeshes = [
-      ...this.bodyMeshes,
-      this.headMesh,
-      this.shellMesh,
-      this.leftAntennaMesh,
-      this.rightAntennaMesh,
-      this.leftEyeMesh,
-      this.rightEyeMesh,
-    ]
-    this._clickMeshes.forEach((mesh) => {
-      mesh.userData.snailRef = this
-    })
+    const scale = length / CFG.snailRefLocalLength
+    this.snail.scale.setScalar(scale)
+    // 参考原型地面偏移（局部体素单位）
+    this.snail.position.y = 0.52 * scale
 
     this._elapsedSec = 0
     this._turnTimerSec = this._noise01(x, z) * CFG.turnNoiseInterval
@@ -162,11 +217,111 @@ export default class VoxelSnail {
     this.scene.add(this.group)
   }
 
-  _makeMesh(geometry, material) {
+  /**
+   * 按参考 HTML 搭建腹足 / 头 / 触角 / 壳体
+   * @param {ReturnType<typeof createSharedSnailAssets>} shared
+   */
+  _buildFromReference(shared) {
+    const { cubeGeometry, materials } = shared
+    const segmentCount = 12
+    this.bodySegments = []
+
+    for (let i = 0; i < segmentCount; i++) {
+      const segment = new THREE.Group()
+      segment.position.x = i
+      segment.userData.baseX = i
+      this.snail.add(segment)
+      this.bodySegments.push(segment)
+
+      const width = i < 2 || i > 9 ? 1 : 2
+      for (let z = -width; z <= width; z++)
+        this._cube(segment, 0, 0, z, (i + z) % 2 ? materials.body : materials.bodyDark, cubeGeometry)
+
+      if (i > 1 && i < 11) {
+        this._cube(segment, 0, 1, -1, materials.bodyDark, cubeGeometry)
+        this._cube(segment, 0, 1, 0, materials.body, cubeGeometry)
+        this._cube(segment, 0, 1, 1, materials.bodyDark, cubeGeometry)
+      }
+    }
+
+    this._cube(this.bodySegments[0], -1, 0, 0, materials.bodyDark, cubeGeometry)
+
+    this.head = new THREE.Group()
+    this.head.position.set(12, 0.4, 0)
+    this.snail.add(this.head)
+    this.headBase = this.head.position.clone()
+
+    const headCells = [
+      [0, 0, -1],
+      [0, 0, 0],
+      [0, 0, 1],
+      [1, 0, -1],
+      [1, 0, 0],
+      [1, 0, 1],
+      [0, 1, -1],
+      [0, 1, 0],
+      [0, 1, 1],
+      [1, 1, -1],
+      [1, 1, 0],
+      [1, 1, 1],
+      [0, 2, 0],
+      [1, 2, 0],
+    ]
+    headCells.forEach(([cx, cy, cz], i) => {
+      this._cube(this.head, cx, cy, cz, i % 3 ? materials.body : materials.bodyDark, cubeGeometry)
+    })
+
+    this.leftTentacle = this._createTentacle(-0.72, materials, cubeGeometry)
+    this.rightTentacle = this._createTentacle(0.72, materials, cubeGeometry)
+
+    this.shell = new THREE.Group()
+    this.shell.position.set(5.7, 2.25, 0)
+    this.snail.add(this.shell)
+    this.shellBase = this.shell.position.clone()
+
+    for (let sx = -3; sx <= 3; sx++) {
+      for (let sy = -1; sy <= 5; sy++) {
+        for (let sz = -2; sz <= 2; sz++) {
+          const nx = sx / 3.1
+          const ny = (sy - 2) / 3.1
+          const nz = sz / 2.35
+          const d = nx * nx + ny * ny + nz * nz
+          if (d <= 1.05) {
+            const stripe = (sx + sy * 2 + sz + 20) % 4
+            this._cube(
+              this.shell,
+              sx,
+              sy,
+              sz,
+              stripe === 0 ? materials.shellDark : materials.shell,
+              cubeGeometry,
+            )
+          }
+        }
+      }
+    }
+  }
+
+  _cube(parent, x, y, z, material, geometry) {
     const mesh = new THREE.Mesh(geometry, material)
+    mesh.position.set(x, y, z)
     mesh.castShadow = true
     mesh.receiveShadow = true
+    mesh.userData.snailRef = this
+    parent.add(mesh)
+    this._clickMeshes.push(mesh)
     return mesh
+  }
+
+  _createTentacle(z, materials, geometry) {
+    const root = new THREE.Group()
+    root.position.set(1.15, 2.15, z)
+    this.head.add(root)
+    this._cube(root, 0, 0, 0, materials.bodyDark, geometry)
+    this._cube(root, 0, 1, 0, materials.body, geometry)
+    this._cube(root, 0, 2, 0, materials.bodyDark, geometry)
+    this._cube(root, 0, 3, 0, materials.eye, geometry)
+    return root
   }
 
   _seedFromPosition(x, z, length) {
@@ -191,8 +346,11 @@ export default class VoxelSnail {
 
   _snapToGround() {
     const surfaceY = this._surfaceY(this.group.position.x, this.group.position.z)
-    if (surfaceY != null)
+    if (surfaceY != null) {
+      const scale = this.length / CFG.snailRefLocalLength
       this.group.position.y = surfaceY + 1
+      this.snail.position.y = 0.52 * scale
+    }
   }
 
   _isFootprintCell(x, z) {
@@ -213,55 +371,91 @@ export default class VoxelSnail {
     this.group.rotation.y += direction * (Math.PI * 0.5 + this._random() * CFG.turnNoiseRadians)
   }
 
-  _updateCrawlVisuals() {
-    const antennaWave = Math.sin(this._elapsedSec * 4.5)
-    this.bodyPivots.forEach((pivot, index) => {
-      const wave = Math.sin(this._elapsedSec * 8 - index * 0.9)
-      pivot.scale.y = 1 + wave * 0.06
-      pivot.position.y = Math.max(0, wave) * 0.012
-    })
-    this.headPivot.rotation.y = Math.sin(this._elapsedSec * 2.2) * 0.08
-    this.leftAntennaPivot.rotation.z = antennaWave * 0.11
-    this.rightAntennaPivot.rotation.z = -antennaWave * 0.11
-    this.shellPivot.rotation.z = Math.sin(this._elapsedSec * 3.2) * 0.035
+  /**
+   * 将 FSM 状态映射为参考原型的 0..1 缩壳进度
+   * @returns {number}
+   */
+  _retractProgress() {
+    if (this.fsm.state === SNAIL_STATES.RETRACTING)
+      return THREE.MathUtils.clamp(this.fsm.timerMs / this.fsm.retractMs, 0, 1)
+    if (this.fsm.state === SNAIL_STATES.RETRACTED)
+      return 1
+    if (this.fsm.state === SNAIL_STATES.EMERGING)
+      return 1 - THREE.MathUtils.clamp(this.fsm.timerMs / this.fsm.emergeMs, 0, 1)
+    return 0
   }
 
-  _updateRetractVisuals() {
-    let antenna = 1
-    let head = 1
-    let body = 1
+  /**
+   * 参考原型蠕动 + 缩壳动画
+   * @param {number} retractProgress
+   */
+  _updateReferenceVisuals(retractProgress) {
+    const crawl = this._elapsedSec * ANIM.speed * 4
+    const tentacleRetract = smoothRange(retractProgress, 0.0, 0.38)
+    const headRetract = smoothRange(retractProgress, 0.16, 0.76)
+    const bodyRetract = smoothRange(retractProgress, 0.34, 1.0)
+    const motionAmount = 1 - smoothRange(retractProgress, 0.0, 0.45)
 
-    if (this.fsm.state === SNAIL_STATES.RETRACTING) {
-      const progress = this.fsm.timerMs / this.fsm.retractMs
-      antenna = stageVisibility(progress, 0)
-      head = stageVisibility(progress, 1)
-      body = stageVisibility(progress, 2)
-    }
-    else if (this.fsm.state === SNAIL_STATES.RETRACTED) {
-      antenna = 0
-      head = 0
-      body = 0
-    }
-    else if (this.fsm.state === SNAIL_STATES.EMERGING) {
-      const progress = 1 - this.fsm.timerMs / this.fsm.emergeMs
-      antenna = stageVisibility(progress, 0)
-      head = stageVisibility(progress, 1)
-      body = stageVisibility(progress, 2)
-    }
+    this.bodySegments.forEach((segment, index) => {
+      const phase = crawl - index * 0.58
+      const push = Math.sin(phase) * ANIM.stride * motionAmount
+      const lift = Math.max(0, Math.sin(phase + 0.55)) * 0.12 * motionAmount
 
-    // 保留极小缩放，避免零缩放矩阵造成射线与阴影边界异常
-    const antennaScale = Math.max(antenna, 0.001)
-    const headScale = Math.max(head, 0.001)
-    const bodyScale = Math.max(body, 0.001)
-    this.leftAntennaPivot.scale.set(antennaScale, antennaScale, antennaScale)
-    this.rightAntennaPivot.scale.set(antennaScale, antennaScale, antennaScale)
-    this.headMesh.scale.set(headScale, headScale, headScale)
-    this.bodyPivots.forEach((pivot) => {
-      pivot.scale.set(bodyScale, bodyScale, bodyScale)
-      pivot.position.y = 0
-      pivot.position.z = THREE.MathUtils.lerp(-0.15, pivot.userData.baseZ, body)
+      const normalX = segment.userData.baseX + push
+      const packedX = 4.9 + index * 0.27
+      const packedY = 0.42 + Math.sin(index * 1.7) * 0.05
+
+      segment.position.x = THREE.MathUtils.lerp(normalX, packedX, bodyRetract)
+      segment.position.y = THREE.MathUtils.lerp(lift, packedY, bodyRetract)
+      segment.position.z = THREE.MathUtils.lerp(0, Math.sin(index) * 0.12, bodyRetract)
+
+      const packedScale = THREE.MathUtils.lerp(1, 0.52, bodyRetract)
+      segment.scale.setScalar(packedScale)
     })
-    this.headPivot.position.z = 0.34 - (1 - head) * 0.22
+
+    const localHeadYaw = Math.sin(this._elapsedSec * 0.55) * ANIM.headTurn * motionAmount
+    const normalHeadX = this.headBase.x + Math.sin(crawl + 0.4) * ANIM.stride * 1.7 * motionAmount
+    const normalHeadY = this.headBase.y + Math.sin(crawl * 1.15) * 0.08 * motionAmount
+
+    this.head.position.x = THREE.MathUtils.lerp(normalHeadX, 7.95, headRetract)
+    this.head.position.y = THREE.MathUtils.lerp(normalHeadY, 0.92, headRetract)
+    this.head.position.z = THREE.MathUtils.lerp(0, 0.05, headRetract)
+    this.head.rotation.z = Math.sin(crawl * 0.85) * 0.035 * motionAmount
+    this.head.rotation.y = localHeadYaw * (1 - headRetract)
+    this.head.scale.setScalar(THREE.MathUtils.lerp(1, 0.38, headRetract))
+
+    const tentacleScaleY = THREE.MathUtils.lerp(1, 0.12, tentacleRetract)
+    this.leftTentacle.scale.set(1, tentacleScaleY, 1)
+    this.rightTentacle.scale.set(1, tentacleScaleY, 1)
+
+    this.leftTentacle.rotation.z = THREE.MathUtils.lerp(
+      0.18 + Math.sin(crawl * 0.72) * ANIM.tentacleSwing * motionAmount,
+      -1.08,
+      tentacleRetract,
+    )
+    this.leftTentacle.rotation.x = THREE.MathUtils.lerp(
+      Math.cos(crawl * 0.55) * ANIM.tentacleSwing * 0.45 * motionAmount,
+      0.24,
+      tentacleRetract,
+    )
+    this.rightTentacle.rotation.z = THREE.MathUtils.lerp(
+      -0.18 - Math.sin(crawl * 0.72 + 0.8) * ANIM.tentacleSwing * motionAmount,
+      1.08,
+      tentacleRetract,
+    )
+    this.rightTentacle.rotation.x = THREE.MathUtils.lerp(
+      Math.cos(crawl * 0.55 + 0.65) * ANIM.tentacleSwing * 0.45 * motionAmount,
+      -0.24,
+      tentacleRetract,
+    )
+
+    this.shell.position.x = this.shellBase.x - Math.sin(crawl) * ANIM.stride * 0.65 * motionAmount
+    this.shell.position.y = this.shellBase.y + Math.sin(crawl * 0.9) * 0.045 * motionAmount
+    this.shell.rotation.z = Math.sin(crawl * 0.72) * ANIM.shellWobble * motionAmount
+    this.shell.rotation.x = Math.cos(crawl * 0.55) * ANIM.shellWobble * 0.45 * motionAmount
+
+    const scale = this.length / CFG.snailRefLocalLength
+    this.snail.position.y = (0.52 + Math.sin(crawl * 0.5) * 0.025 * motionAmount) * scale
   }
 
   getClickMeshes() {
@@ -283,18 +477,22 @@ export default class VoxelSnail {
   update(dtSec) {
     const delta = Number.isFinite(dtSec) ? Math.max(0, dtSec) : 0
     snailFsmUpdate(this.fsm, delta * 1000)
-    this._updateRetractVisuals()
 
-    if (!this.isCrawling())
+    const retractProgress = this._retractProgress()
+    // 缩壳期间仍推进时间，保证展开动画相位连续
+    this._elapsedSec += delta * (retractProgress < 0.45 ? 1 : 0.35)
+    this._updateReferenceVisuals(retractProgress)
+
+    if (!this.isCrawling()) {
+      this._snapToGround()
       return
+    }
 
-    this._elapsedSec += delta
     this._turnTimerSec += delta
     if (this._turnTimerSec >= CFG.turnNoiseInterval) {
       this._turnTimerSec %= CFG.turnNoiseInterval
       this.group.rotation.y += (this._random() * 2 - 1) * CFG.turnNoiseRadians
     }
-    this._updateCrawlVisuals()
 
     const distance = CFG.crawlSpeed * delta
     if (distance <= 0) {
@@ -304,8 +502,9 @@ export default class VoxelSnail {
 
     const x = this.group.position.x
     const z = this.group.position.z
-    const nextX = x + Math.sin(this.group.rotation.y) * distance
-    const nextZ = z + Math.cos(this.group.rotation.y) * distance
+    // 本地 +X 为前进方向
+    const nextX = x + Math.cos(this.group.rotation.y) * distance
+    const nextZ = z + Math.sin(this.group.rotation.y) * distance
     const currentSurfaceY = this._surfaceY(x, z)
     const nextSurfaceY = this._surfaceY(nextX, nextZ)
 

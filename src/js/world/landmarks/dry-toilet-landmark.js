@@ -63,7 +63,7 @@ export default class DryToiletLandmark {
     const cm = this._cm()
     const columns = this._readColumns()
     const targetY = computePlatformTargetY(columns.map(c => c.surfaceY))
-    const originCol = columns.find(c => c.x === 0 && c.z === 0) || columns[0]
+    const originCol = columns.find(c => c.x === CFG.center.x && c.z === CFG.center.z) || columns[0]
     const plan = buildPlatformPlan({
       columns,
       targetY,
@@ -107,7 +107,7 @@ export default class DryToiletLandmark {
       return
     }
 
-    // 先等比缩放到底边 2 格，再重新测包围盒并对齐原点平台顶面
+    // 先等比缩放到底边 2 格，再重新测包围盒并对齐地标中心平台顶面
     const fit = computeToiletFitTransform(
       { x: size.x, y: size.y, z: size.z },
       CFG.targetBaseSize,
@@ -119,8 +119,8 @@ export default class DryToiletLandmark {
     const center = new THREE.Vector3()
     box2.getCenter(center)
     const min = box2.min
-    root.position.x += -center.x
-    root.position.z += -center.z
+    root.position.x += -center.x + CFG.center.x
+    root.position.z += -center.z + CFG.center.z
     root.position.y += -min.y + this._platformTopY
 
     this.scene.add(root)
