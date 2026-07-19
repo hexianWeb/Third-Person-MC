@@ -19,6 +19,7 @@ import {
   AnimationStates,
   timeScaleConfig,
 } from './animation-config.js'
+import HeldItemAttachment from './held-item-attachment.js'
 import { resolveDirectionInput } from './input-resolver.js'
 import { PlayerAnimationController } from './player-animation-controller.js'
 import { PlayerMovementController } from './player-movement-controller.js'
@@ -105,6 +106,9 @@ export default class Player {
 
     this.setModel()
     this._bodyLayers = bindCharacterBodyLayers(this.model)
+    // 手持物挂载（debug 占位），验证右前臂骨骼握持点
+    this.heldItemAttachment = new HeldItemAttachment()
+    this.heldItemAttachment.attach(this.model)
     // 首帧隐藏，避免自定义皮肤装备时闪现 GLB 内嵌贴图
     this.model.visible = false
 
@@ -663,6 +667,8 @@ export default class Player {
   }
 
   debugInit() {
+    this.heldItemAttachment?.debugInit(this.debugFolder)
+
     // ===== 朝向控制 =====
     this.debugFolder.addBinding(this.config, 'facingAngle', {
       label: '朝向角度',
@@ -884,6 +890,9 @@ export default class Player {
   }
 
   destroy() {
+    this.heldItemAttachment?.destroy()
+    this.heldItemAttachment = null
+
     // 先使在途 _applySkinById 失效，避免 dispose 后异步回调再次贴图
     this._skinRequestId++
     emitter.off('skin:changed', this._handleSkinChange)
