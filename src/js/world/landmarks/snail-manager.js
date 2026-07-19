@@ -40,10 +40,8 @@ export default class SnailManager {
     const count = resolveSnailCount(rng, CFG)
     const points = generateSnailSpawnPoints(rng, {
       count,
-      center: { x: center.x, z: center.z },
       footprint: CFG.footprint,
-      radiusMin: CFG.activityRadiusMin,
-      radiusMax: CFG.activityRadiusMax,
+      marginMax: CFG.activityMarginMax,
       lengthMin: CFG.snailLengthMin,
       lengthMax: CFG.snailLengthMax,
     })

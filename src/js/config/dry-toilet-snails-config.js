@@ -26,8 +26,8 @@ export const DRY_TOILET_SNAILS_CONFIG = {
   // 蜗牛数量：确定性落在 [min, max]
   snailCountMin: 3,
   snailCountMax: 5,
-  activityRadiusMin: 4,
-  activityRadiusMax: 10,
+  // 蜗牛活动范围：底座外缘向外 2 格（不含底座本身）
+  activityMarginMax: 2,
   clickDistance: 6,
   snailLengthMin: 0.7,
   snailLengthMax: 0.9,

@@ -116,6 +116,58 @@ function isInsideFootprint(x, z, footprint) {
 }
 
 /**
+ * @param {Array<{ x: number, z: number }>} footprint
+ */
+export function getFootprintBounds(footprint) {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+
+  for (const { x, z } of footprint) {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minZ = Math.min(minZ, z)
+    maxZ = Math.max(maxZ, z)
+  }
+
+  return { minX, maxX, minZ, maxZ }
+}
+
+/**
+ * 世界坐标到脚印外缘的切比雪夫距离（格）；在脚印内为 0
+ * @param {number} x
+ * @param {number} z
+ * @param {Array<{ x: number, z: number }>} footprint
+ * @returns {number}
+ */
+export function distanceOutsideFootprint(x, z, footprint) {
+  const cellX = Math.floor(x)
+  const cellZ = Math.floor(z)
+  const { minX, maxX, minZ, maxZ } = getFootprintBounds(footprint)
+
+  if (cellX >= minX && cellX <= maxX && cellZ >= minZ && cellZ <= maxZ)
+    return 0
+
+  const dx = Math.max(minX - cellX, cellX - maxX, 0)
+  const dz = Math.max(minZ - cellZ, cellZ - maxZ, 0)
+  return Math.max(dx, dz)
+}
+
+/**
+ * 是否在脚印外缘 marginMax 格活动范围内（不含脚印本身）
+ * @param {number} x
+ * @param {number} z
+ * @param {Array<{ x: number, z: number }>} footprint
+ * @param {number} marginMax
+ * @returns {boolean}
+ */
+export function isInsideActivityMargin(x, z, footprint, marginMax) {
+  const margin = distanceOutsideFootprint(x, z, footprint)
+  return margin > 0 && margin <= marginMax
+}
+
+/**
  * 从配置与 RNG 解析本次蜗牛数量（含端点）
  * @param {import('../../tools/rng.js').RNG} rng
  * @param {{ snailCountMin: number, snailCountMax: number }} cfg
@@ -128,14 +180,12 @@ export function resolveSnailCount(rng, { snailCountMin, snailCountMax }) {
 }
 
 /**
- * 确定性生成蜗牛出生点：环带内、避开脚印
+ * 确定性生成蜗牛出生点：脚印外缘 marginMax 格内、避开脚印
  * @param {import('../../tools/rng.js').RNG} rng
  * @param {{
  *   count: number,
- *   center: { x: number, z: number },
  *   footprint: Array<{ x: number, z: number }>,
- *   radiusMin: number,
- *   radiusMax: number,
+ *   marginMax: number,
  *   lengthMin: number,
  *   lengthMax: number,
  * }} params
@@ -143,26 +193,25 @@ export function resolveSnailCount(rng, { snailCountMin, snailCountMax }) {
  */
 export function generateSnailSpawnPoints(rng, {
   count,
-  center,
   footprint,
-  radiusMin,
-  radiusMax,
+  marginMax,
   lengthMin,
   lengthMax,
 }) {
   const points = []
   const maxAttempts = count * 200
   let attempts = 0
+  const bounds = getFootprintBounds(footprint)
+  const pad = marginMax + 1
 
   while (points.length < count && attempts < maxAttempts) {
     attempts++
 
-    const angle = rng.random() * Math.PI * 2
-    const radius = radiusMin + rng.random() * (radiusMax - radiusMin)
-    const x = center.x + Math.cos(angle) * radius
-    const z = center.z + Math.sin(angle) * radius
+    const x = (bounds.minX - pad) + rng.random() * (bounds.maxX - bounds.minX + 2 * pad + 1)
+    const z = (bounds.minZ - pad) + rng.random() * (bounds.maxZ - bounds.minZ + 2 * pad + 1)
+    const margin = distanceOutsideFootprint(x, z, footprint)
 
-    if (isInsideFootprint(x, z, footprint))
+    if (margin <= 0 || margin > marginMax)
       continue
 
     const yaw = rng.random() * Math.PI * 2

@@ -8,6 +8,7 @@ import {
   computePlatformTargetY,
   computeToiletFitTransform,
   createSnailFsm,
+  distanceOutsideFootprint,
   generateSnailSpawnPoints,
   isValidAabbSize,
   resolveSnailCount,
@@ -62,17 +63,15 @@ test('platform plan fills, cuts, clears vegetation, and is idempotent', () => {
   assert.equal(again.ops.length, 0)
 })
 
-test('spawn points stay in ring, avoid footprint, and are deterministic', () => {
+test('spawn points stay within footprint margin, avoid footprint, and are deterministic', () => {
   const cfg = DRY_TOILET_SNAILS_CONFIG
   const makePoints = () => {
     const rng = new RNG(1337 + cfg.rngSalt)
     const count = resolveSnailCount(rng, cfg)
     return generateSnailSpawnPoints(rng, {
       count,
-      center: cfg.center,
       footprint: cfg.footprint,
-      radiusMin: cfg.activityRadiusMin,
-      radiusMax: cfg.activityRadiusMax,
+      marginMax: cfg.activityMarginMax,
       lengthMin: cfg.snailLengthMin,
       lengthMax: cfg.snailLengthMax,
     })
@@ -84,12 +83,11 @@ test('spawn points stay in ring, avoid footprint, and are deterministic', () => 
   const footprintSet = new Set(cfg.footprint.map(p => `${p.x},${p.z}`))
   assert.equal(cfg.footprint.length, cfg.platformSize * cfg.platformSize)
   assert.equal(cfg.targetBaseSize, 4)
+  assert.equal(cfg.activityMarginMax, 2)
   for (const p of a) {
-    const dx = p.x - cfg.center.x
-    const dz = p.z - cfg.center.z
-    const r = Math.hypot(dx, dz)
-    assert.ok(r >= cfg.activityRadiusMin - 1e-6)
-    assert.ok(r <= cfg.activityRadiusMax + 1e-6)
+    const margin = distanceOutsideFootprint(p.x, p.z, cfg.footprint)
+    assert.ok(margin > 0)
+    assert.ok(margin <= cfg.activityMarginMax + 1e-6)
     assert.equal(footprintSet.has(`${Math.floor(p.x)},${Math.floor(p.z)}`), false)
     assert.ok(p.length >= cfg.snailLengthMin && p.length <= cfg.snailLengthMax)
   }

@@ -4,6 +4,7 @@ import { DRY_TOILET_SNAILS_CONFIG as CFG } from '../../config/dry-toilet-snails-
 import Experience from '../../experience.js'
 import {
   createSnailFsm,
+  isInsideActivityMargin,
   SNAIL_STATES,
   snailFsmOnClick,
   snailFsmUpdate,
@@ -362,10 +363,7 @@ export default class VoxelSnail {
   }
 
   _isInsideActivityRing(x, z) {
-    const dx = x - this.activityCenter.x
-    const dz = z - this.activityCenter.z
-    const distance = Math.hypot(dx, dz)
-    return distance >= CFG.activityRadiusMin && distance <= CFG.activityRadiusMax
+    return isInsideActivityMargin(x, z, this.footprint, CFG.activityMarginMax)
   }
 
   _turnAway() {
