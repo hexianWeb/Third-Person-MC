@@ -116,6 +116,18 @@ function isInsideFootprint(x, z, footprint) {
 }
 
 /**
+ * 从配置与 RNG 解析本次蜗牛数量（含端点）
+ * @param {import('../../tools/rng.js').RNG} rng
+ * @param {{ snailCountMin: number, snailCountMax: number }} cfg
+ * @returns {number}
+ */
+export function resolveSnailCount(rng, { snailCountMin, snailCountMax }) {
+  const min = Math.min(snailCountMin, snailCountMax)
+  const max = Math.max(snailCountMin, snailCountMax)
+  return min + Math.floor(rng.random() * (max - min + 1))
+}
+
+/**
  * 确定性生成蜗牛出生点：环带内、避开脚印
  * @param {import('../../tools/rng.js').RNG} rng
  * @param {{

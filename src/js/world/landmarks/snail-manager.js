@@ -4,7 +4,7 @@ import { DRY_TOILET_SNAILS_CONFIG as CFG } from '../../config/dry-toilet-snails-
 import Experience from '../../experience.js'
 import { RNG } from '../../tools/rng.js'
 import emitter from '../../utils/event/event-bus.js'
-import { generateSnailSpawnPoints, shouldConsumeMiningClick } from './dry-toilet-math.js'
+import { generateSnailSpawnPoints, resolveSnailCount, shouldConsumeMiningClick } from './dry-toilet-math.js'
 import VoxelSnail, { createSharedSnailAssets } from './voxel-snail.js'
 
 export { shouldConsumeMiningClick }
@@ -37,8 +37,9 @@ export default class SnailManager {
 
     const seed = this.experience.terrainDataManager?.seed ?? 0
     const rng = new RNG(seed + CFG.rngSalt)
+    const count = resolveSnailCount(rng, CFG)
     const points = generateSnailSpawnPoints(rng, {
-      count: CFG.snailCount,
+      count,
       center: { x: center.x, z: center.z },
       footprint: CFG.footprint,
       radiusMin: CFG.activityRadiusMin,

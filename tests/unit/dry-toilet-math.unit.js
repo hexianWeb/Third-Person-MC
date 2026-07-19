@@ -10,6 +10,7 @@ import {
   createSnailFsm,
   generateSnailSpawnPoints,
   isValidAabbSize,
+  resolveSnailCount,
   SNAIL_STATES,
   snailFsmOnClick,
   snailFsmUpdate,
@@ -63,27 +64,26 @@ test('platform plan fills, cuts, clears vegetation, and is idempotent', () => {
 
 test('spawn points stay in ring, avoid footprint, and are deterministic', () => {
   const cfg = DRY_TOILET_SNAILS_CONFIG
-  const a = generateSnailSpawnPoints(new RNG(1337 + cfg.rngSalt), {
-    count: cfg.snailCount,
-    center: cfg.center,
-    footprint: cfg.footprint,
-    radiusMin: cfg.activityRadiusMin,
-    radiusMax: cfg.activityRadiusMax,
-    lengthMin: cfg.snailLengthMin,
-    lengthMax: cfg.snailLengthMax,
-  })
-  const b = generateSnailSpawnPoints(new RNG(1337 + cfg.rngSalt), {
-    count: cfg.snailCount,
-    center: cfg.center,
-    footprint: cfg.footprint,
-    radiusMin: cfg.activityRadiusMin,
-    radiusMax: cfg.activityRadiusMax,
-    lengthMin: cfg.snailLengthMin,
-    lengthMax: cfg.snailLengthMax,
-  })
-  assert.equal(a.length, 12)
+  const makePoints = () => {
+    const rng = new RNG(1337 + cfg.rngSalt)
+    const count = resolveSnailCount(rng, cfg)
+    return generateSnailSpawnPoints(rng, {
+      count,
+      center: cfg.center,
+      footprint: cfg.footprint,
+      radiusMin: cfg.activityRadiusMin,
+      radiusMax: cfg.activityRadiusMax,
+      lengthMin: cfg.snailLengthMin,
+      lengthMax: cfg.snailLengthMax,
+    })
+  }
+  const a = makePoints()
+  const b = makePoints()
+  assert.ok(a.length >= cfg.snailCountMin && a.length <= cfg.snailCountMax)
   assert.deepEqual(a, b)
   const footprintSet = new Set(cfg.footprint.map(p => `${p.x},${p.z}`))
+  assert.equal(cfg.footprint.length, cfg.platformSize * cfg.platformSize)
+  assert.equal(cfg.targetBaseSize, 4)
   for (const p of a) {
     const dx = p.x - cfg.center.x
     const dz = p.z - cfg.center.z
