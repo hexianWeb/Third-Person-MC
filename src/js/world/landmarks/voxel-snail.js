@@ -370,7 +370,13 @@ export default class VoxelSnail {
 
   _turnAway() {
     const direction = this._random() < 0.5 ? -1 : 1
+    // 仅旋转身体，头部相对朝向不变；移动始终沿头部方向
     this.group.rotation.y += direction * (Math.PI * 0.5 + this._random() * CFG.turnNoiseRadians)
+  }
+
+  /** 头部指向的世界 Y 轴偏航（模型本地 +X 为头朝向） */
+  _getMoveYaw() {
+    return this.group.rotation.y + this.head.rotation.y
   }
 
   /**
@@ -505,9 +511,10 @@ export default class VoxelSnail {
 
     const x = this.group.position.x
     const z = this.group.position.z
-    // 本地 +X 为前进方向
-    const nextX = x + Math.cos(this.group.rotation.y) * distance
-    const nextZ = z + Math.sin(this.group.rotation.y) * distance
+    // 沿头部朝向（本地 +X）前进，不用单独的身体偏航
+    const moveYaw = this._getMoveYaw()
+    const nextX = x + Math.cos(moveYaw) * distance
+    const nextZ = z + Math.sin(moveYaw) * distance
     const currentSurfaceY = this._surfaceY(x, z)
     const nextSurfaceY = this._surfaceY(nextX, nextZ)
 
@@ -523,7 +530,9 @@ export default class VoxelSnail {
       return
     }
 
-    this.group.position.set(nextX, nextSurfaceY + 1, nextZ)
+    this.group.position.x = nextX
+    this.group.position.z = nextZ
+    this.group.position.y = nextSurfaceY + 0.5
   }
 
   destroy() {

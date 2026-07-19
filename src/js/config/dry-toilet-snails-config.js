@@ -32,7 +32,7 @@ export const DRY_TOILET_SNAILS_CONFIG = {
   snailLengthMin: 0.7,
   snailLengthMax: 0.9,
   snailMaxHeight: 0.45,
-  crawlSpeed: 0.35,
+  crawlSpeed: 0.12,
   turnNoiseInterval: 1.2,
   turnNoiseRadians: 0.35,
   maxStepHeight: 1,
