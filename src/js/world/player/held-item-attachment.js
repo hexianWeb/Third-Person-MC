@@ -21,8 +21,9 @@ export default class HeldItemAttachment {
 
     this.params = {
       enabled: false,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
+      // 默认握持位姿：Y 抬到手掌附近，绕 X 转 -π/2 让手柄轴向更合理
+      position: { x: 0, y: 0.3, z: 0 },
+      rotation: { x: -Math.PI / 2, y: 0, z: 0 },
       scale: 1,
     }
   }
