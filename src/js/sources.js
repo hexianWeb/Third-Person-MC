@@ -55,6 +55,11 @@ export default [
     path: 'textures/skins/player.png',
   },
   {
+    name: 'cesuoModel',
+    type: 'gltfModel',
+    path: 'models/cesuo.glb',
+  },
+  {
     name: 'grass_block_top_texture',
     type: 'texture',
     path: 'textures/blocks/grass_block_top.png',

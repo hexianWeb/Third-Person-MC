@@ -674,6 +674,42 @@ export default class ChunkManager {
     return null
   }
 
+  /**
+   * 清除指定世界列上的植物实例（植物不在方块容器内）
+   * @param {Array<{ x: number, z: number }>} columns
+   */
+  clearPlantsInWorldColumns(columns = []) {
+    const touched = new Set()
+    for (const { x, z } of columns) {
+      const wx = Math.floor(x)
+      const wz = Math.floor(z)
+      const chunkX = Math.floor(wx / this.chunkWidth)
+      const chunkZ = Math.floor(wz / this.chunkWidth)
+      const chunkKey = this._key(chunkX, chunkZ)
+      const chunk = this.getChunk(chunkX, chunkZ)
+      if (!chunk)
+        continue
+
+      const localX = Math.floor(wx - chunkX * this.chunkWidth)
+      const localZ = Math.floor(wz - chunkZ * this.chunkWidth)
+      const filterPlants = (list) => {
+        if (!Array.isArray(list))
+          return list
+        return list.filter(p => !(p.x === localX && p.z === localZ))
+      }
+
+      if (chunk.generator?.plantData)
+        chunk.generator.plantData = filterPlants(chunk.generator.plantData)
+      if (chunk.plantData)
+        chunk.plantData = filterPlants(chunk.plantData)
+
+      touched.add(chunkKey)
+    }
+
+    for (const chunkKey of touched)
+      this._refreshActiveChunk(chunkKey)
+  }
+
   // #endregion
 
   /**
