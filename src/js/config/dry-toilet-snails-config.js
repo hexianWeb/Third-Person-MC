@@ -1,0 +1,27 @@
+/** 旱厕地标与蜗牛交互的稳定配置参数 */
+export const DRY_TOILET_SNAILS_CONFIG = {
+  resourceName: 'cesuoModel',
+  center: { x: 0, z: 0 },
+  footprint: [
+    { x: -1, z: -1 },
+    { x: -1, z: 0 },
+    { x: 0, z: -1 },
+    { x: 0, z: 0 },
+  ],
+  targetBaseSize: 2,
+  snailCount: 12,
+  activityRadiusMin: 3,
+  activityRadiusMax: 10,
+  clickDistance: 6,
+  snailLengthMin: 0.7,
+  snailLengthMax: 0.9,
+  snailMaxHeight: 0.45,
+  crawlSpeed: 0.35,
+  turnNoiseInterval: 1.2,
+  turnNoiseRadians: 0.35,
+  maxStepHeight: 1,
+  rngSalt: 90421,
+  retractMs: 700,
+  holdMs: 1600,
+  emergeMs: 700,
+}
