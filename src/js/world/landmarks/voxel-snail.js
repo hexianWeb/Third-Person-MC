@@ -206,8 +206,8 @@ export default class VoxelSnail {
 
     const scale = length / CFG.snailRefLocalLength
     this.snail.scale.setScalar(scale)
-    // 参考原型地面偏移（局部体素单位）
-    this.snail.position.y = 0.52 * scale
+    // 体素底面在局部 -0.5，抬升 0.5 使底面落在 group 原点
+    this.snail.position.y = 0.5 * scale
 
     this._elapsedSec = 0
     this._turnTimerSec = this._noise01(x, z) * CFG.turnNoiseInterval
@@ -346,11 +346,13 @@ export default class VoxelSnail {
 
   _snapToGround() {
     const surfaceY = this._surfaceY(this.group.position.x, this.group.position.z)
-    if (surfaceY != null) {
-      const scale = this.length / CFG.snailRefLocalLength
-      this.group.position.y = surfaceY + 1
-      this.snail.position.y = 0.52 * scale
-    }
+    if (surfaceY == null)
+      return
+
+    const scale = this.length / CFG.snailRefLocalLength
+    // 方块顶面 = surfaceY + 0.5；体素方块中心在局部 y=0，底面在 -0.5
+    this.group.position.y = surfaceY + 0.5
+    this.snail.position.y = 0.5 * scale
   }
 
   _isFootprintCell(x, z) {
@@ -455,7 +457,8 @@ export default class VoxelSnail {
     this.shell.rotation.x = Math.cos(crawl * 0.55) * ANIM.shellWobble * 0.45 * motionAmount
 
     const scale = this.length / CFG.snailRefLocalLength
-    this.snail.position.y = (0.52 + Math.sin(crawl * 0.5) * 0.025 * motionAmount) * scale
+    // 保持腹足底面贴地，仅叠加极小起伏
+    this.snail.position.y = (0.5 + Math.sin(crawl * 0.5) * 0.025 * motionAmount) * scale
   }
 
   getClickMeshes() {

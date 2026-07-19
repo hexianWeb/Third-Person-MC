@@ -77,7 +77,8 @@ export default class DryToiletLandmark {
         cm.addBlockWorld(op.x, op.y, op.z, op.blockId)
     }
     cm.clearPlantsInWorldColumns(plan.clearPlantColumns)
-    this._platformTopY = targetY + 1
+    // 方块中心在整数 Y，顶面为 y + 0.5
+    this._platformTopY = targetY + 0.5
   }
 
   _placeModel() {
@@ -107,7 +108,7 @@ export default class DryToiletLandmark {
       return
     }
 
-    // 先等比缩放到底边 2 格，再重新测包围盒并对齐地标中心平台顶面
+    // 先等比缩放到底边，再重新测包围盒并对齐平台顶面
     const fit = computeToiletFitTransform(
       { x: size.x, y: size.y, z: size.z },
       CFG.targetBaseSize,
@@ -119,10 +120,19 @@ export default class DryToiletLandmark {
     const center = new THREE.Vector3()
     box2.getCenter(center)
     const min = box2.min
+    // 脚印几何中心：4×4 覆盖 [30,34) → 中心 32
     root.position.x += -center.x + CFG.center.x
     root.position.z += -center.z + CFG.center.z
+    // 包围盒底面贴齐平台顶面
     root.position.y += -min.y + this._platformTopY
 
+    // 再测一次，消除缩放/位移后的浮点误差
+    root.updateMatrixWorld(true)
+    const box3 = new THREE.Box3().setFromObject(root)
+    root.position.y += this._platformTopY - box3.min.y
+    root.position.x += CFG.center.x - (box3.min.x + box3.max.x) * 0.5
+    root.position.z += CFG.center.z - (box3.min.z + box3.max.z) * 0.5
+    root.updateMatrixWorld(true)
     this.scene.add(root)
     this.model = root
     this.activityCenter = {
