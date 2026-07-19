@@ -17,7 +17,7 @@ function makeArmModel() {
   return { model, bone }
 }
 
-test('attach parents HeldItemSocket under Arm:Right:Lower with PlaceholderHandle child', (t) => {
+test('attach parents HeldItemSocket under ArmRightLower with PlaceholderHandle child', (t) => {
   const { model, bone } = makeArmModel()
   const held = new HeldItemAttachment()
   t.after(() => held.destroy())
@@ -149,9 +149,9 @@ test('missing bone skips attach, logs once per model cycle, includes bone names'
   }
 
   assert.equal(errors.length, 2)
-  assert.match(errors[0], /Arm:Right:Lower/)
+  assert.match(errors[0], /ArmRightLower/)
   assert.match(errors[0], /SomeOtherBone/)
-  assert.match(errors[1], /Arm:Right:Lower/)
+  assert.match(errors[1], /ArmRightLower/)
 })
 
 test('destroy removes nodes and disposes geometry/material; second destroy is safe', () => {

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
-export const BONE_NAME = 'Arm:Right:Lower'
+// GLTFLoader 会 sanitize 节点名并去掉 ':'（资产原名 Arm:Right:Lower）
+export const BONE_NAME = 'ArmRightLower'
 export const SOCKET_NAME = 'HeldItemSocket'
 export const MESH_NAME = 'PlaceholderHandle'
 
