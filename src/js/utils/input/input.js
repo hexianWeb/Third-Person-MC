@@ -20,6 +20,7 @@ export default class InputManager {
       c: false,
       q: false,
       e: false,
+      g: false,
       tab: false,
       backtick: false,
     }
@@ -148,6 +149,14 @@ export default class InputManager {
       case 'e':
         if (this.keys.e !== isPressed) {
           this.keys.e = isPressed
+          // 仅在按下瞬间切换背包
+          if (isPressed)
+            emitter.emit('input:toggle_inventory')
+        }
+        break
+      case 'g':
+        if (this.keys.g !== isPressed) {
+          this.keys.g = isPressed
           emitter.emit('input:camera_shoulder_right', isPressed)
         }
         break

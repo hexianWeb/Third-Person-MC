@@ -8,6 +8,8 @@ import emitter from '@three/utils/event/event-bus.js'
 import { onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import HowToPlay from './HowToPlay.vue'
+import CraftingTableScreen from './inventory/CraftingTableScreen.vue'
+import InventoryScreen from './inventory/InventoryScreen.vue'
 import LoadingScreen from './LoadingScreen.vue'
 import MainMenu from './MainMenu.vue'
 import PauseMenu from './PauseMenu.vue'
@@ -17,16 +19,34 @@ import SkinSelector from './SkinSelector.vue'
 const ui = useUiStore()
 const { locale } = useI18n()
 
+function handleToggleInventory() {
+  if (ui.screen === 'playing') {
+    ui.toInventory()
+    return
+  }
+  if (ui.screen === 'inventory' || ui.screen === 'craftingTable')
+    ui.toPlaying()
+}
+
+function handleOpenCraftingTable() {
+  if (ui.screen === 'playing')
+    ui.toCraftingTable()
+}
+
 // Listen for core:ready to transition from loading to mainMenu
 onMounted(() => {
   emitter.on('core:ready', handleCoreReady)
   emitter.on('ui:escape', handleEscape)
+  emitter.on('input:toggle_inventory', handleToggleInventory)
+  emitter.on('ui:open_crafting_table', handleOpenCraftingTable)
   window.addEventListener('blur', handleWindowBlur)
 })
 
 onUnmounted(() => {
   emitter.off('core:ready', handleCoreReady)
   emitter.off('ui:escape', handleEscape)
+  emitter.off('input:toggle_inventory', handleToggleInventory)
+  emitter.off('ui:open_crafting_table', handleOpenCraftingTable)
   window.removeEventListener('blur', handleWindowBlur)
 })
 
@@ -60,7 +80,7 @@ function handleWindowBlur() {
       class="menu-overlay"
       :class="{
         loading: ui.screen === 'loading',
-        dark: ui.screen !== 'loading',
+        dark: ui.screen !== 'loading' && ui.screen !== 'inventory' && ui.screen !== 'craftingTable',
         [`lang-${locale}`]: true,
       }"
     >
@@ -82,6 +102,10 @@ function handleWindowBlur() {
 
       <!-- Settings Menu -->
       <SettingsMenu v-else-if="ui.screen === 'settings'" />
+
+      <!-- Inventory / Crafting Table（无 dark 调暗） -->
+      <InventoryScreen v-else-if="ui.screen === 'inventory'" />
+      <CraftingTableScreen v-else-if="ui.screen === 'craftingTable'" />
     </div>
   </Transition>
 </template>

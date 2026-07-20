@@ -1,5 +1,6 @@
 <script setup>
 import { useHudStore } from '@pinia/hudStore.js'
+import { useUiStore } from '@pinia/uiStore.js'
 import sources from '@three/sources.js'
 import emitter from '@three/utils/event/event-bus.js'
 import { blocks as blocksConfig } from '@three/world/terrain/blocks-config.js'
@@ -11,6 +12,7 @@ import { blocks as blocksConfig } from '@three/world/terrain/blocks-config.js'
 import { computed, onMounted, onUnmounted } from 'vue'
 
 const hud = useHudStore()
+const ui = useUiStore()
 
 // Build texture name -> path mapping from sources.js
 const texturePathMap = sources.reduce((map, source) => {
@@ -76,6 +78,8 @@ function getBlockTopTexture(blockId) {
 
 // Handle keyboard 1-9 for slot selection
 function handleKeyDown(e) {
+  if (ui.isMenuVisible)
+    return
   if (e.key >= '1' && e.key <= '9') {
     const slot = Number.parseInt(e.key) - 1
     hud.selectSlot(slot)
@@ -84,6 +88,8 @@ function handleKeyDown(e) {
 
 // Handle mouse wheel for slot cycling
 function handleWheel(e) {
+  if (ui.isMenuVisible)
+    return
   if (e.deltaY > 0) {
     hud.cycleSlot(1)
   }

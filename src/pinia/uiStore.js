@@ -9,6 +9,7 @@ import {
   WORLDGEN_PRESETS,
 } from '../js/config/worldgen-presets.js'
 import { useAchievementStore } from './achievementStore.js'
+import { useInventoryStore } from './inventoryStore.js'
 
 /**
  * UI Store - Menu System State Machine
@@ -31,7 +32,7 @@ export const useUiStore = defineStore('ui', () => {
   // State
   // ----------------------------------------
 
-  /** Current screen: 'loading' | 'mainMenu' | 'playing' | 'pauseMenu' | 'settings' */
+  /** Current screen: 'loading' | 'mainMenu' | 'playing' | 'pauseMenu' | 'settings' | 'inventory' | 'craftingTable' */
   const screen = ref('loading')
 
   /** Main menu sub-view: 'root' | 'worldSetup' | 'howToPlay' | 'skinSelector' | 'achievements' */
@@ -76,7 +77,7 @@ export const useUiStore = defineStore('ui', () => {
 
   /** Check if current screen shows a menu overlay */
   const isMenuVisible = computed(() => {
-    return ['loading', 'mainMenu', 'pauseMenu', 'settings'].includes(screen.value)
+    return ['loading', 'mainMenu', 'pauseMenu', 'settings', 'inventory', 'craftingTable'].includes(screen.value)
   })
 
   // ----------------------------------------
@@ -163,6 +164,10 @@ export const useUiStore = defineStore('ui', () => {
    * Navigate to Playing state
    */
   function toPlaying() {
+    // 从背包/工作台返回时，尝试收回光标物品
+    if (screen.value === 'inventory' || screen.value === 'craftingTable')
+      useInventoryStore().returnCursorToInventory()
+
     screen.value = 'playing'
     mainMenuView.value = 'root'
     isPaused.value = false
@@ -176,6 +181,24 @@ export const useUiStore = defineStore('ui', () => {
   function toPauseMenu() {
     screen.value = 'pauseMenu'
     mainMenuView.value = 'root'
+    isPaused.value = true
+    emitter.emit('ui:pause-changed', true)
+  }
+
+  /**
+   * 打开玩家背包（暂停 + 释放指针）
+   */
+  function toInventory() {
+    screen.value = 'inventory'
+    isPaused.value = true
+    emitter.emit('ui:pause-changed', true)
+  }
+
+  /**
+   * 打开工作台 3x3 界面
+   */
+  function toCraftingTable() {
+    screen.value = 'craftingTable'
     isPaused.value = true
     emitter.emit('ui:pause-changed', true)
   }
@@ -383,6 +406,10 @@ export const useUiStore = defineStore('ui', () => {
       case 'pauseMenu':
         toPlaying()
         break
+      case 'inventory':
+      case 'craftingTable':
+        toPlaying()
+        break
       case 'playing':
         toPauseMenu()
         break
@@ -424,6 +451,8 @@ export const useUiStore = defineStore('ui', () => {
     toMainMenu,
     toPlaying,
     toPauseMenu,
+    toInventory,
+    toCraftingTable,
     toSettings,
     exitSettings,
 
