@@ -1,12 +1,12 @@
 import Experience from '../experience.js'
 import emitter from '../utils/event/event-bus.js'
+import { BLOCK_IDS, blocks } from '../world/terrain/blocks-config.js'
 
 /**
  * BlockInteractionManager
- * - Manages the current interaction mode (Add vs Remove)
- * - Toggles between Mining (Remove) and Placing (Add)
- * - Listens to 'Q' key for mode switching
+ * - Manages mining / placing via mouse
  * - Uses event-based Hotbar integration for block placement
+ * - 工作台右键打开 3x3；非可见方块物品不可放置
  */
 export default class BlockInteractionManager {
   constructor(options = {}) {
@@ -43,7 +43,7 @@ export default class BlockInteractionManager {
   }
 
   _onMouseDown(event) {
-    // Right click (2) only for placing
+    // Right click (2) only for placing / opening crafting table
     if (event.button !== 2)
       return
 
@@ -55,6 +55,13 @@ export default class BlockInteractionManager {
     // Ensure we have a valid target
     if (!this.raycaster || !this.raycaster.current)
       return
+
+    // 右键工作台：打开 3x3 界面（仍更新冷却，防连点）
+    if (this.raycaster.current.blockId === BLOCK_IDS.CRAFTING_TABLE) {
+      this._lastPlaceTime = now
+      emitter.emit('ui:open_crafting_table')
+      return
+    }
 
     this._placeBlock(this.raycaster.current)
   }
@@ -71,6 +78,12 @@ export default class BlockInteractionManager {
       return
     }
 
+    // 非可见方块（木棍/木镐等）不可放置
+    const blockToPlace = this._selectedBlockId
+    const isPlaceable = Object.values(blocks).some(b => b.id === blockToPlace && b.visible)
+    if (!isPlaceable)
+      return
+
     // Calculate target position based on normal
     const nx = Math.round(face.normal.x)
     const ny = Math.round(face.normal.y)
@@ -79,9 +92,6 @@ export default class BlockInteractionManager {
     const targetX = worldBlock.x + nx
     const targetY = worldBlock.y + ny
     const targetZ = worldBlock.z + nz
-
-    // Use selected block from Hotbar
-    const blockToPlace = this._selectedBlockId
 
     // Check availability (optional: collision check with player?)
     // For now, just place it
