@@ -60,7 +60,7 @@
           "0": "Move with WASD or Arrow Keys.",
           "1": "Hold Shift to sprint.",
           "2": "Hold V to sneak for control.",
-          "3": "Press Q or E to switch camera shoulder (left/right).",
+          "3": "Press Q or G to switch camera shoulder (left/right).",
           "4": "Hold Tab for telescope zoom. Press ~ to look back."
         },
         "keybinds": {
@@ -69,9 +69,10 @@
           "2": { "action": "Sprint", "key": "Shift" },
           "3": { "action": "Sneak", "key": "V" },
           "4": { "action": "Camera Left", "key": "Q" },
-          "5": { "action": "Camera Right", "key": "E" },
+          "5": { "action": "Camera Right", "key": "G" },
           "6": { "action": "Telescope", "key": "Tab" },
-          "7": { "action": "Look Back", "key": "~" }
+          "7": { "action": "Look Back", "key": "~" },
+          "8": { "action": "Open Inventory", "key": "E" }
         }
       },
       "combat": {
@@ -183,6 +184,18 @@
         "desc_prefix": "It's time to open the real ",
         "desc_suffix": "!"
       }
+    },
+    "inventory": {
+      "title": "Inventory"
+    },
+    "craftingTable": {
+      "title": "Crafting Table"
     }
+  },
+  "items": {
+    "oak_planks": "Oak Planks",
+    "stick": "Stick",
+    "crafting_table": "Crafting Table",
+    "wooden_pickaxe": "Wooden Pickaxe"
   }
 }

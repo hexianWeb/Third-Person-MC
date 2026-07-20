@@ -13,7 +13,7 @@ const { t } = useI18n()
 
 // 页面配置：文案与按键表通过 i18n 获取（howto.pages.{pageKey}）
 const pages = [
-  { id: 'movement-camera', image: '1.png', bodyCount: 5, keybindCount: 8 },
+  { id: 'movement-camera', image: '1.png', bodyCount: 5, keybindCount: 9 },
   { id: 'combat', image: '2.png', bodyCount: 3, keybindCount: 3 },
   { id: 'build-edit', image: '3.png', bodyCount: 3, keybindCount: 2 },
   { id: 'achievements', image: '4.png', bodyCount: 3, keybindCount: 2 },

@@ -60,7 +60,7 @@
           "0": "使用 WASD 或方向键移动。",
           "1": "按住 Shift 冲刺。",
           "2": "按住 V 潜行以获得更精准的控制。",
-          "3": "按 Q 或 E 切换左肩/右肩视角。",
+          "3": "按 Q 或 G 切换左肩/右肩视角。",
           "4": "按住 Tab 使用望远镜缩放。按 ~ 回头看。"
         },
         "keybinds": {
@@ -69,9 +69,10 @@
           "2": { "action": "冲刺", "key": "Shift" },
           "3": { "action": "潜行", "key": "V" },
           "4": { "action": "左肩视角", "key": "Q" },
-          "5": { "action": "右肩视角", "key": "E" },
+          "5": { "action": "右肩视角", "key": "G" },
           "6": { "action": "望远镜", "key": "Tab" },
-          "7": { "action": "回头看", "key": "~" }
+          "7": { "action": "回头看", "key": "~" },
+          "8": { "action": "打开背包", "key": "E" }
         }
       },
       "combat": {
@@ -183,6 +184,18 @@
         "desc_prefix": "是时候打开真正的 ",
         "desc_suffix": " 了！"
       }
+    },
+    "inventory": {
+      "title": "物品栏"
+    },
+    "craftingTable": {
+      "title": "工作台"
     }
+  },
+  "items": {
+    "oak_planks": "橡木木板",
+    "stick": "木棍",
+    "crafting_table": "工作台",
+    "wooden_pickaxe": "木镐"
   }
 }
