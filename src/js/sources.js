@@ -336,4 +336,25 @@ export default [
     type: 'texture',
     path: 'textures/background/midnight.png',
   },
+  // ===== 合成系统贴图（木板 / 工作台 / 木棍）=====
+  {
+    name: 'oakPlanks_Texture',
+    type: 'texture',
+    path: 'textures/blocks/planks_oak.png',
+  },
+  {
+    name: 'craftingTable_TopTexture',
+    type: 'texture',
+    path: 'textures/blocks/crafting_table_top.png',
+  },
+  {
+    name: 'craftingTable_FrontTexture',
+    type: 'texture',
+    path: 'textures/blocks/crafting_table_front.png',
+  },
+  {
+    name: 'stick_Texture',
+    type: 'texture',
+    path: 'textures/items/stick.png',
+  },
 ]
