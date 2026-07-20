@@ -54,6 +54,9 @@ export const BLOCK_IDS = {
   // snowLayer (ID: 20) 暂不实现（纹理缺失）
   // 其他
   GRAVEL: 21,
+  // 合成系统新增
+  OAK_PLANKS: 22,
+  CRAFTING_TABLE: 23,
 }
 
 // 植物 ID 常量（使用 200+ 区间与方块区分）
@@ -294,6 +297,25 @@ export const blocks = {
     visible: true,
     textureKeys: {
       all: 'gravel_Texture',
+    },
+  },
+  // ===== 合成系统新增 =====
+  oakPlanks: {
+    id: BLOCK_IDS.OAK_PLANKS,
+    name: 'oak_planks',
+    visible: true,
+    textureKeys: {
+      all: 'oakPlanks_Texture',
+    },
+  },
+  craftingTable: {
+    id: BLOCK_IDS.CRAFTING_TABLE,
+    name: 'crafting_table',
+    visible: true,
+    textureKeys: {
+      top: 'craftingTable_TopTexture',
+      bottom: 'oakPlanks_Texture',
+      side: 'craftingTable_FrontTexture',
     },
   },
 }
