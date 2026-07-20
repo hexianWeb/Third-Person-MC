@@ -1,8 +1,10 @@
+import { useHudStore } from '@pinia/hudStore.js'
 import * as THREE from 'three'
 
 import { DRY_TOILET_SNAILS_CONFIG as CFG } from '../../config/dry-toilet-snails-config.js'
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
+import { BLOCK_IDS } from '../terrain/blocks-config.js'
 import { getSnailSpawnPoints, shouldConsumeMiningClick } from './dry-toilet-math.js'
 import Snail from './snail.js'
 
@@ -67,6 +69,41 @@ export default class SnailManager {
       snail.update(dtSec)
   }
 
+  /**
+   * @param {import('./snail.js').default} snail
+   * @returns {boolean} 是否成功拾取
+   */
+  _pickupSnail(snail) {
+    const hud = useHudStore()
+    // 热键栏满则不移除世界蜗牛
+    if (!hud.addItemToHotbar(BLOCK_IDS.SNAIL, 1)) {
+      console.warn('[SnailManager] hotbar full, cannot pickup snail')
+      return false
+    }
+
+    for (let i = 0; i < 9; i++) {
+      if (hud.hotbarItems[i]?.blockId === BLOCK_IDS.SNAIL) {
+        hud.selectSlot(i)
+        break
+      }
+    }
+
+    const index = this.snails.indexOf(snail)
+    if (index >= 0)
+      this.snails.splice(index, 1)
+
+    const worldPos = {
+      x: snail.getPosition().x,
+      y: snail.getPosition().y,
+      z: snail.getPosition().z,
+    }
+    const { length } = snail
+    snail.destroy()
+
+    emitter.emit('game:snail-pickup-complete', { worldPos, length })
+    return true
+  }
+
   _onMouseDown(event) {
     if (event.button !== 0 || !this.spawned)
       return
@@ -99,8 +136,16 @@ export default class SnailManager {
       return
     }
 
-    event.handled = true
-    target.startRetract()
+    // 蜷缩态：拾取；爬行态：缩壳；其余不消费点击
+    if (target.isRetracted()) {
+      if (this._pickupSnail(target))
+        event.handled = true
+      return
+    }
+
+    if (target.startRetract()) {
+      event.handled = true
+    }
   }
 
   reset() {

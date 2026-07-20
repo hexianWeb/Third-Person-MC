@@ -207,13 +207,24 @@ export function createSnailFsm({ retractMs, holdMs, emergeMs }) {
 /**
  * 点击蜗牛：仅 CRAWLING 状态下触发缩入
  * @param {{ state: string, timerMs: number }} fsm
+ * @returns {boolean} 是否成功进入缩壳
  */
 export function snailFsmOnClick(fsm) {
   if (fsm.state !== SNAIL_STATES.CRAWLING)
-    return
+    return false
 
   fsm.state = SNAIL_STATES.RETRACTING
   fsm.timerMs = 0
+  return true
+}
+
+/**
+ * 是否可拾取（已完全缩入）
+ * @param {{ state: string }} fsm
+ * @returns {boolean}
+ */
+export function snailFsmCanPickup(fsm) {
+  return fsm.state === SNAIL_STATES.RETRACTED
 }
 
 /**
@@ -243,6 +254,19 @@ export function snailFsmUpdate(fsm, dtMs) {
     fsm.state = SNAIL_STATES.CRAWLING
     fsm.timerMs = 0
   }
+}
+
+/**
+ * 蜗牛点击球半径（略大于视觉体长，便于准星命中）
+ * @param {number} length 世界体长
+ * @param {{ min?: number, factor?: number }} [opts]
+ * @returns {number}
+ */
+export function resolveSnailClickHitRadius(length, { min = 0.4, factor = 0.75 } = {}) {
+  const safeLength = Number.isFinite(length) ? Math.max(0, length) : 0
+  const safeMin = Number.isFinite(min) ? Math.max(0, min) : 0
+  const safeFactor = Number.isFinite(factor) ? Math.max(0, factor) : 0
+  return Math.max(safeMin, safeLength * safeFactor)
 }
 
 /**

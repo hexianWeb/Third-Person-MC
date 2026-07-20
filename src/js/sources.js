@@ -346,4 +346,11 @@ export default [
     type: 'texture',
     path: 'textures/background/midnight.png',
   },
+
+  // Object
+  {
+    name: 'snail_Texture',
+    type: 'texture',
+    path: 'textures/objects/snail.png',
+  },
 ]

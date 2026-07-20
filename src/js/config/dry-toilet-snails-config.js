@@ -21,7 +21,11 @@ export const DRY_TOILET_SNAILS_CONFIG = {
   platformSize: PLATFORM_SIZE,
   footprint: buildFootprint(CENTER, PLATFORM_SIZE),
   targetBaseSize: PLATFORM_SIZE,
-  clickDistance: 4,
+  // 准星射线交互距离（玩家到蜗牛）
+  clickDistance: 6,
+  // 不可见点击球半径 = max(min, length * factor)；略大于视觉体便于点中
+  clickHitRadiusMin: 0.4,
+  clickHitRadiusFactor: 0.75,
   crawlSpeed: 0.12,
   // 数量固定 10（见 getSnailSpawnPoints）
   snailLengthMin: 0.5,
@@ -35,4 +39,6 @@ export const DRY_TOILET_SNAILS_CONFIG = {
   emergeMs: 700,
   // snail.glb 未缩放本地长度
   snailRefLocalLength: 14,
+  // 手持蜗牛模型统一缩放（与世界体长解耦；约 0.12 ≈ 手中清晰可见）
+  heldSnailModelScale: 0.05,
 }

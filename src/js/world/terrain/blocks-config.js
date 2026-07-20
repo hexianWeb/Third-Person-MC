@@ -54,6 +54,8 @@ export const BLOCK_IDS = {
   // snowLayer (ID: 20) 暂不实现（纹理缺失）
   // 其他
   GRAVEL: 21,
+  // 非地形物品：蜷缩蜗牛（热键栏 / 手持）
+  SNAIL: 22,
 }
 
 // 植物 ID 常量（使用 200+ 区间与方块区分）
@@ -294,6 +296,18 @@ export const blocks = {
     visible: true,
     textureKeys: {
       all: 'gravel_Texture',
+    },
+  },
+  // ===== 蜗牛（仅物品，不可放置为方块）=====
+  snail: {
+    id: BLOCK_IDS.SNAIL,
+    name: 'snail',
+    visible: false,
+    placeable: false,
+    // 热键栏用平面物品图标，而非 CSS 3D 方块
+    hotbarDisplay: 'flat',
+    textureKeys: {
+      all: 'snail_Texture',
     },
   },
 }

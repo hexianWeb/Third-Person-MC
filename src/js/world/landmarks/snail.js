@@ -6,13 +6,53 @@ import Experience from '../../experience.js'
 import {
   createSnailFsm,
   isInSnailZone,
+  resolveSnailClickHitRadius,
   SNAIL_STATES,
+  snailFsmCanPickup,
   snailFsmOnClick,
   snailFsmUpdate,
 } from './dry-toilet-math.js'
 
 const FADE_SEC = 0.12
 const CLIP_NAMES = ['crawl', 'retract', 'emerge']
+
+/**
+ * 创建缩壳姿态的手持蜗牛视觉（共享几何，勿 dispose）
+ * @param {object} resources Experience.resources
+ * @returns {THREE.Object3D | null}
+ */
+export function createHeldSnailVisual(resources) {
+  const gltf = resources?.items?.[CFG.snailResourceName]
+  if (!gltf?.scene)
+    return null
+
+  const model = SkeletonUtils.clone(gltf.scene)
+  model.name = 'HeldSnail'
+  // 手持用固定缩放，不跟世界体长走
+  model.scale.setScalar(CFG.heldSnailModelScale)
+  model.position.set(0, 0.08, 0)
+  model.rotation.z = Math.PI * 0.15
+
+  const clip = (gltf.animations || []).find(a => String(a.name).toLowerCase() === 'retract')
+  if (clip) {
+    const mixer = new THREE.AnimationMixer(model)
+    const action = mixer.clipAction(clip)
+    action.setLoop(THREE.LoopOnce)
+    action.clampWhenFinished = true
+    action.play()
+    action.time = clip.duration
+    mixer.update(0)
+  }
+
+  model.traverse((obj) => {
+    if (!obj.isMesh)
+      return
+    obj.castShadow = true
+    obj.receiveShadow = false
+  })
+
+  return model
+}
 
 /**
  * 最短路径角度插值
@@ -74,14 +114,11 @@ export default class Snail {
     this.model.position.y = 0.5 * scale
     this.group.add(this.model)
 
-    this._clickMeshes = []
     this.model.traverse((obj) => {
       if (!obj.isMesh)
         return
       obj.castShadow = true
       obj.receiveShadow = true
-      obj.userData.snailRef = this
-      this._clickMeshes.push(obj)
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
       for (const material of materials) {
         if (!material?.map)
@@ -92,6 +129,10 @@ export default class Snail {
         material.map.needsUpdate = true
       }
     })
+
+    // 用放大不可见球做点击，避免 SkinnedMesh 过细 / 动画后几何不准
+    this._clickHitbox = this._createClickHitbox()
+    this._clickMeshes = [this._clickHitbox]
 
     this._initAnimation(animations)
     this._turnTimerSec = (x + z) * 0.17 % CFG.turnNoiseInterval
@@ -163,6 +204,28 @@ export default class Snail {
     this.currentAction = next
   }
 
+  /**
+   * 不可见点击球：挂在 group 上，随蜗牛移动，不跟骨骼变形
+   * @returns {THREE.Mesh}
+   */
+  _createClickHitbox() {
+    const radius = resolveSnailClickHitRadius(this.length, {
+      min: CFG.clickHitRadiusMin,
+      factor: CFG.clickHitRadiusFactor,
+    })
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 8, 6),
+      new THREE.MeshBasicMaterial({ visible: false }),
+    )
+    mesh.name = 'SnailClickHitbox'
+    // 球心略抬高，贴近壳/身体中心
+    mesh.position.y = radius * 0.55
+    mesh.visible = false
+    mesh.userData.snailRef = this
+    this.group.add(mesh)
+    return mesh
+  }
+
   _surfaceY(x, z) {
     return this.terrainProvider?.getTopSolidYWorld?.(x, z)
   }
@@ -197,11 +260,15 @@ export default class Snail {
   }
 
   startRetract() {
-    snailFsmOnClick(this.fsm)
+    return snailFsmOnClick(this.fsm)
   }
 
   isCrawling() {
     return this.fsm.state === SNAIL_STATES.CRAWLING
+  }
+
+  isRetracted() {
+    return snailFsmCanPickup(this.fsm)
   }
 
   /**
@@ -264,6 +331,11 @@ export default class Snail {
       delete mesh.userData.snailRef
     })
     this._clickMeshes.length = 0
+    if (this._clickHitbox) {
+      this._clickHitbox.geometry?.dispose()
+      this._clickHitbox.material?.dispose()
+      this._clickHitbox = null
+    }
     this.group.clear()
   }
 }
