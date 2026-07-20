@@ -357,4 +357,9 @@ export default [
     type: 'texture',
     path: 'textures/items/stick.png',
   },
+  {
+    name: 'pickaxe_Texture',
+    type: 'texture',
+    path: 'textures/blocks/pickaxe.png',
+  },
 ]
