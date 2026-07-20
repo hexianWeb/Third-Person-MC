@@ -327,7 +327,6 @@ export const useHudStore = defineStore('hud', () => {
     emitter.on('hud:update', updatePlayerInfo)
     emitter.on('hud:select-slot', selectSlot)
     emitter.on('hud:cycle-slot', cycleSlot)
-    emitter.on('hud:add-item', ({ blockId, amount }) => addItemToHotbar(blockId, amount))
 
     // Hotbar communication with Three.js interaction manager
     emitter.on('hud:request-selected-block', () => {
@@ -344,7 +343,6 @@ export const useHudStore = defineStore('hud', () => {
     emitter.off('hud:update', updatePlayerInfo)
     emitter.off('hud:select-slot', selectSlot)
     emitter.off('hud:cycle-slot', cycleSlot)
-    emitter.off('hud:add-item')
     emitter.off('hud:request-selected-block')
     emitter.off('hud:consume-selected-item')
   }

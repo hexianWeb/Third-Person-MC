@@ -1,5 +1,6 @@
 <script setup>
 import { useHudStore } from '@pinia/hudStore.js'
+import { useInventoryStore } from '@pinia/inventoryStore.js'
 import { useUiStore } from '@pinia/uiStore.js'
 import emitter from '@three/utils/event/event-bus.js'
 /**
@@ -21,6 +22,7 @@ import TopInfoBar from './TopInfoBar.vue'
 
 const ui = useUiStore()
 const hud = useHudStore()
+const inventory = useInventoryStore()
 
 function handleKeyDown(e) {
   // If user is typing in an input, ignore logic
@@ -49,6 +51,7 @@ function handleChatClosed() {
 // Setup event listeners on mount
 onMounted(() => {
   hud.setupListeners()
+  inventory.setupListeners()
   window.addEventListener('keydown', handleKeyDown)
   emitter.on('ui:chat-opened', handleChatOpened)
   emitter.on('ui:chat-closed', handleChatClosed)
@@ -56,6 +59,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   hud.cleanupListeners()
+  inventory.cleanupListeners()
   window.removeEventListener('keydown', handleKeyDown)
   emitter.off('ui:chat-opened', handleChatOpened)
   emitter.off('ui:chat-closed', handleChatClosed)
