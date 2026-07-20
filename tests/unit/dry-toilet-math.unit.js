@@ -12,6 +12,7 @@ import {
   isInSnailZone,
   isValidAabbSize,
   SNAIL_STATES,
+  snailFsmCanPickup,
   snailFsmOnClick,
   snailFsmUpdate,
 } from '../../src/js/world/landmarks/dry-toilet-math.js'
@@ -97,15 +98,17 @@ test('snail zone is toilet-adjacent 4-block ring; spawn points sit inside it', (
 test('snail fsm retracts once and ignores repeat clicks until crawling', () => {
   const fsm = createSnailFsm({ retractMs: 100, holdMs: 100, emergeMs: 100 })
   assert.equal(fsm.state, SNAIL_STATES.CRAWLING)
-  snailFsmOnClick(fsm)
+  assert.equal(snailFsmOnClick(fsm), true)
   assert.equal(fsm.state, SNAIL_STATES.RETRACTING)
   const t0 = fsm.timerMs
-  snailFsmOnClick(fsm)
+  assert.equal(snailFsmOnClick(fsm), false)
   assert.equal(fsm.timerMs, t0)
   snailFsmUpdate(fsm, 100)
   assert.equal(fsm.state, SNAIL_STATES.RETRACTED)
+  assert.equal(snailFsmCanPickup(fsm), true)
   snailFsmUpdate(fsm, 100)
   assert.equal(fsm.state, SNAIL_STATES.EMERGING)
+  assert.equal(snailFsmCanPickup(fsm), false)
   snailFsmUpdate(fsm, 100)
   assert.equal(fsm.state, SNAIL_STATES.CRAWLING)
 })

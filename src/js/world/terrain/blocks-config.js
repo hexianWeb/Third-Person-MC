@@ -312,6 +312,64 @@ export const blocks = {
   },
 }
 
+/**
+ * 按 blockId 查找方块配置
+ * @param {number | null | undefined} blockId
+ * @returns {typeof blocks[keyof typeof blocks] | null}
+ */
+export function getBlockConfigById(blockId) {
+  if (blockId == null || blockId === BLOCK_IDS.EMPTY)
+    return null
+  for (const key of Object.keys(blocks)) {
+    if (blocks[key].id === blockId)
+      return blocks[key]
+  }
+  return null
+}
+
+/**
+ * 热键栏是否以平面物品图标展示（占满一格，非 3D 方块）
+ * @param {number | null | undefined} blockId
+ * @returns {boolean}
+ */
+export function isFlatHotbarItem(blockId) {
+  const cfg = getBlockConfigById(blockId)
+  return cfg?.hotbarDisplay === 'flat'
+}
+
+/**
+ * 热键栏平面图标对应的 sources 纹理名
+ * @param {number | null | undefined} blockId
+ * @returns {string | null}
+ */
+export function getHotbarIconTextureKey(blockId) {
+  const cfg = getBlockConfigById(blockId)
+  if (!cfg)
+    return null
+  if (cfg.hotbarIconKey)
+    return cfg.hotbarIconKey
+  return cfg.textureKeys?.all
+    || cfg.textureKeys?.side
+    || cfg.textureKeys?.top
+    || null
+}
+
+/**
+ * 热键栏选中项是否可作为方块放置
+ * @param {number | null | undefined} blockId
+ * @returns {boolean}
+ */
+export function isPlaceableBlock(blockId) {
+  if (blockId == null || blockId === BLOCK_IDS.EMPTY)
+    return false
+  for (const key of Object.keys(blocks)) {
+    const cfg = blocks[key]
+    if (cfg.id === blockId)
+      return cfg.placeable !== false && cfg.visible !== false
+  }
+  return false
+}
+
 // 需要通过 3D 噪声生成的矿产列表
 export const resources = [
   blocks.stone,

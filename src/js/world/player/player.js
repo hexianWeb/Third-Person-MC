@@ -19,6 +19,8 @@ import {
   AnimationStates,
   timeScaleConfig,
 } from './animation-config.js'
+import { createHeldSnailVisual } from '../landmarks/snail.js'
+import { BLOCK_IDS } from '../terrain/blocks-config.js'
 import HeldItemAttachment from './held-item-attachment.js'
 import { resolveDirectionInput } from './input-resolver.js'
 import { PlayerAnimationController } from './player-animation-controller.js'
@@ -106,7 +108,7 @@ export default class Player {
 
     this.setModel()
     this._bodyLayers = bindCharacterBodyLayers(this.model)
-    // 手持物挂载（debug 占位），验证右前臂骨骼握持点
+    // 手持物挂载（debug 占位 / 蜗牛等）
     this.heldItemAttachment = new HeldItemAttachment()
     this.heldItemAttachment.attach(this.model)
     // 首帧隐藏，避免自定义皮肤装备时闪现 GLB 内嵌贴图
@@ -116,6 +118,11 @@ export default class Player {
     this.animation = new PlayerAnimationController(this.model, this.resource.animations)
 
     this.setupInputListeners()
+
+    // 热键栏选中蜗牛时显示手持模型
+    this._onSelectedBlockUpdate = this._onSelectedBlockUpdate.bind(this)
+    emitter.on('hud:selected-block-update', this._onSelectedBlockUpdate)
+    emitter.emit('hud:request-selected-block')
 
     // 监听皮肤变更事件（保留绑定引用以便 destroy 时 off）
     this._handleSkinChange = this._handleSkinChange.bind(this)
@@ -889,7 +896,25 @@ export default class Player {
     respawnFolder.addBinding(this.config.respawn.position, 'z', { label: '重生Z', min: -200, max: 200, step: 1 })
   }
 
+  /**
+   * 热键栏选中变化：蜗牛显示手持 GLB，其它清空自定义手持
+   * @param {{ blockId: number | null }} payload
+   */
+  _onSelectedBlockUpdate({ blockId }) {
+    if (!this.heldItemAttachment)
+      return
+
+    if (blockId === BLOCK_IDS.SNAIL) {
+      const visual = createHeldSnailVisual(this.resources)
+      this.heldItemAttachment.setHeldObject(visual)
+      return
+    }
+
+    this.heldItemAttachment.setHeldObject(null)
+  }
+
   destroy() {
+    emitter.off('hud:selected-block-update', this._onSelectedBlockUpdate)
     this.heldItemAttachment?.destroy()
     this.heldItemAttachment = null
 
@@ -901,3 +926,4 @@ export default class Player {
     this._activeSkinTexture = null
   }
 }
+

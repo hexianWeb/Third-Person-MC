@@ -2,7 +2,11 @@
 import { useHudStore } from '@pinia/hudStore.js'
 import sources from '@three/sources.js'
 import emitter from '@three/utils/event/event-bus.js'
-import { blocks as blocksConfig } from '@three/world/terrain/blocks-config.js'
+import {
+  getBlockConfigById,
+  getHotbarIconTextureKey,
+  isFlatHotbarItem,
+} from '@three/world/terrain/blocks-config.js'
 /**
  * Hotbar - Minecraft Style Hotbar (9 slots)
  * Displays CSS 3D block icons with count badges
@@ -26,18 +30,6 @@ const selectorLeft = computed(() => {
   const offset = -1 // Selector offset
   return `calc(${offset + hud.selectedSlot * slotWidth}px * var(--hud-scale))`
 })
-
-/**
- * Get block config by ID
- */
-function getBlockConfigById(blockId) {
-  for (const key of Object.keys(blocksConfig)) {
-    if (blocksConfig[key].id === blockId) {
-      return blocksConfig[key]
-    }
-  }
-  return null
-}
 
 /**
  * Get texture URL for a block face
@@ -71,6 +63,16 @@ function getBlockTopTexture(blockId) {
   if (!textureKey)
     return null
 
+  return texturePathMap[textureKey] || null
+}
+
+/**
+ * 平面物品图标 URL（占满热键栏格，非 3D 方块）
+ */
+function getFlatHotbarIconUrl(blockId) {
+  const textureKey = getHotbarIconTextureKey(blockId)
+  if (!textureKey)
+    return null
   return texturePathMap[textureKey] || null
 }
 
@@ -113,8 +115,15 @@ onUnmounted(() => {
         :key="index"
         class="hotbar-slot"
       >
+        <!-- 平面物品图标（如蜗牛） -->
+        <img
+          v-if="item && isFlatHotbarItem(item.blockId)"
+          :src="getFlatHotbarIconUrl(item.blockId)"
+          class="item-icon"
+          alt=""
+        >
         <!-- CSS 3D Block Icon -->
-        <div v-if="item" class="slot-block-3d">
+        <div v-else-if="item" class="slot-block-3d">
           <div
             class="block-face block-top"
             :style="{ backgroundImage: `url(${getBlockTopTexture(item.blockId)})` }"

@@ -1,5 +1,6 @@
 import Experience from '../experience.js'
 import emitter from '../utils/event/event-bus.js'
+import { isPlaceableBlock } from '../world/terrain/blocks-config.js'
 
 /**
  * BlockInteractionManager
@@ -70,6 +71,11 @@ export default class BlockInteractionManager {
       // No block selected in Hotbar, cannot place
       return
     }
+
+    // 蜗牛等非放置物品：右键不落方块
+    if (!isPlaceableBlock(this._selectedBlockId))
+      return
+
 
     // Calculate target position based on normal
     const nx = Math.round(face.normal.x)

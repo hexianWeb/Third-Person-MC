@@ -15,6 +15,8 @@ export default class HeldItemAttachment {
     this.bone = null
     this.socket = null
     this.mesh = null
+    /** @type {THREE.Object3D | null} 自定义手持物（如蜗牛），不 dispose 共享几何 */
+    this._customHeld = null
     this.debugFolder = null
     this.attachFailed = false
     this._loggedMissingBoneForModel = null
@@ -81,6 +83,40 @@ export default class HeldItemAttachment {
     this.params.enabled = Boolean(enabled)
     if (this.socket)
       this.socket.visible = this.params.enabled
+  }
+
+  /**
+   * 设置自定义手持物；传 null 清除并隐藏（占位块一并隐藏）
+   * @param {THREE.Object3D | null} object3D
+   */
+  setHeldObject(object3D) {
+    this._clearCustomHeld()
+
+    if (!object3D) {
+      if (this.mesh)
+        this.mesh.visible = true
+      this.setEnabled(false)
+      return
+    }
+
+    if (!this.socket) {
+      console.warn('[HeldItemAttachment] setHeldObject skipped: socket not ready')
+      return
+    }
+
+    if (this.mesh)
+      this.mesh.visible = false
+
+    this._customHeld = object3D
+    this.socket.add(object3D)
+    this.setEnabled(true)
+  }
+
+  _clearCustomHeld() {
+    if (!this._customHeld)
+      return
+    this._customHeld.removeFromParent()
+    this._customHeld = null
   }
 
   /**
@@ -182,6 +218,8 @@ export default class HeldItemAttachment {
    * @param {{ disposeResources: boolean }} options
    */
   _detachCurrentAttachment({ disposeResources }) {
+    this._clearCustomHeld()
+
     if (this.mesh)
       this.mesh.removeFromParent()
     if (this.socket)

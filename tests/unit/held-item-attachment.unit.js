@@ -48,6 +48,25 @@ test('setEnabled syncs params.enabled and socket.visible', (t) => {
   assert.equal(held.socket.visible, false)
 })
 
+test('setHeldObject shows custom mesh and clears back to hidden placeholder', (t) => {
+  const { model } = makeArmModel()
+  const held = new HeldItemAttachment()
+  t.after(() => held.destroy())
+  held.attach(model)
+
+  const custom = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1))
+  custom.name = 'CustomHeld'
+  held.setHeldObject(custom)
+  assert.equal(held.socket.visible, true)
+  assert.equal(held.mesh.visible, false)
+  assert.equal(custom.parent, held.socket)
+
+  held.setHeldObject(null)
+  assert.equal(held.socket.visible, false)
+  assert.equal(held.mesh.visible, true)
+  assert.equal(custom.parent, null)
+})
+
 test('attach same live model is a no-op (single socket)', (t) => {
   const { model, bone } = makeArmModel()
   const held = new HeldItemAttachment()
