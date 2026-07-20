@@ -60,6 +60,11 @@ export default [
     path: 'models/cesuo.glb',
   },
   {
+    name: 'snailModel',
+    type: 'gltfModel',
+    path: 'models/snail.glb',
+  },
+  {
     name: 'grass_block_top_texture',
     type: 'texture',
     path: 'textures/blocks/grass_block_top.png',

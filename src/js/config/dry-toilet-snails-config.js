@@ -13,33 +13,26 @@ function buildFootprint(center, size) {
 const CENTER = { x: 32, z: 32 }
 const PLATFORM_SIZE = 4
 
-/** 旱厕地标与蜗牛交互的稳定配置参数 */
+/** 旱厕地标与蜗牛交互配置（蜗牛模型：models/snail.glb） */
 export const DRY_TOILET_SNAILS_CONFIG = {
   resourceName: 'cesuoModel',
-  // 地标世界中心（方块格）
+  snailResourceName: 'snailModel',
   center: CENTER,
-  // 底座边长（方块数）与脚印
   platformSize: PLATFORM_SIZE,
   footprint: buildFootprint(CENTER, PLATFORM_SIZE),
-  // 模型最长底边缩放到该格数
   targetBaseSize: PLATFORM_SIZE,
-  // 蜗牛数量：确定性落在 [min, max]
-  snailCountMin: 3,
-  snailCountMax: 5,
-  // 蜗牛活动范围：底座外缘向外 2 格（不含底座本身）
-  activityMarginMax: 2,
-  clickDistance: 6,
-  snailLengthMin: 0.7,
-  snailLengthMax: 0.9,
-  snailMaxHeight: 0.45,
+  clickDistance: 4,
   crawlSpeed: 0.12,
-  turnNoiseInterval: 1.2,
-  turnNoiseRadians: 0.35,
-  maxStepHeight: 1,
-  rngSalt: 90421,
+  // 数量固定 10（见 getSnailSpawnPoints）
+  snailLengthMin: 0.5,
+  snailLengthMax: 1.0,
+  // 简易转向噪声（目标角 + lerp，规律可见可接受）
+  turnNoiseInterval: 1.5,
+  turnNoiseRadians: 0.5,
+  turnLerpSpeed: 4,
   retractMs: 700,
   holdMs: 1600,
   emergeMs: 700,
-  // 参考体素蜗牛未缩放本地长度（腹足+头部），用于映射到 snailLength*
+  // snail.glb 未缩放本地长度
   snailRefLocalLength: 14,
 }

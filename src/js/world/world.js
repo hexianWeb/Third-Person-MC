@@ -51,7 +51,7 @@ export default class World {
     })
   }
 
-  /** 旱厕地标 + 蜗牛（点击仲裁依赖注册顺序） */
+  /** 旱厕地标 + 蜗牛（蜗牛须先于挖矿注册 input:mouse_down） */
   _initLandmarks() {
     this.dryToiletLandmark = new DryToiletLandmark()
     this.snailManager = new SnailManager({ landmark: this.dryToiletLandmark })

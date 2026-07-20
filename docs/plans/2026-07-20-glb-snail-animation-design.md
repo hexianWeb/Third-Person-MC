@@ -25,12 +25,12 @@
 
 **产物：** `public/models/snail.glb`
 
-**造型**
+**造型（1:1 还原 `voxel-snail.js`）**
 
-- 部件：约 12 段腹足、头、左右触角、壳
-- 风格：方块体素；身体浅绿/深绿、壳棕色；导出后使用 Nearest 过滤
-- 轴向：局部 **+X 为头朝向**；底面贴 `y=0`
-- 未缩放本地长度对齐现 `snailRefLocalLength`（~14），运行时缩放到 0.7–0.9 格
+- 几何与层级严格按 `_buildFromReference` / `_createTentacle`：12 段腹足、头 14 格、触角各 4 格、壳椭球体素填充条件 `d <= 1.05`
+- 材质用代码中的基础色近似（body `#cbb38c` / bodyDark `#b99c75` / eye `#171717` / shell `#78431f` / shellDark `#5e341c`）；像素噪点贴图可不烘焙
+- 轴向：局部 **+X 为头朝向**（Three.js Y-up）；Blender 内用 `(x, -z, y)` 放置以保证 glTF 导出后与运行时一致
+- 立方体边长 1；体素中心与代码一致（底面在局部 y=-0.5）；`snailRefLocalLength` 仍为 14
 
 **建议骨架**
 

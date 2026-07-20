@@ -2,16 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { DRY_TOILET_SNAILS_CONFIG } from '../../src/js/config/dry-toilet-snails-config.js'
-import { RNG } from '../../src/js/tools/rng.js'
 import {
   buildPlatformPlan,
   computePlatformTargetY,
   computeToiletFitTransform,
   createSnailFsm,
-  distanceOutsideFootprint,
-  generateSnailSpawnPoints,
+  getSnailActivityColumns,
+  getSnailSpawnPoints,
+  isInSnailZone,
   isValidAabbSize,
-  resolveSnailCount,
   SNAIL_STATES,
   snailFsmOnClick,
   snailFsmUpdate,
@@ -63,34 +62,36 @@ test('platform plan fills, cuts, clears vegetation, and is idempotent', () => {
   assert.equal(again.ops.length, 0)
 })
 
-test('spawn points stay within footprint margin, avoid footprint, and are deterministic', () => {
-  const cfg = DRY_TOILET_SNAILS_CONFIG
-  const makePoints = () => {
-    const rng = new RNG(1337 + cfg.rngSalt)
-    const count = resolveSnailCount(rng, cfg)
-    return generateSnailSpawnPoints(rng, {
-      count,
-      footprint: cfg.footprint,
-      marginMax: cfg.activityMarginMax,
-      lengthMin: cfg.snailLengthMin,
-      lengthMax: cfg.snailLengthMax,
-    })
+test('snail zone is toilet-adjacent 4-block ring; spawn points sit inside it', () => {
+  assert.equal(DRY_TOILET_SNAILS_CONFIG.footprint.length, 16)
+  assert.equal(isInSnailZone(32, 32), false) // 厕所内
+  assert.equal(isInSnailZone(28.5, 32), true)
+  assert.equal(isInSnailZone(26.5, 32), true) // 外扩 4 格内
+  assert.equal(isInSnailZone(25.5, 32), false) // 超出
+  const points = getSnailSpawnPoints({ lengthMin: 0.5, lengthMax: 1.0 })
+  assert.equal(points.length, 10)
+  for (const p of points) {
+    assert.equal(isInSnailZone(p.x, p.z), true)
+    assert.ok(p.length >= 0.5 && p.length <= 1.0)
   }
-  const a = makePoints()
-  const b = makePoints()
-  assert.ok(a.length >= cfg.snailCountMin && a.length <= cfg.snailCountMax)
-  assert.deepEqual(a, b)
-  const footprintSet = new Set(cfg.footprint.map(p => `${p.x},${p.z}`))
-  assert.equal(cfg.footprint.length, cfg.platformSize * cfg.platformSize)
-  assert.equal(cfg.targetBaseSize, 4)
-  assert.equal(cfg.activityMarginMax, 2)
-  for (const p of a) {
-    const margin = distanceOutsideFootprint(p.x, p.z, cfg.footprint)
-    assert.ok(margin > 0)
-    assert.ok(margin <= cfg.activityMarginMax + 1e-6)
-    assert.equal(footprintSet.has(`${Math.floor(p.x)},${Math.floor(p.z)}`), false)
-    assert.ok(p.length >= cfg.snailLengthMin && p.length <= cfg.snailLengthMax)
+  // 等角离散：相邻点不应重叠
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    const dx = a.x - b.x
+    const dz = a.z - b.z
+    assert.ok(Math.hypot(dx, dz) > 1.5)
   }
+  assert.deepEqual(
+    getSnailSpawnPoints({ lengthMin: 0.5, lengthMax: 1.0 }),
+    points,
+  )
+
+  const cols = getSnailActivityColumns()
+  // 12×12 - 4×4
+  assert.equal(cols.length, 144 - 16)
+  for (const c of cols)
+    assert.equal(isInSnailZone(c.x + 0.5, c.z + 0.5), true)
 })
 
 test('snail fsm retracts once and ignores repeat clicks until crawling', () => {

@@ -5,6 +5,7 @@ import {
   buildPlatformPlan,
   computePlatformTargetY,
   computeToiletFitTransform,
+  getSnailActivityColumns,
   isValidAabbSize,
 } from './dry-toilet-math.js'
 
@@ -26,16 +27,21 @@ export default class DryToiletLandmark {
     return this.experience.terrainDataManager
   }
 
+  _columnReady(cm, x, z) {
+    const chunk = cm.getChunkAtWorld(x, z)
+    if (!chunk || chunk.state !== 'dataReady')
+      return false
+    return cm.getTopSolidYWorld(x, z) != null
+  }
+
   _columnsReady() {
     const cm = this._cm()
     if (!cm)
       return false
-    return CFG.footprint.every(({ x, z }) => {
-      const chunk = cm.getChunkAtWorld(x, z)
-      if (!chunk || chunk.state !== 'dataReady')
-        return false
-      return cm.getTopSolidYWorld(x, z) != null
-    })
+    // 底座 + 蜗牛活动环都必须就绪，才能平整清障
+    if (!CFG.footprint.every(({ x, z }) => this._columnReady(cm, x, z)))
+      return false
+    return getSnailActivityColumns().every(({ x, z }) => this._columnReady(cm, x, z))
   }
 
   _readColumns() {
@@ -77,8 +83,41 @@ export default class DryToiletLandmark {
         cm.addBlockWorld(op.x, op.y, op.z, op.blockId)
     }
     cm.clearPlantsInWorldColumns(plan.clearPlantColumns)
+    // 蜗牛活动环：削高填平到同 targetY，并清掉上方全部方块
+    this._flattenSnailActivityArea(targetY, originCol.surfaceBlockId)
     // 方块中心在整数 Y，顶面为 y + 0.5
     this._platformTopY = targetY + 0.5
+  }
+
+  /**
+   * 清空厕所外围蜗牛活动带障碍，并垫平地表
+   * @param {number} targetY
+   * @param {number} fillBlockId
+   */
+  _flattenSnailActivityArea(targetY, fillBlockId) {
+    const cm = this._cm()
+    const columns = getSnailActivityColumns()
+
+    for (const { x, z } of columns) {
+      const surfaceY = cm.getTopSolidYWorld(x, z)
+      if (surfaceY == null)
+        continue
+
+      // 目标面以上全部移除（树/叶/植物/突出地形）
+      for (let y = targetY + 1; y < cm.chunkHeight; y++) {
+        const block = cm.getBlockWorld(x, y, z)
+        if (block?.id)
+          cm.removeBlockWorld(x, y, z)
+      }
+
+      // 地表低于平台：填平
+      if (surfaceY < targetY) {
+        for (let y = surfaceY + 1; y <= targetY; y++)
+          cm.addBlockWorld(x, y, z, fillBlockId)
+      }
+    }
+
+    cm.clearPlantsInWorldColumns(columns)
   }
 
   _placeModel() {
