@@ -21,7 +21,7 @@ test('starts with a complete fixed 3x3 render window', async ({ page }) => {
   expect(diagnostics.totalSlots).toBe(14)
   expect(diagnostics.activeSlots).toBe(9)
   expect(diagnostics.freeSlots).toBe(5)
-  expect(diagnostics.estimatedBufferBytes).toBe(63594496)
+  expect(diagnostics.estimatedBufferBytes).toBe(65544192)
 })
 
 test('rebuilds the active render window from data-only chunks', async ({ page }) => {

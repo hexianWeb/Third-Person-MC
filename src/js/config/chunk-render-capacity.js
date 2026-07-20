@@ -23,10 +23,14 @@ export const BLOCK_INSTANCE_CAPACITY = Object.freeze({
   packedIce: 4096,
   snow: 4096,
   gravel: 4096,
+  // 合成系统：玩家放置方块（容量按树干量级）
+  oakPlanks: 1024,
+  craftingTable: 1024,
 })
 
 export const PLANT_INSTANCE_CAPACITY = 512
-export const FIXED_INSTANCE_BUFFER_BYTES = 63594496
+// 14 slots × (Σ blockCap × 68B + plantCap × 64B)；较基线 +2×1024 方块容量
+export const FIXED_INSTANCE_BUFFER_BYTES = 65544192
 
 /**
  * 检查区块视距是否符合固定渲染策略。

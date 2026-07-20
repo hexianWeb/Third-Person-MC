@@ -102,10 +102,12 @@ function onMouseDown(e) {
 }
 
 .inv-block-3d {
-  width: 32px;
-  height: 32px;
+  /* 与 Hotbar CSS3D 同构：正方形面 + 半宽 translateZ，避免 scale 造成竖向拉伸 */
+  --inv-block-size: 16px;
+  width: var(--inv-block-size);
+  height: var(--inv-block-size);
   transform-style: preserve-3d;
-  transform: rotateX(-30deg) rotateY(45deg) scale(0.55);
+  transform: rotateX(-30deg) rotateY(45deg);
   position: relative;
   pointer-events: none;
 }
@@ -121,15 +123,15 @@ function onMouseDown(e) {
 }
 
 .inv-block-top {
-  transform: rotateX(90deg) translateZ(16px);
+  transform: rotateX(90deg) translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-block-front {
-  transform: translateZ(16px);
+  transform: translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-block-right {
-  transform: rotateY(-90deg) translateZ(16px);
+  transform: rotateY(-90deg) translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-item-img {

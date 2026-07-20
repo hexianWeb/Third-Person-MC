@@ -75,10 +75,11 @@ onUnmounted(() => {
 }
 
 .inv-block-3d {
-  width: 32px;
-  height: 32px;
+  --inv-block-size: 16px;
+  width: var(--inv-block-size);
+  height: var(--inv-block-size);
   transform-style: preserve-3d;
-  transform: rotateX(-30deg) rotateY(45deg) scale(0.55);
+  transform: rotateX(-30deg) rotateY(45deg);
   position: relative;
 }
 
@@ -93,15 +94,15 @@ onUnmounted(() => {
 }
 
 .inv-block-top {
-  transform: rotateX(90deg) translateZ(16px);
+  transform: rotateX(90deg) translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-block-front {
-  transform: translateZ(16px);
+  transform: translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-block-right {
-  transform: rotateY(-90deg) translateZ(16px);
+  transform: rotateY(-90deg) translateZ(calc(var(--inv-block-size) / 2));
 }
 
 .inv-item-img {
