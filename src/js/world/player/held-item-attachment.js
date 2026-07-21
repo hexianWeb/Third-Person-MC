@@ -5,12 +5,10 @@ import { isHeldTool, ITEM_BY_ID } from '../../config/items-config.js'
 export const BONE_NAME = 'ArmRightLower'
 export const SOCKET_NAME = 'HeldItemSocket'
 export const MESH_NAME = 'PlaceholderHandle'
-/** tool.glb 网格约 0.2 单位，相对角色需放大；可在 Debug 面板再调 */
-export const DEFAULT_HELD_TOOL_SCALE = 10
 
 /**
  * 运行时手持物挂载：bone → socket → 工具网格
- * tool.glb 原点已在握把；缩放由 socket.scale 统一应用
+ * tool.glb 原点已在握把；缩放由 socket.scale 统一应用（资产侧已 Apply Scale）
  */
 export default class HeldItemAttachment {
   constructor() {
@@ -27,12 +25,12 @@ export default class HeldItemAttachment {
     this._activeToolName = null
     this._placeholder = null
 
-    // 工具资产原点在握把：位移/旋转默认 0，缩放用默认放大
+    // 工具资产原点在握把：默认零偏移、单位缩放
     this.params = {
       enabled: false,
       position: { x: 0, y: 0, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
-      scale: DEFAULT_HELD_TOOL_SCALE,
+      scale: 1,
     }
   }
 
@@ -240,6 +238,8 @@ export default class HeldItemAttachment {
       this.socket.add(tool)
     if (this._placeholder)
       this._placeholder.visible = false
+    // 每次挂上工具都重刷 socket 缩放（避免仅改过 params 未生效）
+    this._applyParamsToSocket()
   }
 
   _hideActiveTool() {
