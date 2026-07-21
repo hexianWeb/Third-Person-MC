@@ -149,7 +149,88 @@ export const recipes = {
       [null, 'stick', null],
       [null, 'stick', null],
     ],
-    result: { id: 301, count: 1 }, // 见 items-config.js WOODEN_PICKAXE
+    result: { id: 301, count: 1 },
+    minGrid: 3,
+  },
+  woodenAxe: {
+    pattern: [
+      ['oak_planks', 'oak_planks'],
+      ['oak_planks', 'stick'],
+      [null, 'stick'],
+    ],
+    result: { id: 302, count: 1 },
+    minGrid: 3,
+  },
+  woodenShovel: {
+    pattern: [
+      ['oak_planks'],
+      ['stick'],
+      ['stick'],
+    ],
+    result: { id: 303, count: 1 },
+    minGrid: 3,
+  },
+  woodenSword: {
+    pattern: [
+      ['oak_planks'],
+      ['oak_planks'],
+      ['stick'],
+    ],
+    result: { id: 304, count: 1 },
+    minGrid: 3,
+  },
+  woodenHoe: {
+    pattern: [
+      ['oak_planks', 'oak_planks'],
+      [null, 'stick'],
+      [null, 'stick'],
+    ],
+    result: { id: 305, count: 1 },
+    minGrid: 3,
+  },
+  stonePickaxe: {
+    pattern: [
+      ['stone', 'stone', 'stone'],
+      [null, 'stick', null],
+      [null, 'stick', null],
+    ],
+    result: { id: 306, count: 1 },
+    minGrid: 3,
+  },
+  stoneAxe: {
+    pattern: [
+      ['stone', 'stone'],
+      ['stone', 'stick'],
+      [null, 'stick'],
+    ],
+    result: { id: 307, count: 1 },
+    minGrid: 3,
+  },
+  stoneShovel: {
+    pattern: [
+      ['stone'],
+      ['stick'],
+      ['stick'],
+    ],
+    result: { id: 308, count: 1 },
+    minGrid: 3,
+  },
+  stoneSword: {
+    pattern: [
+      ['stone'],
+      ['stone'],
+      ['stick'],
+    ],
+    result: { id: 309, count: 1 },
+    minGrid: 3,
+  },
+  stoneHoe: {
+    pattern: [
+      ['stone', 'stone'],
+      [null, 'stick'],
+      [null, 'stick'],
+    ],
+    result: { id: 310, count: 1 },
     minGrid: 3,
   },
 }

@@ -196,6 +196,15 @@
     "oak_planks": "橡木木板",
     "stick": "木棍",
     "crafting_table": "工作台",
-    "wooden_pickaxe": "木镐"
+    "wooden_pickaxe": "木镐",
+    "wooden_axe": "木斧",
+    "wooden_shovel": "木铲",
+    "wooden_sword": "木剑",
+    "wooden_hoe": "木锄",
+    "stone_pickaxe": "石镐",
+    "stone_axe": "石斧",
+    "stone_shovel": "石铲",
+    "stone_sword": "石剑",
+    "stone_hoe": "石锄"
   }
 }

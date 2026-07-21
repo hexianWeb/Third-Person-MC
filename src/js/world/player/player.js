@@ -106,9 +106,16 @@ export default class Player {
 
     this.setModel()
     this._bodyLayers = bindCharacterBodyLayers(this.model)
-    // 手持物挂载（debug 占位），验证右前臂骨骼握持点
+    // 手持物挂载：tool.glb（握把原点）+ 快捷栏选中同步
     this.heldItemAttachment = new HeldItemAttachment()
     this.heldItemAttachment.attach(this.model)
+    const toolGltf = this.resources.items.toolModel
+    if (toolGltf)
+      this.heldItemAttachment.loadToolKit(toolGltf)
+
+    this._onSelectedBlockUpdate = this._onSelectedBlockUpdate.bind(this)
+    emitter.on('hud:selected-block-update', this._onSelectedBlockUpdate)
+    emitter.emit('hud:request-selected-block')
     // 首帧隐藏，避免自定义皮肤装备时闪现 GLB 内嵌贴图
     this.model.visible = false
 
@@ -137,6 +144,14 @@ export default class Player {
       })
       this.debugInit()
     }
+  }
+
+  /**
+   * 快捷栏选中变化 → 切换手持工具模型
+   * @param {{ blockId: number | null }} payload
+   */
+  _onSelectedBlockUpdate({ blockId }) {
+    this.heldItemAttachment?.setHeldItemId(blockId)
   }
 
   /**
@@ -892,6 +907,8 @@ export default class Player {
   destroy() {
     this.heldItemAttachment?.destroy()
     this.heldItemAttachment = null
+
+    emitter.off('hud:selected-block-update', this._onSelectedBlockUpdate)
 
     // 先使在途 _applySkinById 失效，避免 dispose 后异步回调再次贴图
     this._skinRequestId++

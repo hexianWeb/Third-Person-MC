@@ -357,9 +357,21 @@ export default [
     type: 'texture',
     path: 'textures/items/stick.png',
   },
+  // ===== 木/石工具图标 =====
+  { name: 'woodenPickaxe_Texture', type: 'texture', path: 'textures/items/wooden_pickaxe.png' },
+  { name: 'woodenAxe_Texture', type: 'texture', path: 'textures/items/wooden_axe.png' },
+  { name: 'woodenShovel_Texture', type: 'texture', path: 'textures/items/wooden_shovel.png' },
+  { name: 'woodenSword_Texture', type: 'texture', path: 'textures/items/wooden_sword.png' },
+  { name: 'woodenHoe_Texture', type: 'texture', path: 'textures/items/wooden_hoe.png' },
+  { name: 'stonePickaxe_Texture', type: 'texture', path: 'textures/items/stone_pickaxe.png' },
+  { name: 'stoneAxe_Texture', type: 'texture', path: 'textures/items/stone_axe.png' },
+  { name: 'stoneShovel_Texture', type: 'texture', path: 'textures/items/stone_shovel.png' },
+  { name: 'stoneSword_Texture', type: 'texture', path: 'textures/items/stone_sword.png' },
+  { name: 'stoneHoe_Texture', type: 'texture', path: 'textures/items/stone_hoe.png' },
+  // ===== 手持工具套件（木/石，原点在握把）=====
   {
-    name: 'pickaxe_Texture',
-    type: 'texture',
-    path: 'textures/blocks/pickaxe.png',
+    name: 'toolModel',
+    type: 'gltfModel',
+    path: 'models/tool/tool.glb',
   },
 ]

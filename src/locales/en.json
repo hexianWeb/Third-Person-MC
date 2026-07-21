@@ -196,6 +196,15 @@
     "oak_planks": "Oak Planks",
     "stick": "Stick",
     "crafting_table": "Crafting Table",
-    "wooden_pickaxe": "Wooden Pickaxe"
+    "wooden_pickaxe": "Wooden Pickaxe",
+    "wooden_axe": "Wooden Axe",
+    "wooden_shovel": "Wooden Shovel",
+    "wooden_sword": "Wooden Sword",
+    "wooden_hoe": "Wooden Hoe",
+    "stone_pickaxe": "Stone Pickaxe",
+    "stone_axe": "Stone Axe",
+    "stone_shovel": "Stone Shovel",
+    "stone_sword": "Stone Sword",
+    "stone_hoe": "Stone Hoe"
   }
 }
