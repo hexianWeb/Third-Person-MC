@@ -25,11 +25,11 @@ export default class HeldItemAttachment {
     this._activeToolName = null
     this._placeholder = null
 
-    // 工具资产原点在握把：默认零偏移、单位缩放
+    // 握持位姿：Y 抬到手掌附近，绕 X -π/2 对齐手柄轴向
     this.params = {
       enabled: false,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
+      position: { x: 0, y: 0.3, z: 0 },
+      rotation: { x: -1.57, y: 0, z: 0 },
       scale: 1,
     }
   }
