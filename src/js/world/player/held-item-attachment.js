@@ -205,8 +205,8 @@ export default class HeldItemAttachment {
     this.debugFolder.addBinding(this.params, 'scale', {
       label: '缩放',
       min: 0.01,
-      max: 50,
-      step: 0.1,
+      max: 5,
+      step: 0.01,
     }).on('change', () => this._applyParamsToSocket())
   }
 
