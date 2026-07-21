@@ -86,6 +86,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     rem = stackSameSlots(mainSlots.value, blockId, rem)
     rem = fillEmptySlots(hud.hotbarItems, blockId, rem)
     rem = fillEmptySlots(mainSlots.value, blockId, rem)
+    hud.syncSelectedBlock()
     return rem === 0
   }
 
@@ -311,6 +312,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     if (section === 'result2' || section === 'result3') {
       if (button === 0)
         craftFromResult(section, !!shift)
+      useHudStore().syncSelectedBlock()
       return
     }
 
@@ -320,6 +322,7 @@ export const useInventoryStore = defineStore('inventory', () => {
 
     if (shift && button === 0) {
       shiftMove(section, index)
+      useHudStore().syncSelectedBlock()
       return
     }
 
@@ -327,6 +330,9 @@ export const useInventoryStore = defineStore('inventory', () => {
       leftClickSlot(slots, index)
     else if (button === 2)
       rightClickSlot(slots, index)
+
+    // 快捷栏内容可能已变但选中下标未变 → 仍需刷新手持物
+    useHudStore().syncSelectedBlock()
   }
 
   /**

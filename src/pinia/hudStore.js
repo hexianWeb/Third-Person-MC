@@ -1,3 +1,4 @@
+import { ITEM_IDS } from '@three/config/items-config.js'
 /**
  * HUD Store - Minecraft Style HUD State Management
  * Manages health, hunger, experience, hotbar, position, and chat messages
@@ -36,9 +37,13 @@ export const useHudStore = defineStore('hud', () => {
 
   /**
    * Hotbar items (9 slots)
+   * 默认第 1 格：木斧（便于验证手持与图标）
    * Each slot: { blockId: number, count: number } | null
    */
-  const hotbarItems = ref(Array.from({ length: 9 }, () => null))
+  const hotbarItems = ref([
+    { blockId: ITEM_IDS.WOODEN_AXE, count: 1 },
+    ...Array.from({ length: 8 }, () => null),
+  ])
 
   // ========================================
   // Player Position & Facing
@@ -202,8 +207,7 @@ export const useHudStore = defineStore('hud', () => {
   function selectSlot(slot) {
     if (slot >= 0 && slot <= 8) {
       selectedSlot.value = slot
-      // Notify Three.js interaction manager of the new selected block
-      emitter.emit('hud:selected-block-update', { blockId: getSelectedBlockId() })
+      syncSelectedBlock()
     }
   }
 
@@ -213,7 +217,14 @@ export const useHudStore = defineStore('hud', () => {
    */
   function cycleSlot(delta) {
     selectedSlot.value = (selectedSlot.value + delta + 9) % 9
-    // Notify Three.js interaction manager of the new selected block
+    syncSelectedBlock()
+  }
+
+  /**
+   * 通知 3D 层当前选中物品（手持模型 / 放置方块）
+   * 槽位内容变化但 selectedSlot 未变时也必须调用
+   */
+  function syncSelectedBlock() {
     emitter.emit('hud:selected-block-update', { blockId: getSelectedBlockId() })
   }
 
@@ -230,8 +241,10 @@ export const useHudStore = defineStore('hud', () => {
         const canAdd = Math.min(amount, MAX_STACK - slot.count)
         slot.count += canAdd
         amount -= canAdd
-        if (amount <= 0)
+        if (amount <= 0) {
+          syncSelectedBlock()
           return true
+        }
       }
     }
     // 2. Find empty slots for remaining
@@ -240,11 +253,14 @@ export const useHudStore = defineStore('hud', () => {
         const added = Math.min(amount, MAX_STACK)
         hotbarItems.value[i] = { blockId, count: added }
         amount -= added
-        if (amount <= 0)
+        if (amount <= 0) {
+          syncSelectedBlock()
           return true
+        }
       }
     }
     // 3. Hotbar full
+    syncSelectedBlock()
     return false
   }
 
@@ -260,6 +276,7 @@ export const useHudStore = defineStore('hud', () => {
     if (item.count <= 0) {
       hotbarItems.value[selectedSlot.value] = null
     }
+    syncSelectedBlock()
     return true
   }
 
@@ -330,12 +347,10 @@ export const useHudStore = defineStore('hud', () => {
 
     // Hotbar communication with Three.js interaction manager
     emitter.on('hud:request-selected-block', () => {
-      emitter.emit('hud:selected-block-update', { blockId: getSelectedBlockId() })
+      syncSelectedBlock()
     })
     emitter.on('hud:consume-selected-item', () => {
       consumeSelectedItem()
-      // Notify interaction manager of the updated selected block
-      emitter.emit('hud:selected-block-update', { blockId: getSelectedBlockId() })
     })
   }
 
@@ -396,6 +411,7 @@ export const useHudStore = defineStore('hud', () => {
     addItemToHotbar,
     consumeSelectedItem,
     getSelectedBlockId,
+    syncSelectedBlock,
     takeDamage,
     heal,
     setHealth,

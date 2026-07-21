@@ -58,10 +58,12 @@ export default class HeldItemAttachment {
       const clone = src.clone(true)
       clone.name = name
       clone.visible = false
+      clone.frustumCulled = false
       clone.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true
           child.receiveShadow = false
+          child.frustumCulled = false
         }
       })
       this._toolMeshes.set(name, clone)
@@ -70,6 +72,10 @@ export default class HeldItemAttachment {
     // 有真实工具后隐藏占位条
     if (this._placeholder)
       this._placeholder.visible = false
+
+    // 工具库就绪后，若已有选中工具则重新挂上
+    if (this._activeToolName)
+      this._showTool(this._activeToolName)
   }
 
   /**

@@ -52,6 +52,8 @@ function handleChatClosed() {
 onMounted(() => {
   hud.setupListeners()
   inventory.setupListeners()
+  // Player 可能早于 HUD 就绪已请求过选中物，挂载后再推一次
+  hud.syncSelectedBlock()
   window.addEventListener('keydown', handleKeyDown)
   emitter.on('ui:chat-opened', handleChatOpened)
   emitter.on('ui:chat-closed', handleChatClosed)
