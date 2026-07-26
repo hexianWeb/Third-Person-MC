@@ -16,8 +16,7 @@ export default class AchievementController {
     emitter.once('game:create_world', () => this.store.unlock('first_world'))
     emitter.once('game:reset_world', () => this.store.unlock('first_world'))
     emitter.once('input:jump', () => this.store.unlock('first_jump'))
-    emitter.once('input:punch_straight', () => this.store.unlock('first_punch'))
-    emitter.once('input:punch_hook', () => this.store.unlock('first_punch'))
+    emitter.once('input:air_swing', () => this.store.unlock('first_punch'))
     emitter.once('input:telescope', () => this.store.unlock('first_zoom'))
     emitter.once('input:rear_view', (isPressed) => {
       if (isPressed)
@@ -32,7 +31,7 @@ export default class AchievementController {
 
     // Listen for sprint/run in input update and unbind once achieved
     const onInputUpdate = (keys) => {
-      if (keys.shift && (keys.forward || keys.backward || keys.left || keys.right)) {
+      if (keys.sprint && (keys.forward || keys.backward || keys.left || keys.right)) {
         this.store.unlock('first_run')
         emitter.off('input:update', onInputUpdate)
       }
@@ -60,8 +59,7 @@ export default class AchievementController {
         this.store.unlock('rage_quit')
       }
     }
-    emitter.on('input:punch_straight', onPunch)
-    emitter.on('input:punch_hook', onPunch)
+    emitter.on('input:air_swing', onPunch)
 
     const resetPunch = () => {
       this.punchCount = 0

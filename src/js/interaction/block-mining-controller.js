@@ -47,10 +47,14 @@ export default class BlockMiningController {
       return
 
     const raycaster = this.experience.world?.blockRaycaster
-    if (!raycaster || !raycaster.current)
+    if (!raycaster)
       return
 
-    // Start mining
+    if (!raycaster.current) {
+      emitter.emit('input:air_swing')
+      return
+    }
+
     this.isMining = true
     this.miningStartTime = this.time.elapsed
     this.miningProgress = 0
