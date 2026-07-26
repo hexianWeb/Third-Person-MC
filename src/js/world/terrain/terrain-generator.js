@@ -18,6 +18,7 @@ import {
   getCategoricalBiomeBlocks,
 } from './terrain-biome-field.js'
 import TerrainContainer from './terrain-container.js'
+import { placeTree } from './tree-shape.js'
 
 export default class TerrainGenerator {
   constructor(options = {}) {
@@ -418,60 +419,27 @@ export default class TerrainGenerator {
    * @param {object} stats - 统计对象（会被修改）
    */
   _generateVegetation(x, baseY, z, vegetationType, rng, stats) {
-    const { heightRange, canopyRadius, trunkBlock, leavesBlock } = vegetationType
-    const { height } = this.container.getSize()
+    const { heightRange, trunkBlock, leavesBlock } = vegetationType
+    const shape = vegetationType.shape
+      ?? (leavesBlock ? 'oak' : 'none')
+    const { width, height } = this.container.getSize()
 
-    // 树干高度
-    const trunkHeight = Math.round(
-      rng.random() * (heightRange[1] - heightRange[0]) + heightRange[0],
-    )
-    const topY = baseY + trunkHeight
+    const placed = placeTree(shape, {
+      setBlockId: (px, py, pz, id) => this.container.setBlockId(px, py, pz, id),
+      getBlockId: (px, py, pz) => this.container.getBlock(px, py, pz).id,
+      emptyId: blocks.empty.id,
+      x,
+      baseY,
+      z,
+      trunkBlock,
+      leavesBlock,
+      heightRange,
+      rng,
+      bounds: { width, height },
+    })
 
-    // 填充树干
-    for (let y = baseY; y < topY; y++) {
-      if (y >= height)
-        break
-      this.container.setBlockId(x, y, z, trunkBlock)
-      stats.treeTrunkBlocks++
-    }
-
-    // 生成树叶（如果有）
-    if (leavesBlock && canopyRadius && canopyRadius[1] > 0) {
-      const R = Math.round(
-        rng.random() * (canopyRadius[1] - canopyRadius[0]) + canopyRadius[0],
-      )
-      const R2 = R * R
-      const { width } = this.container.getSize()
-      const canopyDensity = this.params.trees?.canopyDensity ?? 0.5
-
-      // 球形树冠生成逻辑
-      for (let dx = -R; dx <= R; dx++) {
-        for (let dy = -R; dy <= R; dy++) {
-          for (let dz = -R; dz <= R; dz++) {
-            if (dx * dx + dy * dy + dz * dz > R2)
-              continue
-
-            const px = x + dx
-            const py = topY + dy
-            const pz = z + dz
-
-            // 边界检查
-            if (px < 0 || px >= width || pz < 0 || pz >= width || py < baseY + trunkHeight - 2 || py >= height)
-              continue
-
-            // 不覆盖非空方块
-            if (this.container.getBlock(px, py, pz).id !== blocks.empty.id)
-              continue
-
-            // 根据稀疏度决定是否生成树叶
-            if (rng.random() > canopyDensity) {
-              this.container.setBlockId(px, py, pz, leavesBlock)
-              stats.treeLeavesBlocks++
-            }
-          }
-        }
-      }
-    }
+    stats.treeTrunkBlocks += placed.trunkBlocks
+    stats.treeLeavesBlocks += placed.leavesBlocks
   }
 
   /**
@@ -784,11 +752,11 @@ export default class TerrainGenerator {
     }).on('change', () => this.generate())
 
     treeFolder.addBinding(this.params.trees, 'canopyDensity', {
-      label: '树冠稀疏度',
+      label: '树冠稀疏度(已弃用)',
       min: 0,
       max: 1,
       step: 0.01,
-    }).on('change', () => this.generate())
+    })
 
     // 群系调试面板
     const biomeFolder = this.debugFolder.addFolder({

@@ -39,11 +39,11 @@ export const BIOMES = {
       types: [
         {
           type: 'oak', // 植被类型标识
+          shape: 'oak',
           weight: 1, // 权重（用于随机选择）
           trunkBlock: BLOCK_IDS.TREE_TRUNK,
           leavesBlock: BLOCK_IDS.TREE_LEAVES,
-          heightRange: [4, 6], // 高度范围
-          canopyRadius: [3, 4], // 树冠大
+          heightRange: [5, 7], // 至少两格树干露在树冠下
         },
       ],
       allowedSurface: [BLOCK_IDS.GRASS], // 允许生成的地表方块类型
@@ -84,11 +84,11 @@ export const BIOMES = {
       types: [
         {
           type: 'oak',
+          shape: 'oak',
           weight: 1,
           trunkBlock: BLOCK_IDS.TREE_TRUNK,
           leavesBlock: BLOCK_IDS.TREE_LEAVES,
-          heightRange: [4, 6],
-          canopyRadius: [3, 4], // 树冠大
+          heightRange: [5, 7],
         },
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
@@ -131,11 +131,11 @@ export const BIOMES = {
       types: [
         {
           type: 'birch',
+          shape: 'birch',
           weight: 1,
           trunkBlock: BLOCK_IDS.BIRCH_TRUNK,
           leavesBlock: BLOCK_IDS.BIRCH_LEAVES,
           heightRange: [7, 9], // 白桦树通常更高
-          canopyRadius: [4, 6],
         },
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
@@ -176,11 +176,11 @@ export const BIOMES = {
       types: [
         {
           type: 'cherry',
+          shape: 'cherry',
           weight: 1,
           trunkBlock: BLOCK_IDS.CHERRY_TRUNK,
           leavesBlock: BLOCK_IDS.CHERRY_LEAVES,
-          heightRange: [4, 6],
-          canopyRadius: [4, 6],
+          heightRange: [5, 7],
         },
       ],
       allowedSurface: [BLOCK_IDS.GRASS],
@@ -221,11 +221,11 @@ export const BIOMES = {
       types: [
         {
           type: 'cactus',
+          shape: 'none',
           weight: 1,
           trunkBlock: BLOCK_IDS.CACTUS,
           leavesBlock: null, // 仙人掌无树叶
           heightRange: [1, 3], // 高度较小
-          canopyRadius: [0, 0], // 无树冠
         },
       ],
       allowedSurface: [BLOCK_IDS.SAND],
