@@ -1,0 +1,12 @@
+---
+description: Apply the Linear workflow when a request mentions Linear or an HX-{number} issue.
+globs: 
+alwaysApply: false
+---
+
+Use this rule only when the request mentions Linear or an `HX-{number}` identifier.
+
+- Treat `HX-{number}` as the corresponding Linear issue identifier.
+- Before creating, updating, or commenting on an issue, inspect the referenced issue and any explicitly named project documents.
+- Keep issue titles, descriptions, status, assignee, priority, labels, comments, and sub-issues aligned with the user’s explicit request; do not infer external changes.
+- When committing work for a referenced issue, use the repository’s Conventional Commit format and include the issue identifier only when the user asks for that association.
