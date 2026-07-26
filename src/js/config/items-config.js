@@ -3,6 +3,11 @@
  * heldMesh：tool.glb 内节点名（镐子资产名为 *_manuscript）
  */
 
+export const ATTACK_STYLES = Object.freeze({
+  UNARMED: 'unarmed',
+  MELEE: 'melee',
+})
+
 export const ITEM_IDS = {
   STICK: 300,
   WOODEN_PICKAXE: 301,
@@ -39,6 +44,7 @@ export const items = {
     name: 'wooden_axe',
     icon: 'woodenAxe_Texture',
     heldMesh: 'wood_axe',
+    attackStyle: ATTACK_STYLES.MELEE,
   },
   woodenShovel: {
     id: ITEM_IDS.WOODEN_SHOVEL,
@@ -51,6 +57,7 @@ export const items = {
     name: 'wooden_sword',
     icon: 'woodenSword_Texture',
     heldMesh: 'wood_sword',
+    attackStyle: ATTACK_STYLES.MELEE,
   },
   woodenHoe: {
     id: ITEM_IDS.WOODEN_HOE,
@@ -69,6 +76,7 @@ export const items = {
     name: 'stone_axe',
     icon: 'stoneAxe_Texture',
     heldMesh: 'stone_axe',
+    attackStyle: ATTACK_STYLES.MELEE,
   },
   stoneShovel: {
     id: ITEM_IDS.STONE_SHOVEL,
@@ -81,6 +89,7 @@ export const items = {
     name: 'stone_sword',
     icon: 'stoneSword_Texture',
     heldMesh: 'stone_sword',
+    attackStyle: ATTACK_STYLES.MELEE,
   },
   stoneHoe: {
     id: ITEM_IDS.STONE_HOE,

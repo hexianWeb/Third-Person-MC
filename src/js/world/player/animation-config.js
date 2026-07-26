@@ -40,6 +40,10 @@ export const AnimationClips = Object.freeze({
   RIGHT_STRAIGHT_PUNCH: 'right_straight_punch',
   RIGHT_HOOK_PUNCH: 'right_hook_punch',
   RIGHT_BLOCK: 'right_block',
+  MELEE_HORIZONTAL: 'melee_horizontal',
+  MELEE_DOWNWARD: 'melee_downward',
+  MELEE_360_HIGH: 'melee_360_high',
+  MELEE_COMBO_V3: 'melee_combo_v3',
   STANDUP: 'standup',
   TPOSE: 'tpose',
 })
@@ -71,6 +75,10 @@ export const animationSettings = {
   [AnimationClips.RIGHT_STRAIGHT_PUNCH]: { timeScale: 1.5, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
   [AnimationClips.RIGHT_HOOK_PUNCH]: { timeScale: 1.5, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
   [AnimationClips.RIGHT_BLOCK]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
+  [AnimationClips.MELEE_HORIZONTAL]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
+  [AnimationClips.MELEE_DOWNWARD]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
+  [AnimationClips.MELEE_360_HIGH]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
+  [AnimationClips.MELEE_COMBO_V3]: { timeScale: 1.0, category: AnimationCategories.COMBAT, loop: THREE.LoopOnce },
   [AnimationClips.STANDUP]: { timeScale: 1.0, category: AnimationCategories.ACTION, loop: THREE.LoopOnce },
 }
 
@@ -126,6 +134,10 @@ export const CombatAnimations = Object.freeze([
   AnimationClips.RIGHT_STRAIGHT_PUNCH,
   AnimationClips.RIGHT_HOOK_PUNCH,
   AnimationClips.RIGHT_BLOCK,
+  AnimationClips.MELEE_HORIZONTAL,
+  AnimationClips.MELEE_DOWNWARD,
+  AnimationClips.MELEE_360_HIGH,
+  AnimationClips.MELEE_COMBO_V3,
 ])
 
 // ===== 播放速率配置（层级化） =====
@@ -144,6 +156,7 @@ export const timeScaleConfig = {
     idle: 1.8,
     // Combat
     punch: 1.5,
+    melee: 2.25, // 1.0 × 1.3 × 2.25 ≈ 2.925，对齐直拳有效倍率
     block: 2.0,
     // Action
     jump: 1.0,
@@ -176,6 +189,10 @@ export const animationSubGroupMap = {
   [AnimationClips.RIGHT_HOOK_PUNCH]: 'punch',
   [AnimationClips.BLOCK]: 'block',
   [AnimationClips.RIGHT_BLOCK]: 'block',
+  [AnimationClips.MELEE_HORIZONTAL]: 'melee',
+  [AnimationClips.MELEE_DOWNWARD]: 'melee',
+  [AnimationClips.MELEE_360_HIGH]: 'melee',
+  [AnimationClips.MELEE_COMBO_V3]: 'melee',
   [AnimationClips.STANDUP]: 'standup',
   [AnimationClips.TPOSE]: 'idle',
 }

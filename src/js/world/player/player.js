@@ -19,6 +19,7 @@ import {
   AnimationStates,
   timeScaleConfig,
 } from './animation-config.js'
+import { resolveAirSwingAnimation } from './attack-animation-resolver.js'
 import HeldItemAttachment from './held-item-attachment.js'
 import { resolveDirectionInput } from './input-resolver.js'
 import { PlayerAnimationController } from './player-animation-controller.js'
@@ -65,14 +66,15 @@ export default class Player {
       backward: false,
       left: false,
       right: false,
-      shift: false,
-      v: false,
+      sneak: false,
+      sprint: false,
       space: false,
     }
 
-    // 攻击左右手交替状态（toggle）
-    this._useLeftStraight = true // 直拳：true=左手, false=右手
-    this._useLeftHook = true // 勾拳：true=左手, false=右手
+    // 空挥动画序列状态
+    this._selectedItemId = null
+    this._airSwingSequenceIndex = 0
+    this._handleAirSwing = this._handleAirSwing.bind(this)
     // 挖掘状态
     this.isMining = false
     // 望远镜状态
@@ -151,6 +153,9 @@ export default class Player {
    * @param {{ blockId: number | null }} payload
    */
   _onSelectedBlockUpdate({ blockId }) {
+    if (this._selectedItemId !== blockId)
+      this._airSwingSequenceIndex = 0
+    this._selectedItemId = blockId
     this.heldItemAttachment?.setHeldItemId(blockId)
   }
 
@@ -332,6 +337,19 @@ export default class Player {
     this.movement.setFacing(angle)
   }
 
+  _handleAirSwing() {
+    if (this.attackCooldown > 0)
+      return
+
+    const { clip, nextIndex } = resolveAirSwingAnimation(
+      this._selectedItemId,
+      this._airSwingSequenceIndex,
+    )
+    this._airSwingSequenceIndex = nextIndex
+    this.animation.triggerAttack(clip)
+    this.handleAttack()
+  }
+
   setupInputListeners() {
     emitter.on('input:update', (keys) => {
       this.inputState = keys
@@ -349,37 +367,7 @@ export default class Player {
     })
 
     // ==================== 攻击输入 ====================
-
-    // 直拳（Z键）- 左右交替
-    emitter.on('input:punch_straight', () => {
-      if (this.attackCooldown > 0)
-        return
-      const anim = this._useLeftStraight
-        ? AnimationClips.STRAIGHT_PUNCH // 左直拳
-        : AnimationClips.RIGHT_STRAIGHT_PUNCH // 右直拳
-      this._useLeftStraight = !this._useLeftStraight // 切换下次使用的手
-      this.animation.triggerAttack(anim)
-      this.handleAttack()
-    })
-
-    // 勾拳（X键）- 左右交替
-    emitter.on('input:punch_hook', () => {
-      if (this.attackCooldown > 0)
-        return
-      const anim = this._useLeftHook
-        ? AnimationClips.HOOK_PUNCH // 左勾拳
-        : AnimationClips.RIGHT_HOOK_PUNCH // 右勾拳
-      this._useLeftHook = !this._useLeftHook // 切换下次使用的手
-      this.animation.triggerAttack(anim)
-      this.handleAttack()
-    })
-
-    // 格挡（C键）- 保持原逻辑
-    emitter.on('input:block', (isBlocking) => {
-      if (isBlocking) {
-        this.animation.triggerAttack(AnimationClips.BLOCK)
-      }
-    })
+    emitter.on('input:air_swing', this._handleAirSwing)
 
     // ==================== 挖掘事件 ====================
     emitter.on('game:mining-start', () => {
@@ -507,11 +495,11 @@ export default class Player {
     if (this.attackCooldown > 0)
       return
 
+    this.attackCooldown = this.ATTACK_COOLDOWN
+
     const enemyManager = this.experience.world?.enemyManager
     if (!enemyManager)
       return
-
-    this.attackCooldown = this.ATTACK_COOLDOWN
 
     const { width, depth, damage } = this.attackConfig
     const attackerPos = this.getPosition()
@@ -572,8 +560,8 @@ export default class Player {
           backward: false,
           left: false,
           right: false,
-          shift: false,
-          v: false,
+          sneak: false,
+          sprint: false,
           space: false,
         }
       : resolvedInput
@@ -651,13 +639,13 @@ export default class Player {
 
   /**
    * 更新速度线效果
-   * 当玩家按住 Shift + 方向键冲刺时，显示速度线
+   * 当玩家按住 Control + 方向键冲刺时，显示速度线
    * @param {object} inputState - 输入状态
    */
   updateSpeedLines(inputState) {
-    // 检查是否处于冲刺状态：shift + 任意方向键
+    // 检查是否处于冲刺状态：Control sprint + 任意方向键
     const isMoving = inputState.forward || inputState.backward || inputState.left || inputState.right
-    const isSprinting = inputState.shift && isMoving
+    const isSprinting = inputState.sprint && isMoving
 
     // 计算时间增量（秒）
     const deltaTime = this.time.delta * 0.001
@@ -804,6 +792,7 @@ export default class Player {
     // Combat Subgroups
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'punch', { label: 'Punch', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'block', { label: 'Block', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
+    subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'melee', { label: 'Melee', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
 
     // Action Subgroups
     subGroupsFolder.addBinding(timeScaleConfig.subGroups, 'jump', { label: 'Jump', min: 0.1, max: 3.0 }).on('change', updateTimeScales)
@@ -909,6 +898,7 @@ export default class Player {
     this.heldItemAttachment = null
 
     emitter.off('hud:selected-block-update', this._onSelectedBlockUpdate)
+    emitter.off('input:air_swing', this._handleAirSwing)
 
     // 先使在途 _applySkinById 失效，避免 dispose 后异步回调再次贴图
     this._skinRequestId++
