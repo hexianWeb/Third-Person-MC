@@ -5,6 +5,8 @@ import { isHeldTool, ITEM_BY_ID } from '../../config/items-config.js'
 export const BONE_NAME = 'ArmRightLower'
 export const SOCKET_NAME = 'HeldItemSocket'
 export const MESH_NAME = 'PlaceholderHandle'
+/** 高于人物(1–2)与水体(3)，避免手持物被错误遮挡 */
+export const TOOL_RENDER_ORDER = 4
 
 /**
  * 运行时手持物挂载：bone → socket → 工具网格
@@ -64,6 +66,7 @@ export default class HeldItemAttachment {
           child.castShadow = true
           child.receiveShadow = false
           child.frustumCulled = false
+          child.renderOrder = TOOL_RENDER_ORDER
         }
       })
       this._toolMeshes.set(name, clone)
@@ -274,6 +277,7 @@ export default class HeldItemAttachment {
     const mesh = new THREE.Mesh(geometry, material)
     mesh.name = MESH_NAME
     mesh.visible = false
+    mesh.renderOrder = TOOL_RENDER_ORDER
     this._placeholder = mesh
     return mesh
   }

@@ -6,6 +6,7 @@ import HeldItemAttachment, {
   BONE_NAME,
   MESH_NAME,
   SOCKET_NAME,
+  TOOL_RENDER_ORDER,
 } from '../../src/js/world/player/held-item-attachment.js'
 
 function makeArmModel() {
@@ -199,4 +200,29 @@ test('placeholder uses grip-offset box and standard material flags', (t) => {
   assert.equal(held.mesh.material.color.getHex(), 0xff5533)
   assert.equal(held.mesh.material.roughness, 0.65)
   assert.equal(held.mesh.material.metalness, 0)
+  assert.equal(held.mesh.renderOrder, TOOL_RENDER_ORDER)
+})
+
+test('loadToolKit sets tool mesh renderOrder above water/player', (t) => {
+  const { model } = makeArmModel()
+  const scene = new THREE.Group()
+  const tool = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshStandardMaterial(),
+  )
+  tool.name = 'wood_sword'
+  scene.add(tool)
+
+  const held = new HeldItemAttachment()
+  t.after(() => held.destroy())
+  held.attach(model)
+  held.loadToolKit({ scene })
+  held.setHeldItemId(304) // WOODEN_SWORD
+
+  assert.equal(held.mesh.name, 'wood_sword')
+  held.mesh.traverse((child) => {
+    if (child.isMesh)
+      assert.equal(child.renderOrder, TOOL_RENDER_ORDER)
+  })
+  assert.ok(TOOL_RENDER_ORDER > 3)
 })
