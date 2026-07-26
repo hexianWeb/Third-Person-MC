@@ -109,26 +109,8 @@ export default class CameraRig {
       this.setRearView(isActive)
     })
 
-    emitter.on('input:camera_shoulder_left', (isPressed) => {
-      if (isPressed) {
-        if (this._shoulderMode === 'left') {
-          this.setShoulderMode('center')
-        }
-        else {
-          this.setShoulderMode('left')
-        }
-      }
-    })
-
-    emitter.on('input:camera_shoulder_right', (isPressed) => {
-      if (isPressed) {
-        if (this._shoulderMode === 'right') {
-          this.setShoulderMode('center')
-        }
-        else {
-          this.setShoulderMode('right')
-        }
-      }
+    emitter.on('input:cycle_camera_shoulder', () => {
+      this.cycleShoulderMode()
     })
 
     emitter.on('input:mouse_move', ({ movementY }) => {
@@ -227,6 +209,15 @@ export default class CameraRig {
     }
   }
 
+  /**
+   * 循环切换探头：中间 → 左 → 右 → 中间
+   */
+  cycleShoulderMode() {
+    const order = ['center', 'left', 'right']
+    const nextIndex = (order.indexOf(this._shoulderMode) + 1) % order.length
+    this.setShoulderMode(order[nextIndex])
+  }
+
   setShoulderMode(mode) {
     if (this._shoulderMode === mode)
       return
@@ -249,6 +240,25 @@ export default class CameraRig {
       ease: 'power2.inOut',
       overwrite: true,
     })
+  }
+
+  /**
+   * 循环探头视角：中间 → 左 → 右 → 中间
+   */
+  cycleShoulderMode() {
+    const order = ['center', 'left', 'right']
+    const currentIndex = order.indexOf(this._shoulderMode)
+    const nextMode = order[(currentIndex + 1) % order.length]
+    this.setShoulderMode(nextMode)
+  }
+
+  /**
+   * 循环切换肩膀视角：中间 → 左 → 右 → 中间
+   */
+  cycleShoulderMode() {
+    const order = ['center', 'left', 'right']
+    const nextIndex = (order.indexOf(this._shoulderMode) + 1) % order.length
+    this.setShoulderMode(order[nextIndex])
   }
 
   setRearView(active) {

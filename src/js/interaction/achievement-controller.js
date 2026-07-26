@@ -23,8 +23,7 @@ export default class AchievementController {
       if (isPressed)
         this.store.unlock('first_rear_view')
     })
-    emitter.once('input:camera_shoulder_left', () => this.store.unlock('first_perspective'))
-    emitter.once('input:camera_shoulder_right', () => this.store.unlock('first_perspective'))
+    emitter.once('input:cycle_camera_shoulder', () => this.store.unlock('first_perspective'))
     emitter.once('ui:chat-opened', () => this.store.unlock('first_chat'))
     emitter.once('player:block_break', () => this.store.unlock('first_mine'))
     emitter.once('player:block_place', () => this.store.unlock('first_place'))
@@ -88,8 +87,7 @@ export default class AchievementController {
       }
       this.lastCameraSwitchTime = now
     }
-    emitter.on('input:camera_shoulder_left', onCameraSwitch)
-    emitter.on('input:camera_shoulder_right', onCameraSwitch)
+    emitter.on('input:cycle_camera_shoulder', onCameraSwitch)
   }
 
   update(_dt) {
