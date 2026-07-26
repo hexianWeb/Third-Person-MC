@@ -155,10 +155,12 @@ Delete every tracked file below `.sisyphus/plans/`; do not delete `.sisyphus/dra
 Run:
 
 ```powershell
-git -c core.quotePath=false ls-files docs .sisyphus
+Get-ChildItem docs,.sisyphus -Recurse -File |
+  ForEach-Object { $_.FullName.Substring((Resolve-Path '.').Path.Length + 1) }
+git -c core.quotePath=false diff --name-status -- docs .sisyphus
 ```
 
-Expected: only July 2026 docs, the current cleanup design/plan, and `.sisyphus/drafts/*` remain.
+Expected: the filesystem contains only July 2026 docs, the current cleanup design/plan, and `.sisyphus/drafts/*`; the Git diff lists every removed pre-July document and `.sisyphus/plans/*` as deleted.
 
 - [ ] **Step 5: Commit only document removals**
 
