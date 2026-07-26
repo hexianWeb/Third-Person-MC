@@ -1,13 +1,45 @@
 /**
- * Event Bus - 事件总线
+ * Event Bus - 跨层即时事件通信（mitt）
  *
- * 本项目使用增强型 emitter 包装 mitt，添加调试功能。
- * 保持与原 mitt 完全相同的 API，可作为 drop-in 替换。
- *
- * 调试功能仅在开发环境且 URL hash 为 #debug 时启用。
+ * 额外提供 once()，供成就等一次性监听使用。
+ * API：emit / on / once / off / all
  */
 
-import debugEmitter from './debug-emitter.js'
+import mitt from 'mitt'
 
-// 导出增强型 emitter (与原版 mitt API 完全一致)
-export default debugEmitter
+const emitter = mitt()
+
+/**
+ * 监听事件一次后自动 off
+ * @param {string} type
+ * @param {Function} handler
+ */
+emitter.once = (type, handler) => {
+  const wrapper = (payload) => {
+    emitter.off(type, wrapper)
+    handler(payload)
+  }
+  wrapper._originalHandler = handler
+  emitter.on(type, wrapper)
+}
+
+const originalOff = emitter.off.bind(emitter)
+
+/**
+ * 移除监听；兼容 once 包装后的 handler 引用
+ * @param {string} type
+ * @param {Function} [handler]
+ */
+emitter.off = (type, handler) => {
+  if (handler) {
+    const handlers = emitter.all.get(type)
+    if (handlers) {
+      const wrapped = handlers.find(h => h._originalHandler === handler)
+      if (wrapped)
+        return originalOff(type, wrapped)
+    }
+  }
+  return originalOff(type, handler)
+}
+
+export default emitter

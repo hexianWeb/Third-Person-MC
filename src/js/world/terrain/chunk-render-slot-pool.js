@@ -4,6 +4,7 @@
 import * as THREE from 'three'
 
 import { FIXED_INSTANCE_BUFFER_BYTES, TOTAL_SLOT_COUNT } from '../../config/chunk-render-capacity.js'
+import emitter from '../../utils/event/event-bus.js'
 import { disposeSharedTerrainResources } from './blocks-config.js'
 import ChunkRenderSlot from './chunk-render-slot.js'
 
@@ -156,6 +157,12 @@ export default class ChunkRenderSlotPool {
       }))
     }
 
+    emitter.emit('core:loading-progress', {
+      loaded: 0,
+      total: TOTAL_SLOT_COUNT,
+      phase: 'slots',
+    })
+
     for (const slot of this.slots) {
       if (this._destroyed)
         throw new Error('Chunk render slot pool was disposed during prewarm')
@@ -176,6 +183,13 @@ export default class ChunkRenderSlotPool {
           this._markSlotFailed(slot, error, { phase: 'startup', slotId: slot.id })
         throw error
       }
+
+      emitter.emit('core:loading-progress', {
+        loaded: this.startupCompileCount,
+        total: TOTAL_SLOT_COUNT,
+        phase: 'slots',
+      })
+
       // 逐槽位让出主线程：菜单保持响应，异步管线在后续帧后台解析
       await this.waitFrame()
     }

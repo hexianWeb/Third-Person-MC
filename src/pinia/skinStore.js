@@ -18,7 +18,7 @@ import { createCustomSkinStorage } from '../js/utils/storage/custom-skin-storage
 // ========================================
 const STORAGE_KEY = 'mc-player-skin'
 
-/** 懒加载共享 event-bus，避免 Node 单测静态拉入 Vite 调试依赖链 */
+/** 懒加载共享 event-bus，避免 Node 单测静态拉入浏览器侧依赖 */
 let cachedDefaultEmitter = null
 let defaultEmitterLoad = null
 

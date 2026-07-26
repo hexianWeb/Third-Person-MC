@@ -33,9 +33,9 @@ function handleOpenCraftingTable() {
     ui.toCraftingTable()
 }
 
-// Listen for core:ready to transition from loading to mainMenu
+// 资源 + 渲染槽位池就绪后再离开 loading（core:boot-complete）
 onMounted(() => {
-  emitter.on('core:ready', handleCoreReady)
+  emitter.on('core:boot-complete', handleBootComplete)
   emitter.on('ui:escape', handleEscape)
   emitter.on('input:toggle_inventory', handleToggleInventory)
   emitter.on('ui:open_crafting_table', handleOpenCraftingTable)
@@ -43,14 +43,14 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  emitter.off('core:ready', handleCoreReady)
+  emitter.off('core:boot-complete', handleBootComplete)
   emitter.off('ui:escape', handleEscape)
   emitter.off('input:toggle_inventory', handleToggleInventory)
   emitter.off('ui:open_crafting_table', handleOpenCraftingTable)
   window.removeEventListener('blur', handleWindowBlur)
 })
 
-function handleCoreReady() {
+function handleBootComplete() {
   ui.screen = 'mainMenu'
   ui.mainMenuView = 'root'
 }

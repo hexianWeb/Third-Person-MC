@@ -217,8 +217,8 @@
     background: rgba(0, 0, 0, 0.6);
   }
   
-  // Deeper overlay for loading
+  // HEXIAN Loading 全屏底色（由 LoadingScreen 铺满）
   &.loading {
-    background: rgba(0, 0, 0, 0.85);
+    background: #f12d3e;
   }
 }

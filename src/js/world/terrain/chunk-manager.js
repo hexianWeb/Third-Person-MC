@@ -84,6 +84,7 @@ export default class ChunkManager {
     this.idleQueue = new IdleQueue()
 
     this._renderPoolReadyPromise = null
+    this._slotsReadyPromise = null
     this._renderSlotsReady = false
     this._transitionRunnerPromise = null
     this._transitionId = 0
@@ -131,7 +132,8 @@ export default class ChunkManager {
 
   initializeRenderPool() {
     if (!this._renderPoolReadyPromise) {
-      this._renderPoolReadyPromise = this.experience.renderer.whenReady()
+      // 槽位实例化/预编译完成即可离场 loading；初始窗口填充在后台继续
+      this._slotsReadyPromise = this.experience.renderer.whenReady()
         .then(() => this.renderSlotPool.initialize(
           this.experience.renderer.instance,
           this.experience.scene,
@@ -140,13 +142,24 @@ export default class ChunkManager {
           // 预热必须走真实渲染管线：compileAsync 的 render context 与运行时不同，缓存不会命中
           () => this.experience.renderer.renderPipeline?.render(),
         ))
-        .then(async () => {
+        .then(() => {
           this._renderSlotsReady = true
+        })
+
+      this._renderPoolReadyPromise = this._slotsReadyPromise
+        .then(async () => {
           const initialCenter = getInitialChunkWindowCenter(this._latestRequestedCenter)
           await this._requestWindow(initialCenter.x, initialCenter.z, true)
         })
     }
     return this._renderPoolReadyPromise
+  }
+
+  /** 槽位池预热完成（不含初始窗口填满） */
+  whenSlotsReady() {
+    if (!this._slotsReadyPromise)
+      this.initializeRenderPool()
+    return this._slotsReadyPromise
   }
 
   whenRenderReady() {

@@ -24,6 +24,9 @@ const ui = useUiStore()
 const hud = useHudStore()
 const inventory = useInventoryStore()
 
+/** #debug 时隐藏右侧 Info/按键反馈，避免挡住 Tweakpane */
+const isDebugMode = window.location.hash === '#debug'
+
 function handleKeyDown(e) {
   // If user is typing in an input, ignore logic
   if (['INPUT', 'TEXTAREA'].includes(e.target.tagName))
@@ -74,8 +77,8 @@ onUnmounted(() => {
     <!-- Top Info Bar: Coordinates + Compass -->
     <TopInfoBar />
 
-    <!-- Top Right Info Panel Stack -->
-    <div class="hud-top-right-stack">
+    <!-- Top Right Info Panel Stack（debug 时隐藏，避免挡住 Tweakpane） -->
+    <div v-if="!isDebugMode" class="hud-top-right-stack">
       <InfoPanel />
       <KeyFeedbackPanel />
     </div>

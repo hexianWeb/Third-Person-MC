@@ -35,16 +35,33 @@ export default class World {
     this.scene.add(new THREE.AxesHelper(5))
 
     emitter.on('core:ready', () => {
-      this._initTerrain()
-      this._initPlayerAndCamera()
-
-      this._initEnvironment()
-      this._initBlockInteraction()
-      this._initEffects()
-      this._setupSettingsListeners()
-      // this._initEnemies()
-      this._initAchievements()
+      this._bootWorld()
     })
+  }
+
+  /**
+   * 资源就绪后启动世界；槽位池预热完成再发出 core:boot-complete，供 LoadingScreen 退场。
+   */
+  async _bootWorld() {
+    this._initTerrain()
+    this._initPlayerAndCamera()
+
+    this._initEnvironment()
+    this._initBlockInteraction()
+    this._initEffects()
+    this._setupSettingsListeners()
+    // this._initEnemies()
+    this._initAchievements()
+
+    try {
+      await this.chunkManager?.whenSlotsReady()
+    }
+    catch (error) {
+      console.warn('[World] render slot pool boot failed:', error)
+    }
+    finally {
+      emitter.emit('core:boot-complete')
+    }
   }
 
   _initAchievements() {
