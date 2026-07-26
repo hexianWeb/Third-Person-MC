@@ -15,3 +15,18 @@ export function refreshBiomeGenerator(generator, currentSeed, nextSeed) {
   generator.clearAllCache()
   return currentSeed
 }
+
+/**
+ * Release the cached biome map owned by one unloaded chunk.
+ *
+ * @param {object} generator
+ * @param {{ chunkX: number, chunkZ: number }} chunk
+ * @param {number} chunkWidth
+ */
+export function clearChunkBiomeCache(generator, chunk, chunkWidth) {
+  generator.clearCache(
+    chunk.chunkX * chunkWidth,
+    chunk.chunkZ * chunkWidth,
+    chunkWidth,
+  )
+}

@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import { BIOME_PARAMS } from '../../src/js/config/chunk-config.js'
 import BiomeGenerator from '../../src/js/world/terrain/biome-generator.js'
+import {
+  blendBiomeTerrainProfile,
+} from '../../src/js/world/terrain/biome-terrain-profile.js'
 
 function assertNormalizedWeights(weights) {
   assert.ok(weights)
@@ -61,13 +64,31 @@ test('generator data always has finite climate and normalized weights', () => {
       assert.ok(data.temp >= 0 && data.temp <= 1)
       assert.ok(data.humidity >= 0 && data.humidity <= 1)
       assertNormalizedWeights(data.weights)
-      const dominant = Object.entries(data.weights)
-        .sort(([firstId, firstWeight], [secondId, secondWeight]) =>
-          secondWeight - firstWeight || firstId.localeCompare(secondId),
-        )[0][0]
-      assert.equal(data.biome, dominant)
+      assert.ok(data.weights[data.biome] > 0)
     }
   }
+})
+
+test('triple junctions retain every nearby biome in the continuous blend', () => {
+  const generator = new BiomeGenerator(1337)
+  const first = generator.getBiomeAt(-113, 242)
+  const second = generator.getBiomeAt(-112, 242)
+
+  assert.ok(
+    Object.keys(first.weights).length >= 3,
+    `expected 3+ contributors, received ${JSON.stringify(first.weights)}`,
+  )
+  assert.ok(
+    Object.keys(second.weights).length >= 3,
+    `expected 3+ contributors, received ${JSON.stringify(second.weights)}`,
+  )
+
+  const firstProfile = blendBiomeTerrainProfile(first.weights)
+  const secondProfile = blendBiomeTerrainProfile(second.weights)
+  assert.ok(
+    Math.abs(firstProfile.heightOffset - secondProfile.heightOffset) <= 0.25,
+    `height offset jumped from ${firstProfile.heightOffset} to ${secondProfile.heightOffset}`,
+  )
 })
 
 test('chunk maps match point queries at positive and negative origins', () => {

@@ -18,7 +18,10 @@ import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-conf
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 import IdleQueue from '../../utils/utils/idle-queue.js'
-import { refreshBiomeGenerator } from './biome-generator-lifecycle.js'
+import {
+  clearChunkBiomeCache,
+  refreshBiomeGenerator,
+} from './biome-generator-lifecycle.js'
 import BiomeGenerator from './biome-generator.js'
 import { blocks, createStagedMaterialGeneration, resources } from './blocks-config.js'
 import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
@@ -1050,6 +1053,7 @@ export default class ChunkManager {
         !this.activeSlots.has(chunkKey)
         && (Math.abs(chunk.chunkX - center.x) > unloadDistance || Math.abs(chunk.chunkZ - center.z) > unloadDistance)
       ) {
+        clearChunkBiomeCache(this.biomeGenerator, chunk, this.chunkWidth)
         chunk.dispose()
         this.chunks.delete(chunkKey)
       }
@@ -1527,6 +1531,7 @@ export default class ChunkManager {
     })
     this.chunks.clear()
     this.activeSlots.clear()
+    this.biomeGenerator.clearAllCache()
     this.renderSlotPool.dispose()
   }
 }

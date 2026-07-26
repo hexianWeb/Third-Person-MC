@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  clearChunkBiomeCache,
   refreshBiomeGenerator,
 } from '../../src/js/world/terrain/biome-generator-lifecycle.js'
 
@@ -29,4 +30,15 @@ test('same-seed regeneration only clears shared biome caches', () => {
 
   assert.equal(seed, 1337)
   assert.deepEqual(calls, [['clear']])
+})
+
+test('pruning a chunk clears its world-coordinate biome map cache', () => {
+  const calls = []
+  const generator = {
+    clearCache: (...args) => calls.push(args),
+  }
+
+  clearChunkBiomeCache(generator, { chunkX: -2, chunkZ: 3 }, 64)
+
+  assert.deepEqual(calls, [[-128, 192, 64]])
 })

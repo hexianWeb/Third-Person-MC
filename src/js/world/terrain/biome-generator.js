@@ -6,6 +6,12 @@ import { validateBiomeDefinitions } from './biome-terrain-profile.js'
 
 const UINT32_RANGE = 0x100000000
 const PARAM_NAMES = Object.keys(BIOME_PARAMS)
+const BIOME_IDS = Object.values(BIOMES)
+  .map(biome => biome.id)
+  .sort((first, second) => first.localeCompare(second))
+const BIOME_INDEX_BY_ID = Object.fromEntries(
+  BIOME_IDS.map((biomeId, index) => [biomeId, index]),
+)
 
 function assertFinite(name, value) {
   if (!Number.isFinite(value))
@@ -33,6 +39,9 @@ export default class BiomeGenerator {
     validateBiomeDefinitions(BIOMES)
     this.biomeCache = new Map()
     this.siteCache = new Map()
+    this._candidateSites = Array.from({ length: 9 })
+    this._candidateDistances = new Float64Array(9)
+    this._biomeWeights = new Float64Array(BIOME_IDS.length)
     this._applyParams({ ...BIOME_PARAMS, ...options })
     this.setSeed(seed)
   }
@@ -99,9 +108,9 @@ export default class BiomeGenerator {
     const centerCellX = Math.floor(warpedX / this.regionSize)
     const centerCellZ = Math.floor(warpedZ / this.regionSize)
     let nearestSite = null
-    let secondSite = null
     let nearestDistanceSquared = Number.POSITIVE_INFINITY
     let secondDistanceSquared = Number.POSITIVE_INFINITY
+    let candidateIndex = 0
 
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -117,6 +126,9 @@ export default class BiomeGenerator {
         const distanceX = warpedX - site.x
         const distanceZ = warpedZ - site.z
         const distanceSquared = distanceX * distanceX + distanceZ * distanceZ
+        this._candidateSites[candidateIndex] = site
+        this._candidateDistances[candidateIndex] = distanceSquared
+        candidateIndex++
 
         if (
           distanceSquared < nearestDistanceSquared
@@ -128,29 +140,18 @@ export default class BiomeGenerator {
             )
           )
         ) {
-          secondSite = nearestSite
           secondDistanceSquared = nearestDistanceSquared
           nearestSite = site
           nearestDistanceSquared = distanceSquared
         }
-        else if (
-          distanceSquared < secondDistanceSquared
-          || (
-            distanceSquared === secondDistanceSquared
-            && (
-              !secondSite
-              || site.cellX < secondSite.cellX
-              || (site.cellX === secondSite.cellX && site.cellZ < secondSite.cellZ)
-            )
-          )
-        ) {
-          secondSite = site
+        else if (distanceSquared < secondDistanceSquared) {
           secondDistanceSquared = distanceSquared
         }
       }
     }
 
-    if (nearestSite.biome === secondSite.biome) {
+    const nearestDistance = Math.sqrt(nearestDistanceSquared)
+    if (Math.sqrt(secondDistanceSquared) - nearestDistance >= this.transitionWidth) {
       return {
         biome: nearestSite.biome,
         temp: nearestSite.temp,
@@ -159,45 +160,42 @@ export default class BiomeGenerator {
       }
     }
 
-    const distanceDelta = Math.sqrt(secondDistanceSquared)
-      - Math.sqrt(nearestDistanceSquared)
-    const proximity = Math.max(0, 1 - distanceDelta / this.transitionWidth)
-    const secondaryRawWeight = proximity * proximity
-    if (secondaryRawWeight === 0) {
-      return {
-        biome: nearestSite.biome,
-        temp: nearestSite.temp,
-        humidity: nearestSite.humidity,
-        weights: { [nearestSite.biome]: 1 },
-      }
+    const maximumDistance = nearestDistance + this.transitionWidth
+    const maximumDistanceSquared = maximumDistance * maximumDistance
+    this._biomeWeights.fill(0)
+    let totalWeight = 0
+    let temperature = 0
+    let humidity = 0
+
+    for (let index = 0; index < candidateIndex; index++) {
+      const distanceSquared = this._candidateDistances[index]
+      if (distanceSquared > maximumDistanceSquared)
+        continue
+
+      const site = this._candidateSites[index]
+      const distanceDelta = Math.sqrt(distanceSquared) - nearestDistance
+      const proximity = Math.max(0, 1 - distanceDelta / this.transitionWidth)
+      const rawWeight = proximity * proximity
+      if (rawWeight === 0)
+        continue
+
+      this._biomeWeights[BIOME_INDEX_BY_ID[site.biome]] += rawWeight
+      totalWeight += rawWeight
+      temperature += site.temp * rawWeight
+      humidity += site.humidity * rawWeight
     }
 
-    const totalWeight = 1 + secondaryRawWeight
-    const nearestWeight = 1 / totalWeight
-    const secondWeight = secondaryRawWeight / totalWeight
-    const weights = nearestSite.biome < secondSite.biome
-      ? {
-          [nearestSite.biome]: nearestWeight,
-          [secondSite.biome]: secondWeight,
-        }
-      : {
-          [secondSite.biome]: secondWeight,
-          [nearestSite.biome]: nearestWeight,
-        }
-    const biome = nearestWeight === secondWeight
-      ? (nearestSite.biome < secondSite.biome ? nearestSite.biome : secondSite.biome)
-      : nearestSite.biome
+    const weights = {}
+    for (let index = 0; index < BIOME_IDS.length; index++) {
+      const rawWeight = this._biomeWeights[index]
+      if (rawWeight > 0)
+        weights[BIOME_IDS[index]] = rawWeight / totalWeight
+    }
 
     return {
-      biome,
-      temp: (
-        nearestSite.temp
-        + secondSite.temp * secondaryRawWeight
-      ) / totalWeight,
-      humidity: (
-        nearestSite.humidity
-        + secondSite.humidity * secondaryRawWeight
-      ) / totalWeight,
+      biome: nearestSite.biome,
+      temp: temperature / totalWeight,
+      humidity: humidity / totalWeight,
       weights,
     }
   }
