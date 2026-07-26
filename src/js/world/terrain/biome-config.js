@@ -17,14 +17,14 @@ export const BIOMES = {
   PLAINS: {
     id: 'plains',
     name: '平原',
-    // Climate parameters (for biome generator)
-    // Adjusting ranges to be more specific, utilizing the fallback mechanism for gaps
-    tempRange: [0.3, 0.6],
-    humidityRange: [0.2, 0.5],
+    climate: {
+      temperature: 0.50,
+      humidity: 0.45,
+    },
     // 地形参数（用于后续生成器）
     terrainParams: {
       heightOffset: 0, // 高度偏移（相对基准）
-      heightMagnitude: 0.5, // 振幅倍数（0.5 = 较小，地形平坦）
+      roughness: 0.75,
     },
     // 方块映射（地表/土层/深层）
     blocks: {
@@ -65,12 +65,13 @@ export const BIOMES = {
   FOREST: {
     id: 'forest',
     name: '森林',
-    // Climate parameters
-    tempRange: [0.3, 0.6],
-    humidityRange: [0.5, 1.0],
+    climate: {
+      temperature: 0.48,
+      humidity: 0.78,
+    },
     terrainParams: {
       heightOffset: 0, // 略高
-      heightMagnitude: 3.0, // 正常振幅
+      roughness: 1.10,
     },
     blocks: {
       surface: BLOCK_IDS.GRASS,
@@ -111,12 +112,13 @@ export const BIOMES = {
   BIRCH_FOREST: {
     id: 'birchForest',
     name: '白桦木林',
-    // Climate parameters
-    tempRange: [0.0, 0.3],
-    humidityRange: [0.2, 0.5],
+    climate: {
+      temperature: 0.25,
+      humidity: 0.45,
+    },
     terrainParams: {
       heightOffset: 0, // 略高
-      heightMagnitude: 1.5, // 中等偏小
+      roughness: 0.95,
     },
     blocks: {
       surface: BLOCK_IDS.GRASS,
@@ -155,12 +157,13 @@ export const BIOMES = {
   CHERRY_FOREST: {
     id: 'cherryForest',
     name: '樱花树林',
-    // Climate parameters
-    tempRange: [0.6, 1.0],
-    humidityRange: [0.5, 1.0],
+    climate: {
+      temperature: 0.78,
+      humidity: 0.72,
+    },
     terrainParams: {
       heightOffset: 0, // 基准
-      heightMagnitude: 3.0, // 中等
+      roughness: 1.10,
     },
     blocks: {
       surface: BLOCK_IDS.GRASS,
@@ -199,12 +202,13 @@ export const BIOMES = {
   DESERT: {
     id: 'desert',
     name: '沙漠',
-    // Climate parameters
-    tempRange: [0.6, 1.0],
-    humidityRange: [0.0, 0.5],
+    climate: {
+      temperature: 0.88,
+      humidity: 0.18,
+    },
     terrainParams: {
-      heightOffset: 2, // 基准或略低
-      heightMagnitude: 3.0, // 较大，沙丘起伏
+      heightOffset: 1,
+      roughness: 1.15,
     },
     blocks: {
       surface: BLOCK_IDS.SAND, // 地表是沙子
@@ -240,12 +244,13 @@ export const BIOMES = {
   BADLANDS: {
     id: 'badlands',
     name: '恶地',
-    // Climate parameters
-    tempRange: [0.3, 0.6],
-    humidityRange: [0.0, 0.2],
+    climate: {
+      temperature: 0.55,
+      humidity: 0.10,
+    },
     terrainParams: {
       heightOffset: 2, // 较高
-      heightMagnitude: 5,
+      roughness: 1.35,
     },
     blocks: {
       // 恶地使用陶瓦或红沙（随机选择，这里先使用陶瓦，后续可扩展）
@@ -274,12 +279,13 @@ export const BIOMES = {
   FROZEN_OCEAN: {
     id: 'frozenOcean',
     name: '冻洋',
-    // Climate parameters
-    tempRange: [0.0, 0.3],
-    humidityRange: [0.5, 1.0],
+    climate: {
+      temperature: 0.10,
+      humidity: 0.80,
+    },
     terrainParams: {
       heightOffset: 0, // 很低，大部分在水下
-      heightMagnitude: 4, // 很小，海底较平坦
+      roughness: 0.80,
     },
     blocks: {
       // 冻洋使用冰或压缩冰（随机选择，这里先使用冰）

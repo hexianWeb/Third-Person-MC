@@ -1,231 +1,372 @@
-/**
- * BiomeGenerator - 群系生成器
- * 基于温度/湿度噪声图自动生成群系，支持平滑过渡
- *
- * 核心功能：
- * - 使用独立的 Simplex 噪声生成温度/湿度分布
- * - 根据温度/湿度确定群系类型
- * - 边界区域计算混合权重，实现平滑过渡
- * - chunk 级别缓存，避免重复计算
- */
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js'
+import { BIOME_PARAMS } from '../../config/chunk-config.js'
 import { RNG } from '../../tools/rng.js'
 import { BIOMES } from './biome-config.js'
+import { validateBiomeDefinitions } from './biome-terrain-profile.js'
+
+const UINT32_RANGE = 0x100000000
+const PARAM_NAMES = Object.keys(BIOME_PARAMS)
+
+function assertFinite(name, value) {
+  if (!Number.isFinite(value))
+    throw new TypeError(`${name} must be finite; received ${value}`)
+}
+
+function assertPositive(name, value) {
+  assertFinite(name, value)
+  if (value <= 0)
+    throw new RangeError(`${name} must be greater than zero; received ${value}`)
+}
+
+function hashCoordinate(seed, cellX, cellZ, salt) {
+  let hash = Math.imul(Math.trunc(seed), 0x9E3779B1)
+  hash ^= Math.imul(cellX, 0x85EBCA77)
+  hash ^= Math.imul(cellZ, 0xC2B2AE3D)
+  hash ^= salt
+  hash = Math.imul(hash ^ (hash >>> 16), 0x7FEB352D)
+  hash = Math.imul(hash ^ (hash >>> 15), 0x846CA68B)
+  return ((hash ^ (hash >>> 16)) >>> 0) / UINT32_RANGE
+}
 
 export default class BiomeGenerator {
-  /**
-   * @param {number} seed - 随机种子
-   * @param {object} options - 配置选项
-   */
   constructor(seed, options = {}) {
-    // 使用独立的 seed 偏移确保温度/湿度独立
-    const rngTemp = new RNG(seed + 1000)
-    const rngHumidity = new RNG(seed + 2000)
-
-    this.tempNoise = new SimplexNoise(rngTemp)
-    this.humidityNoise = new SimplexNoise(rngHumidity)
-
-    // 噪声缩放参数（可配置）
-    this.tempScale = options.tempScale ?? 200 // Temperature noise scale (larger = smoother)
-    this.humidityScale = options.humidityScale ?? 200 // Humidity noise scale
-
-    // Edge transition threshold
-    this.transitionThreshold = options.transitionThreshold ?? 0.15
-
-    // Cache: avoid repeated calculation
-    // key: "originX,originZ" (chunk origin world coordinates)
+    validateBiomeDefinitions(BIOMES)
     this.biomeCache = new Map()
+    this.siteCache = new Map()
+    this._applyParams({ ...BIOME_PARAMS, ...options })
+    this.setSeed(seed)
   }
 
-  /**
-   * Generate biome map for entire chunk (batch calculation)
-   * @param {number} originX - Chunk origin world X coordinate
-   * @param {number} originZ - Chunk origin world Z coordinate
-   * @param {number} chunkWidth - Chunk width
-   * @returns {Array<Array<BiomeData>>} Biome map [x][z]
-   */
-  generateBiomeMap(originX, originZ, chunkWidth) {
-    const cacheKey = `${originX},${originZ}`
+  setSeed(seed) {
+    assertFinite('seed', seed)
+    this.seed = Math.trunc(seed)
+    this.temperatureNoise = new SimplexNoise(new RNG(this.seed + 1000))
+    this.humidityNoise = new SimplexNoise(new RNG(this.seed + 2000))
+    this.warpNoise = new SimplexNoise(new RNG(this.seed + 3000))
+    this.clearAllCache()
+  }
 
-    // Check cache
-    if (this.biomeCache.has(cacheKey)) {
-      return this.biomeCache.get(cacheKey)
-    }
+  updateParams(params = {}) {
+    const unknown = Object.keys(params).filter(name => !PARAM_NAMES.includes(name))
+    if (unknown.length > 0)
+      throw new RangeError(`Unknown biome parameters: ${unknown.join(', ')}`)
+    this._applyParams({ ...this._snapshotParams(), ...params })
+    this.clearAllCache()
+  }
 
-    const biomeMap = []
+  _snapshotParams() {
+    return Object.fromEntries(PARAM_NAMES.map(name => [name, this[name]]))
+  }
 
-    for (let x = 0; x < chunkWidth; x++) {
-      biomeMap[x] = []
-      for (let z = 0; z < chunkWidth; z++) {
-        const wx = originX + x
-        const wz = originZ + z
+  _applyParams(params) {
+    assertPositive('regionSize', params.regionSize)
+    assertFinite('regionJitter', params.regionJitter)
+    assertPositive('transitionWidth', params.transitionWidth)
+    assertPositive('warpScale', params.warpScale)
+    assertFinite('warpStrength', params.warpStrength)
+    if (params.warpStrength < 0)
+      throw new RangeError('warpStrength cannot be negative')
+    assertPositive('temperatureScale', params.temperatureScale)
+    assertPositive('humidityScale', params.humidityScale)
+    assertPositive('siteCacheLimit', params.siteCacheLimit)
 
-        // Get temperature/humidity (normalized to 0-1)
-        const temp = this._getTemperature(wx, wz)
-        const humidity = this._getHumidity(wx, wz)
+    this.regionSize = params.regionSize
+    this.regionJitter = Math.min(0.25, Math.max(0, params.regionJitter))
+    const minimumSiteSeparation = this.regionSize * (1 - 2 * this.regionJitter)
+    this.transitionWidth = Math.min(params.transitionWidth, minimumSiteSeparation / 2)
+    this.warpScale = params.warpScale
+    this.warpStrength = params.warpStrength
+    this.temperatureScale = params.temperatureScale
+    this.humidityScale = params.humidityScale
+    this.siteCacheLimit = Math.max(1, Math.floor(params.siteCacheLimit))
+  }
 
-        // Determine biome
-        const biomeId = this._getBiome(temp, humidity)
+  getBiomeAt(worldX, worldZ) {
+    this._validateCoordinate('worldX', worldX)
+    this._validateCoordinate('worldZ', worldZ)
+    return this._sampleBiomeAt(worldX, worldZ)
+  }
 
-        // Calculate blend weights (for border regions)
-        const weights = this._getBiomeWeights(temp, humidity)
+  _sampleBiomeAt(worldX, worldZ, siteGrid = null) {
+    const warpedX = worldX + this.warpNoise.noise(
+      worldX / this.warpScale,
+      worldZ / this.warpScale,
+    ) * this.warpStrength
+    const warpedZ = worldZ + this.warpNoise.noise(
+      (worldX + 10000) / this.warpScale,
+      (worldZ - 10000) / this.warpScale,
+    ) * this.warpStrength
+    const centerCellX = Math.floor(warpedX / this.regionSize)
+    const centerCellZ = Math.floor(warpedZ / this.regionSize)
+    let nearestSite = null
+    let secondSite = null
+    let nearestDistanceSquared = Number.POSITIVE_INFINITY
+    let secondDistanceSquared = Number.POSITIVE_INFINITY
 
-        biomeMap[x][z] = {
-          biome: biomeId,
-          temp,
-          humidity,
-          weights, // null means single biome, otherwise { biomeId: weight, ... }
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cellX = centerCellX + dx
+        const cellZ = centerCellZ + dz
+        const siteIndex = siteGrid
+          ? (cellZ - siteGrid.minCellZ) * siteGrid.columns
+          + cellX - siteGrid.minCellX
+          : -1
+        const site = siteGrid
+          ? siteGrid.sites[siteIndex]
+          : this._getSite(cellX, cellZ)
+        const distanceX = warpedX - site.x
+        const distanceZ = warpedZ - site.z
+        const distanceSquared = distanceX * distanceX + distanceZ * distanceZ
+
+        if (
+          distanceSquared < nearestDistanceSquared
+          || (
+            distanceSquared === nearestDistanceSquared
+            && (
+              site.cellX < nearestSite.cellX
+              || (site.cellX === nearestSite.cellX && site.cellZ < nearestSite.cellZ)
+            )
+          )
+        ) {
+          secondSite = nearestSite
+          secondDistanceSquared = nearestDistanceSquared
+          nearestSite = site
+          nearestDistanceSquared = distanceSquared
+        }
+        else if (
+          distanceSquared < secondDistanceSquared
+          || (
+            distanceSquared === secondDistanceSquared
+            && (
+              !secondSite
+              || site.cellX < secondSite.cellX
+              || (site.cellX === secondSite.cellX && site.cellZ < secondSite.cellZ)
+            )
+          )
+        ) {
+          secondSite = site
+          secondDistanceSquared = distanceSquared
         }
       }
     }
 
-    // Cache result
-    this.biomeCache.set(cacheKey, biomeMap)
+    if (nearestSite.biome === secondSite.biome) {
+      return {
+        biome: nearestSite.biome,
+        temp: nearestSite.temp,
+        humidity: nearestSite.humidity,
+        weights: { [nearestSite.biome]: 1 },
+      }
+    }
 
-    return biomeMap
-  }
+    const distanceDelta = Math.sqrt(secondDistanceSquared)
+      - Math.sqrt(nearestDistanceSquared)
+    const proximity = Math.max(0, 1 - distanceDelta / this.transitionWidth)
+    const secondaryRawWeight = proximity * proximity
+    if (secondaryRawWeight === 0) {
+      return {
+        biome: nearestSite.biome,
+        temp: nearestSite.temp,
+        humidity: nearestSite.humidity,
+        weights: { [nearestSite.biome]: 1 },
+      }
+    }
 
-  /**
-   * Get single position biome data (for external queries)
-   * @param {number} wx - World X coordinate
-   * @param {number} wz - World Z coordinate
-   * @returns {object} Biome data
-   */
-  getBiomeAt(wx, wz) {
-    const temp = this._getTemperature(wx, wz)
-    const humidity = this._getHumidity(wx, wz)
-    const biomeId = this._getBiome(temp, humidity)
-    const weights = this._getBiomeWeights(temp, humidity)
+    const totalWeight = 1 + secondaryRawWeight
+    const nearestWeight = 1 / totalWeight
+    const secondWeight = secondaryRawWeight / totalWeight
+    const weights = nearestSite.biome < secondSite.biome
+      ? {
+          [nearestSite.biome]: nearestWeight,
+          [secondSite.biome]: secondWeight,
+        }
+      : {
+          [secondSite.biome]: secondWeight,
+          [nearestSite.biome]: nearestWeight,
+        }
+    const biome = nearestWeight === secondWeight
+      ? (nearestSite.biome < secondSite.biome ? nearestSite.biome : secondSite.biome)
+      : nearestSite.biome
 
     return {
-      biome: biomeId,
-      temp,
-      humidity,
+      biome,
+      temp: (
+        nearestSite.temp
+        + secondSite.temp * secondaryRawWeight
+      ) / totalWeight,
+      humidity: (
+        nearestSite.humidity
+        + secondSite.humidity * secondaryRawWeight
+      ) / totalWeight,
       weights,
     }
   }
 
-  /**
-   * Get temperature at specified position (0-1)
-   * @private
-   */
-  _getTemperature(wx, wz) {
-    const noise = this.tempNoise.noise(wx / this.tempScale, wz / this.tempScale)
-    return noise * 0.5 + 0.5 // Normalize to [0, 1]
-  }
-
-  /**
-   * Get humidity at specified position (0-1)
-   * @private
-   */
-  _getHumidity(wx, wz) {
-    const noise = this.humidityNoise.noise(wx / this.humidityScale, wz / this.humidityScale)
-    return noise * 0.5 + 0.5 // Normalize to [0, 1]
-  }
-
-  /**
-   * Determine biome based on temperature/humidity
-   * @private
-   */
-  _getBiome(temp, humidity) {
-    // Traverse all biomes, find matching one
-    for (const biome of Object.values(BIOMES)) {
-      // Skip biomes without climate config
-      if (!biome.tempRange || !biome.humidityRange)
-        continue
-
-      const tempInRange = temp >= biome.tempRange[0] && temp <= biome.tempRange[1]
-      const humidityInRange = humidity >= biome.humidityRange[0] && humidity <= biome.humidityRange[1]
-
-      if (tempInRange && humidityInRange) {
-        return biome.id
-      }
-    }
-
-    // Default biome (plains)
-    return 'plains'
-  }
-
-  /**
-   * Calculate biome blend weights (smooth transition)
-   * Returns null for single biome, otherwise returns weight object
-   * @private
-   */
-  _getBiomeWeights(temp, humidity) {
-    const candidates = []
-    const threshold = this.transitionThreshold
-
-    // Find all "nearby" biomes
-    for (const biome of Object.values(BIOMES)) {
-      // Skip biomes without climate config
-      if (!biome.tempRange || !biome.humidityRange)
-        continue
-
-      // Calculate distance to biome center
-      const tempCenter = (biome.tempRange[0] + biome.tempRange[1]) / 2
-      const humidityCenter = (biome.humidityRange[0] + biome.humidityRange[1]) / 2
-      const tempRange = (biome.tempRange[1] - biome.tempRange[0]) / 2
-      const humidityRange = (biome.humidityRange[1] - biome.humidityRange[0]) / 2
-
-      // Normalized distance (considering range size)
-      const tempDist = Math.abs(temp - tempCenter) / Math.max(tempRange, 0.1)
-      const humidityDist = Math.abs(humidity - humidityCenter) / Math.max(humidityRange, 0.1)
-      const totalDist = Math.sqrt(tempDist ** 2 + humidityDist ** 2)
-
-      if (totalDist < 1 + threshold) {
-        candidates.push({ biomeId: biome.id, dist: totalDist })
-      }
-    }
-
-    // If only one candidate, return null (single biome)
-    if (candidates.length <= 1) {
-      return null
-    }
-
-    // Convert to weights (closer = higher weight)
-    const weights = {}
-    const totalInvDist = candidates.reduce((sum, c) => sum + 1 / (c.dist + 0.01), 0)
-
-    candidates.forEach((c) => {
-      weights[c.biomeId] = (1 / (c.dist + 0.01)) / totalInvDist
+  _createSiteGrid(originX, originZ, chunkWidth) {
+    const minCellX = Math.floor(
+      (originX - this.warpStrength) / this.regionSize,
+    ) - 1
+    const maxCellX = Math.floor(
+      (originX + chunkWidth - 1 + this.warpStrength) / this.regionSize,
+    ) + 1
+    const minCellZ = Math.floor(
+      (originZ - this.warpStrength) / this.regionSize,
+    ) - 1
+    const maxCellZ = Math.floor(
+      (originZ + chunkWidth - 1 + this.warpStrength) / this.regionSize,
+    ) + 1
+    const columns = maxCellX - minCellX + 1
+    const sites = Array.from({
+      length: columns * (maxCellZ - minCellZ + 1),
     })
 
-    return weights
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+        sites[
+          (cellZ - minCellZ) * columns + cellX - minCellX
+        ] = this._getSite(cellX, cellZ)
+      }
+    }
+
+    return {
+      minCellX,
+      minCellZ,
+      columns,
+      sites,
+    }
   }
 
-  /**
-   * Clear cache (call when chunk unloads)
-   * @param {number} originX - Chunk origin X
-   * @param {number} originZ - Chunk origin Z
-   */
-  clearCache(originX, originZ) {
-    const cacheKey = `${originX},${originZ}`
-    this.biomeCache.delete(cacheKey)
+  _getSite(cellX, cellZ) {
+    const key = `${cellX},${cellZ}`
+    const cached = this.siteCache.get(key)
+    if (cached) {
+      this.siteCache.delete(key)
+      this.siteCache.set(key, cached)
+      return cached
+    }
+
+    const jitterX = (hashCoordinate(this.seed, cellX, cellZ, 0xA341316C) * 2 - 1)
+      * this.regionJitter
+    const jitterZ = (hashCoordinate(this.seed, cellX, cellZ, 0xC8013EA4) * 2 - 1)
+      * this.regionJitter
+    const x = (cellX + 0.5 + jitterX) * this.regionSize
+    const z = (cellZ + 0.5 + jitterZ) * this.regionSize
+    const temp = this.temperatureNoise.noise(
+      x / this.temperatureScale,
+      z / this.temperatureScale,
+    ) * 0.5 + 0.5
+    const humidity = this.humidityNoise.noise(
+      x / this.humidityScale,
+      z / this.humidityScale,
+    ) * 0.5 + 0.5
+    const biome = this._classifyClimate(temp, humidity)
+    const site = { cellX, cellZ, x, z, temp, humidity, biome }
+
+    this.siteCache.set(key, site)
+    while (this.siteCache.size > this.siteCacheLimit) {
+      const oldestKey = this.siteCache.keys().next().value
+      this.siteCache.delete(oldestKey)
+    }
+    return site
   }
 
-  /**
-   * Clear all cache
-   */
+  _classifyClimate(temp, humidity) {
+    const candidates = Object.values(BIOMES)
+      .map((biome) => {
+        const tempDistance = temp - biome.climate.temperature
+        const humidityDistance = humidity - biome.climate.humidity
+        return {
+          biomeId: biome.id,
+          distance: Math.hypot(tempDistance, humidityDistance),
+        }
+      })
+    candidates.sort((first, second) =>
+      first.distance - second.distance
+      || first.biomeId.localeCompare(second.biomeId),
+    )
+    return candidates[0].biomeId
+  }
+
+  _validateCoordinate(name, value) {
+    assertFinite(name, value)
+  }
+
+  generateBiomeMap(originX, originZ, chunkWidth) {
+    this._validateCoordinate('originX', originX)
+    this._validateCoordinate('originZ', originZ)
+    assertPositive('chunkWidth', chunkWidth)
+    if (!Number.isInteger(chunkWidth))
+      throw new RangeError(`chunkWidth must be an integer; received ${chunkWidth}`)
+
+    const cacheKey = `${originX},${originZ},${chunkWidth}`
+    const cached = this.biomeCache.get(cacheKey)
+    if (cached)
+      return cached
+
+    const siteGrid = this._createSiteGrid(originX, originZ, chunkWidth)
+    const biomeMap = Array.from(
+      { length: chunkWidth },
+      () => Array.from({ length: chunkWidth }),
+    )
+    for (let x = 0; x < chunkWidth; x++) {
+      for (let z = 0; z < chunkWidth; z++) {
+        biomeMap[x][z] = this._sampleBiomeAt(
+          originX + x,
+          originZ + z,
+          siteGrid,
+        )
+      }
+    }
+    this.biomeCache.set(cacheKey, biomeMap)
+    return biomeMap
+  }
+
+  getSitesInBounds(minX, minZ, maxX, maxZ) {
+    const bounds = [
+      ['minX', minX],
+      ['minZ', minZ],
+      ['maxX', maxX],
+      ['maxZ', maxZ],
+    ]
+    bounds.forEach(([name, value]) => this._validateCoordinate(name, value))
+    if (maxX < minX || maxZ < minZ)
+      throw new RangeError('Site bounds must have max >= min')
+
+    const minCellX = Math.floor(minX / this.regionSize) - 1
+    const maxCellX = Math.floor(maxX / this.regionSize) + 1
+    const minCellZ = Math.floor(minZ / this.regionSize) - 1
+    const maxCellZ = Math.floor(maxZ / this.regionSize) + 1
+    const sites = []
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+        const site = this._getSite(cellX, cellZ)
+        if (
+          site.x >= minX
+          && site.x <= maxX
+          && site.z >= minZ
+          && site.z <= maxZ
+        ) {
+          sites.push({ ...site })
+        }
+      }
+    }
+    return sites
+  }
+
+  clearCache(originX, originZ, chunkWidth) {
+    this.biomeCache.delete(`${originX},${originZ},${chunkWidth}`)
+  }
+
   clearAllCache() {
     this.biomeCache.clear()
+    this.siteCache.clear()
   }
 
-  /**
-   * Update noise parameters (requires cache clear)
-   * @param {object} params - Parameters to update
-   */
-  updateParams(params = {}) {
-    if (params.tempScale !== undefined) {
-      this.tempScale = params.tempScale
+  getCacheDiagnostics() {
+    return {
+      biomeMaps: this.biomeCache.size,
+      sites: this.siteCache.size,
+      siteLimit: this.siteCacheLimit,
     }
-    if (params.humidityScale !== undefined) {
-      this.humidityScale = params.humidityScale
-    }
-    if (params.transitionThreshold !== undefined) {
-      this.transitionThreshold = params.transitionThreshold
-    }
-
-    // Clear cache after parameter change
-    this.clearAllCache()
   }
 }

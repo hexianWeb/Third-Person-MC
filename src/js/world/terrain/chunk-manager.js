@@ -3,6 +3,7 @@
  * Step1：仅实现固定 3×3 初始化与 getBlockWorld（用于玩家碰撞/贴地）
  */
 import {
+  BIOME_PARAMS,
   CHUNK_BASIC_CONFIG,
   RENDER_PARAMS,
   TERRAIN_PARAMS,
@@ -17,6 +18,7 @@ import { SHADOW_CONFIG, shouldTerrainCastShadow } from '../../config/shadow-conf
 import Experience from '../../experience.js'
 import emitter from '../../utils/event/event-bus.js'
 import IdleQueue from '../../utils/utils/idle-queue.js'
+import { refreshBiomeGenerator } from './biome-generator-lifecycle.js'
 import BiomeGenerator from './biome-generator.js'
 import { blocks, createStagedMaterialGeneration, resources } from './blocks-config.js'
 import ChunkRenderCapacityError from './chunk-render-capacity-error.js'
@@ -61,7 +63,7 @@ export default class ChunkManager {
     }
 
     // STEP 2: 共享的群系生成器（所有 chunk 共用，确保跨 chunk 群系连贯）
-    this.biomeGenerator = new BiomeGenerator(this.seed)
+    this.biomeGenerator = new BiomeGenerator(this.seed, BIOME_PARAMS)
 
     this._statsParams = {
       totalInstances: 0,
@@ -434,13 +436,11 @@ export default class ChunkManager {
       chunk.dispose()
     })
     this.chunks.clear()
-    this.biomeGenerator.clearAllCache()
-
-    // (2) Update seed
-    if (seed !== undefined) {
-      this.seed = seed
-      this.biomeGenerator.seed = seed
-    }
+    this.seed = refreshBiomeGenerator(
+      this.biomeGenerator,
+      this.seed,
+      seed,
+    )
 
     // (3) Apply worldgen params
     this.applyWorldGenParams({ terrain, trees, water, biome })
@@ -1327,40 +1327,29 @@ export default class ChunkManager {
       expanded: false,
     })
 
-    biomeGenFolder.addBinding(this.biomeGenerator, 'tempScale', {
-      label: '温度噪声缩放',
-      min: 20,
-      max: 300,
-      step: 5,
-    }).on('change', () => {
-      if (this.biomeParams.biomeSource === 'generator') {
-        this.biomeGenerator.clearAllCache()
-        this._regenerateAllChunks()
-      }
-    })
+    const regenerateForBiomeParam = (name, value) => {
+      if (this.biomeParams.biomeSource !== 'generator')
+        return
+      this.biomeGenerator.updateParams({ [name]: value })
+      this._regenerateAllChunks()
+    }
+    const biomeGeneratorBindings = [
+      ['regionSize', '生态区域大小', 64, 256, 16],
+      ['transitionWidth', '过渡宽度', 4, 48, 1],
+      ['warpStrength', '边界扭曲', 0, 32, 1],
+      ['temperatureScale', '温度尺度', 128, 768, 16],
+      ['humidityScale', '湿度尺度', 128, 768, 16],
+    ]
 
-    biomeGenFolder.addBinding(this.biomeGenerator, 'humidityScale', {
-      label: '湿度噪声缩放',
-      min: 20,
-      max: 300,
-      step: 5,
-    }).on('change', () => {
-      if (this.biomeParams.biomeSource === 'generator') {
-        this.biomeGenerator.clearAllCache()
-        this._regenerateAllChunks()
-      }
-    })
-
-    biomeGenFolder.addBinding(this.biomeGenerator, 'transitionThreshold', {
-      label: '过渡阈值',
-      min: 0.05,
-      max: 0.5,
-      step: 0.01,
-    }).on('change', () => {
-      if (this.biomeParams.biomeSource === 'generator') {
-        this.biomeGenerator.clearAllCache()
-        this._regenerateAllChunks()
-      }
+    biomeGeneratorBindings.forEach(([name, label, min, max, step]) => {
+      biomeGenFolder.addBinding(this.biomeGenerator, name, {
+        label,
+        min,
+        max,
+        step,
+      }).on('change', ({ value }) => {
+        regenerateForBiomeParam(name, value)
+      })
     })
 
     // ===== Streaming 参数 =====

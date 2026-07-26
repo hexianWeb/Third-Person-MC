@@ -33,6 +33,18 @@ export const TERRAIN_PARAMS = {
 }
 
 // 树生成参数（影响树木生成，变更后需全量重新生成）
+// Macro biome regions modify a shared terrain profile instead of owning height noise.
+export const BIOME_PARAMS = {
+  regionSize: 128,
+  regionJitter: 0.25,
+  transitionWidth: 20,
+  warpScale: 96,
+  warpStrength: 12,
+  temperatureScale: 384,
+  humidityScale: 384,
+  siteCacheLimit: 2048,
+}
+
 export const TREE_PARAMS = {
   minHeight: 3, // 树干最小高度（方块数，范围: 1-32）
   maxHeight: 6, // 树干最大高度（方块数，范围: 1-32）

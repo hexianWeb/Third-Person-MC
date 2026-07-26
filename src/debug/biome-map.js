@@ -28,7 +28,9 @@ const FALLBACK_COLOR = [150, 150, 150]
 // ── State ──
 let generator = null
 let seed = 12345
-let displayMode = 'biome' // 'biome' | 'temperature' | 'humidity'
+let displayMode = 'biome'
+let showSites = true
+let showChunks = true
 
 // Camera state (world coords at canvas center)
 let camX = 0
@@ -55,11 +57,18 @@ function init() {
   requestAnimationFrame(renderLoop)
 }
 
+function readGeneratorOptions() {
+  return {
+    regionSize: Number(document.getElementById('ctrl-region-size').value),
+    transitionWidth: Number(document.getElementById('ctrl-transition-width').value),
+    warpStrength: Number(document.getElementById('ctrl-warp-strength').value),
+    temperatureScale: Number(document.getElementById('ctrl-temp-scale').value),
+    humidityScale: Number(document.getElementById('ctrl-humidity-scale').value),
+  }
+}
+
 function createGenerator() {
-  const tempScale = Number(document.getElementById('ctrl-temp-scale').value)
-  const humidityScale = Number(document.getElementById('ctrl-humidity-scale').value)
-  const transition = Number(document.getElementById('ctrl-transition').value) / 100
-  generator = new BiomeGenerator(seed, { tempScale, humidityScale, transitionThreshold: transition })
+  generator = new BiomeGenerator(seed, readGeneratorOptions())
   needsRedraw = true
 }
 
@@ -86,7 +95,7 @@ function drawMap() {
   const data = imgData.data
 
   // Calculate sampling step: when zoomed out far, skip pixels
-  const step = Math.max(1, Math.round(1 / zoom))
+  const step = Math.max(2, Math.round(1 / zoom))
 
   // World bounds visible on screen
   const halfW = w / 2
@@ -98,28 +107,33 @@ function drawMap() {
       const wx = Math.floor(camX + (sx - halfW) / zoom)
       const wz = Math.floor(camZ + (sy - halfH) / zoom)
 
+      const biomeData = generator.getBiomeAt(wx, wz)
       let r, g, b
 
       if (displayMode === 'biome') {
-        const biomeData = generator.getBiomeAt(wx, wz)
         const color = BIOME_COLORS[biomeData.biome] || FALLBACK_COLOR
         r = color[0]
         g = color[1]
         b = color[2]
       }
       else if (displayMode === 'temperature') {
-        const temp = generator._getTemperature(wx, wz)
         // cold=blue → hot=red
-        r = Math.floor(temp * 255)
-        g = Math.floor((1 - Math.abs(temp - 0.5) * 2) * 180)
-        b = Math.floor((1 - temp) * 255)
+        r = Math.floor(biomeData.temp * 255)
+        g = Math.floor((1 - Math.abs(biomeData.temp - 0.5) * 2) * 180)
+        b = Math.floor((1 - biomeData.temp) * 255)
+      }
+      else if (displayMode === 'humidity') {
+        // humidity: dry=yellow → wet=blue
+        r = Math.floor((1 - biomeData.humidity) * 200)
+        g = Math.floor((1 - biomeData.humidity) * 180 + biomeData.humidity * 100)
+        b = Math.floor(biomeData.humidity * 255)
       }
       else {
-        // humidity: dry=yellow → wet=blue
-        const hum = generator._getHumidity(wx, wz)
-        r = Math.floor((1 - hum) * 200)
-        g = Math.floor((1 - hum) * 180 + hum * 100)
-        b = Math.floor(hum * 255)
+        const maxWeight = Math.max(...Object.values(biomeData.weights))
+        const intensity = Math.floor(Math.min(1, (1 - maxWeight) * 2) * 255)
+        r = intensity
+        g = intensity
+        b = intensity
       }
 
       // Fill step×step block
@@ -137,13 +151,79 @@ function drawMap() {
 
   ctx.putImageData(imgData, 0, 0)
 
-  // Draw crosshair at origin
+  if (showChunks)
+    drawChunkGrid()
+  if (showSites)
+    drawBiomeSites()
   drawCrosshair()
 
   // Update status bar
   const blocksW = Math.round(w / zoom)
   const blocksH = Math.round(h / zoom)
   statusBar.textContent = `Center: (${Math.round(camX)}, ${Math.round(camZ)}) | Zoom: ${zoom.toFixed(2)}x | View: ${blocksW}×${blocksH} blocks`
+}
+
+function getVisibleWorldBounds() {
+  return {
+    minX: camX - canvas.width / (2 * zoom),
+    maxX: camX + canvas.width / (2 * zoom),
+    minZ: camZ - canvas.height / (2 * zoom),
+    maxZ: camZ + canvas.height / (2 * zoom),
+  }
+}
+
+function worldToScreen(worldX, worldZ) {
+  return {
+    x: canvas.width / 2 + (worldX - camX) * zoom,
+    y: canvas.height / 2 + (worldZ - camZ) * zoom,
+  }
+}
+
+function drawChunkGrid() {
+  const bounds = getVisibleWorldBounds()
+  const firstX = Math.ceil(bounds.minX / 64) * 64
+  const firstZ = Math.ceil(bounds.minZ / 64) * 64
+
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  for (let worldX = firstX; worldX <= bounds.maxX; worldX += 64) {
+    const { x } = worldToScreen(worldX, 0)
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, canvas.height)
+  }
+  for (let worldZ = firstZ; worldZ <= bounds.maxZ; worldZ += 64) {
+    const { y } = worldToScreen(0, worldZ)
+    ctx.moveTo(0, y)
+    ctx.lineTo(canvas.width, y)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawBiomeSites() {
+  const bounds = getVisibleWorldBounds()
+  const sites = generator.getSitesInBounds(
+    bounds.minX,
+    bounds.minZ,
+    bounds.maxX,
+    bounds.maxZ,
+  )
+
+  ctx.save()
+  ctx.lineWidth = 1
+  ctx.strokeStyle = '#fff'
+  for (const site of sites) {
+    const screen = worldToScreen(site.x, site.z)
+    const color = BIOME_COLORS[site.biome] || FALLBACK_COLOR
+    ctx.fillStyle = `rgb(${color.join(',')})`
+    ctx.beginPath()
+    ctx.arc(screen.x, screen.y, 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.restore()
 }
 
 function drawCrosshair() {
@@ -293,21 +373,28 @@ function bindControls() {
     createGenerator()
   })
 
-  // Sliders with realtime display
-  bindSlider('ctrl-temp-scale', 'val-temp-scale', (v) => {
-    generator.updateParams({ tempScale: v })
-    needsRedraw = true
+  const sliderBindings = [
+    ['ctrl-region-size', 'val-region-size', 'regionSize'],
+    ['ctrl-transition-width', 'val-transition-width', 'transitionWidth'],
+    ['ctrl-warp-strength', 'val-warp-strength', 'warpStrength'],
+    ['ctrl-temp-scale', 'val-temp-scale', 'temperatureScale'],
+    ['ctrl-humidity-scale', 'val-humidity-scale', 'humidityScale'],
+  ]
+  sliderBindings.forEach(([sliderId, valueId, parameter]) => {
+    bindSlider(sliderId, valueId, (value) => {
+      generator.updateParams({ [parameter]: value })
+      needsRedraw = true
+    })
   })
 
-  bindSlider('ctrl-humidity-scale', 'val-humidity-scale', (v) => {
-    generator.updateParams({ humidityScale: v })
+  document.getElementById('ctrl-show-sites').addEventListener('change', (event) => {
+    showSites = event.target.checked
     needsRedraw = true
   })
-
-  bindSlider('ctrl-transition', 'val-transition', (v) => {
-    generator.updateParams({ transitionThreshold: v / 100 })
+  document.getElementById('ctrl-show-chunks').addEventListener('change', (event) => {
+    showChunks = event.target.checked
     needsRedraw = true
-  }, v => (v / 100).toFixed(2))
+  })
 
   // Display mode buttons
   document.querySelectorAll('.mode-btn').forEach((btn) => {

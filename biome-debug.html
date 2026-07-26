@@ -221,21 +221,31 @@
     </div>
 
     <div class="panel-section">
-      <h3>Noise Parameters</h3>
+      <h3>Macro Biome Parameters</h3>
       <div class="control-row">
-        <label>Temp Scale</label>
-        <input type="range" id="ctrl-temp-scale" min="50" max="800" value="200" />
-        <span class="value-display" id="val-temp-scale">200</span>
+        <label>Region Size</label>
+        <input type="range" id="ctrl-region-size" min="64" max="256" step="16" value="128" />
+        <span class="value-display" id="val-region-size">128</span>
+      </div>
+      <div class="control-row">
+        <label>Transition Width</label>
+        <input type="range" id="ctrl-transition-width" min="4" max="48" value="20" />
+        <span class="value-display" id="val-transition-width">20</span>
+      </div>
+      <div class="control-row">
+        <label>Warp Strength</label>
+        <input type="range" id="ctrl-warp-strength" min="0" max="32" value="12" />
+        <span class="value-display" id="val-warp-strength">12</span>
+      </div>
+      <div class="control-row">
+        <label>Temperature Scale</label>
+        <input type="range" id="ctrl-temp-scale" min="128" max="768" step="16" value="384" />
+        <span class="value-display" id="val-temp-scale">384</span>
       </div>
       <div class="control-row">
         <label>Humidity Scale</label>
-        <input type="range" id="ctrl-humidity-scale" min="50" max="800" value="200" />
-        <span class="value-display" id="val-humidity-scale">200</span>
-      </div>
-      <div class="control-row">
-        <label>Transition</label>
-        <input type="range" id="ctrl-transition" min="0" max="50" value="15" />
-        <span class="value-display" id="val-transition">0.15</span>
+        <input type="range" id="ctrl-humidity-scale" min="128" max="768" step="16" value="384" />
+        <span class="value-display" id="val-humidity-scale">384</span>
       </div>
     </div>
 
@@ -245,6 +255,17 @@
         <button class="mode-btn active" data-mode="biome">Biome</button>
         <button class="mode-btn" data-mode="temperature">Temp</button>
         <button class="mode-btn" data-mode="humidity">Humidity</button>
+        <button class="mode-btn" data-mode="transition">Transition</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Overlays</h3>
+      <div class="control-row">
+        <label><input type="checkbox" id="ctrl-show-sites" checked /> Biome sites</label>
+      </div>
+      <div class="control-row">
+        <label><input type="checkbox" id="ctrl-show-chunks" checked /> Chunk grid</label>
       </div>
     </div>
 
