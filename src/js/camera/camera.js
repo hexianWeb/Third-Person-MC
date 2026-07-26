@@ -91,7 +91,7 @@ export default class Camera {
     // 透视相机（用于第三人称与鸟瞰透视）
     // Initial FOV (will be updated by Rig)
     this.perspectiveCamera = new THREE.PerspectiveCamera(
-      55,
+      75,
       this.sizes.width / this.sizes.height,
       0.1,
       512,

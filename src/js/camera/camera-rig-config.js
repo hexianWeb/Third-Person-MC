@@ -43,8 +43,8 @@ export const CAMERA_RIG_CONFIG = {
     // 动态 FOV 配置
     fov: {
       enabled: true,
-      baseFov: 65, // 基础 FOV
-      maxFov: 85, // 最大 FOV（高速时）
+      baseFov: 75, // 静态基础 FOV
+      maxFov: 95, // 奔跑时最大 FOV
       speedThreshold: 3.0, // 达到最大 FOV 的速度阈值
       smoothSpeed: 0.05, // FOV 变化平滑度
     },

@@ -10,15 +10,15 @@
 export const FOV_PRESETS = {
   off: {
     enabled: false,
-    baseFov: 55,
-    maxFov: 85,
+    baseFov: 75,
+    maxFov: 95,
     speedThreshold: 3.0,
     smoothSpeed: 0.05,
   },
   default: {
     enabled: true,
-    baseFov: 55,
-    maxFov: 85,
+    baseFov: 75,
+    maxFov: 95,
     speedThreshold: 3.0,
     smoothSpeed: 0.05,
   },
