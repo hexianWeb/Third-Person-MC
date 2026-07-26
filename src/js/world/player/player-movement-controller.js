@@ -56,7 +56,7 @@ export class PlayerMovementController {
 
   /**
    * 每帧更新入口
-   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,shift:boolean,v:boolean}} inputState 输入状态
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,sneak:boolean,sprint:boolean}} inputState 输入状态
    * @param {boolean} isCombatActive 是否处于战斗减速
    */
   update(inputState, isCombatActive) {
@@ -103,7 +103,7 @@ export class PlayerMovementController {
    * - 处理输入 -> 水平速度
    * - 应用重力 -> 预测位置 -> 碰撞修正
    * - 同步位置与状态
-   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,shift:boolean,v:boolean}} inputState 输入状态
+   * @param {{forward:boolean,backward:boolean,left:boolean,right:boolean,sneak:boolean,sprint:boolean}} inputState 输入状态
    * @param {boolean} isCombatActive 是否战斗减速
    */
   _updateCustomPhysics(inputState, isCombatActive) {
@@ -118,17 +118,9 @@ export class PlayerMovementController {
       this.worldVelocity.multiplyScalar(MOVEMENT_CONSTANTS.COMBAT_DECELERATION)
     }
     else {
-      let currentSpeed = this.config.speed.walk
-      let profile = 'walk'
-      if (inputState.shift) {
-        currentSpeed = this.config.speed.run
-        profile = 'run'
-      }
-      else if (inputState.v) {
-        currentSpeed = this.config.speed.crouch
-        profile = 'crouch'
-      }
-
+      const speedProfile = this.getSpeedProfile(inputState)
+      const profile = speedProfile.id
+      const currentSpeed = this.config.speed[profile]
       const dirScale = this._computeDirectionScale(profile, inputState)
       this.worldVelocity.x = worldX * currentSpeed * dirScale
       this.worldVelocity.z = worldZ * currentSpeed * dirScale
@@ -346,14 +338,14 @@ export class PlayerMovementController {
 
   /**
    * 获取动画速度档位
-   * @param {{shift:boolean,v:boolean}} inputState 输入状态
+   * @param {{sneak:boolean,sprint:boolean}} inputState 输入状态
    * @returns {LocomotionProfiles} 当前档位
    */
   getSpeedProfile(inputState) {
-    if (inputState.shift)
-      return LocomotionProfiles.RUN
-    if (inputState.v)
+    if (inputState.sneak)
       return LocomotionProfiles.CROUCH
+    if (inputState.sprint)
+      return LocomotionProfiles.RUN
     return LocomotionProfiles.WALK
   }
 

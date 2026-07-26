@@ -1,4 +1,4 @@
-import Stats from 'three/examples/jsm/libs/stats.module'
+import Stats from 'three/examples/jsm/libs/stats.module.js'
 
 export default class StatsPanel {
   constructor() {

@@ -12,12 +12,9 @@ export default class InputManager {
       backward: false,
       left: false,
       right: false,
-      shift: false,
-      v: false,
+      sneak: false,
+      sprint: false,
       space: false,
-      z: false,
-      x: false,
-      c: false,
       q: false,
       e: false,
       tab: false,
@@ -38,6 +35,7 @@ export default class InputManager {
     this._onMouseUp = this.onMouseUp.bind(this)
     this._onContextMenu = this.onContextMenu.bind(this)
     this._onWheel = this.onWheel.bind(this)
+    this._onGesture = this.onGesture.bind(this)
 
     this.init()
   }
@@ -54,12 +52,22 @@ export default class InputManager {
 
     // 阻止右键菜单（避免影响 PointerLock / 场景交互）
     window.addEventListener('contextmenu', this._onContextMenu)
+
+    // Safari 触控板捏合缩放
+    window.addEventListener('gesturestart', this._onGesture, { passive: false })
+    window.addEventListener('gesturechange', this._onGesture, { passive: false })
+    window.addEventListener('gestureend', this._onGesture, { passive: false })
   }
 
   // ==================== 键盘事件 ====================
 
   onKeyDown(event) {
     const key = event.key.toLowerCase()
+
+    // 始终拦截浏览器页面缩放快捷键（Ctrl/Cmd + +/-/0）
+    if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0', '_'].includes(key)) {
+      event.preventDefault()
+    }
 
     // 如果焦点在输入框或文本域，忽略游戏控制逻辑 (允许打字)
     if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
@@ -109,10 +117,10 @@ export default class InputManager {
         this.keys.right = isPressed
         break
       case 'shift':
-        this.keys.shift = isPressed
+        this.keys.sprint = isPressed
         break
-      case 'v':
-        this.keys.v = isPressed
+      case 'control':
+        this.keys.sneak = isPressed
         break
       case ' ':
         if (isPressed && !this.keys.space) {
@@ -120,24 +128,6 @@ export default class InputManager {
           emitter.emit('input:jump')
         }
         this.keys.space = isPressed
-        break
-      // Z/X 键保留作为备用攻击键
-      case 'z':
-        if (isPressed && !this.keys.z) {
-          emitter.emit('input:punch_straight')
-        }
-        this.keys.z = isPressed
-        break
-      case 'x':
-        if (isPressed && !this.keys.x) {
-          emitter.emit('input:punch_hook')
-        }
-        this.keys.x = isPressed
-        break
-      case 'c':
-        this.keys.c = isPressed
-        // 格挡：需要持续状态
-        emitter.emit('input:block', isPressed)
         break
       case 'q':
         if (this.keys.q !== isPressed) {
@@ -231,10 +221,19 @@ export default class InputManager {
 
   /**
    * 鼠标滚轮事件
+   * - 拦截浏览器页面缩放（Ctrl/Cmd + 滚轮）与默认滚动
+   * - 仍向游戏层广播滚轮，供相机高度等使用
    */
   onWheel(event) {
-    // 发送滚轮事件，deltaY 通常为 ±100 或类似值
+    event.preventDefault()
     emitter.emit('input:wheel', { deltaY: event.deltaY })
+  }
+
+  /**
+   * 拦截 Safari 等浏览器的触控板捏合缩放手势
+   */
+  onGesture(event) {
+    event.preventDefault()
   }
 
   // ==================== 清理 ====================
@@ -246,5 +245,8 @@ export default class InputManager {
     window.removeEventListener('mouseup', this._onMouseUp)
     window.removeEventListener('wheel', this._onWheel)
     window.removeEventListener('contextmenu', this._onContextMenu)
+    window.removeEventListener('gesturestart', this._onGesture)
+    window.removeEventListener('gesturechange', this._onGesture)
+    window.removeEventListener('gestureend', this._onGesture)
   }
 }

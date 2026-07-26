@@ -1,6 +1,6 @@
 /**
  * 解析原始输入，处理冲突并返回有效方向 + 归一化权重
- * @param {object} rawInput - { forward, backward, left, right }
+ * @param {object} rawInput - { forward, backward, left, right, sneak, sprint, space }
  * @returns {{ resolvedInput: object, weights: object }}
  */
 export function resolveDirectionInput(rawInput) {
@@ -9,8 +9,8 @@ export function resolveDirectionInput(rawInput) {
     backward: false,
     left: false,
     right: false,
-    shift: rawInput.shift,
-    v: rawInput.v,
+    sneak: rawInput.sneak,
+    sprint: rawInput.sprint,
     space: rawInput.space,
   }
 
