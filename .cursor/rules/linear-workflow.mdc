@@ -1,6 +1,6 @@
 ---
 description: Apply the Linear workflow when a request mentions Linear or an HX-{number} issue.
-globs: 
+globs:
 alwaysApply: false
 ---
 
