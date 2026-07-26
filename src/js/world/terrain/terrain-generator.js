@@ -12,6 +12,7 @@ import { computeAllBlocksAO } from './ao-calculator.js'
 import { getBiomeConfig } from './biome-config.js'
 import BiomeGenerator from './biome-generator.js'
 import { BLOCK_IDS, blocks, resources } from './blocks-config.js'
+import { getFloraSpawnDensity } from './flora-density.js'
 import {
   buildTerrainBiomeField,
   getCategoricalBiomeBlocks,
@@ -578,7 +579,7 @@ export default class TerrainGenerator {
           continue
 
         // 根据密度决定是否生成
-        if (rng.random() > floraConfig.density)
+        if (rng.random() > getFloraSpawnDensity(floraConfig.density))
           continue
 
         // 选择植物类型（根据权重）

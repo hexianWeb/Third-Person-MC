@@ -39,8 +39,6 @@ export default class BiomeGenerator {
     validateBiomeDefinitions(BIOMES)
     this.biomeCache = new Map()
     this.siteCache = new Map()
-    this._candidateSites = Array.from({ length: 9 })
-    this._candidateDistances = new Float64Array(9)
     this._biomeWeights = new Float64Array(BIOME_IDS.length)
     this._applyParams({ ...BIOME_PARAMS, ...options })
     this.setSeed(seed)
@@ -110,7 +108,6 @@ export default class BiomeGenerator {
     let nearestSite = null
     let nearestDistanceSquared = Number.POSITIVE_INFINITY
     let secondDistanceSquared = Number.POSITIVE_INFINITY
-    let candidateIndex = 0
 
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -126,9 +123,6 @@ export default class BiomeGenerator {
         const distanceX = warpedX - site.x
         const distanceZ = warpedZ - site.z
         const distanceSquared = distanceX * distanceX + distanceZ * distanceZ
-        this._candidateSites[candidateIndex] = site
-        this._candidateDistances[candidateIndex] = distanceSquared
-        candidateIndex++
 
         if (
           distanceSquared < nearestDistanceSquared
@@ -167,22 +161,34 @@ export default class BiomeGenerator {
     let temperature = 0
     let humidity = 0
 
-    for (let index = 0; index < candidateIndex; index++) {
-      const distanceSquared = this._candidateDistances[index]
-      if (distanceSquared > maximumDistanceSquared)
-        continue
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cellX = centerCellX + dx
+        const cellZ = centerCellZ + dz
+        const siteIndex = siteGrid
+          ? (cellZ - siteGrid.minCellZ) * siteGrid.columns
+          + cellX - siteGrid.minCellX
+          : -1
+        const site = siteGrid
+          ? siteGrid.sites[siteIndex]
+          : this._getSite(cellX, cellZ)
+        const distanceX = warpedX - site.x
+        const distanceZ = warpedZ - site.z
+        const distanceSquared = distanceX * distanceX + distanceZ * distanceZ
+        if (distanceSquared > maximumDistanceSquared)
+          continue
 
-      const site = this._candidateSites[index]
-      const distanceDelta = Math.sqrt(distanceSquared) - nearestDistance
-      const proximity = Math.max(0, 1 - distanceDelta / this.transitionWidth)
-      const rawWeight = proximity * proximity
-      if (rawWeight === 0)
-        continue
+        const distanceDelta = Math.sqrt(distanceSquared) - nearestDistance
+        const proximity = Math.max(0, 1 - distanceDelta / this.transitionWidth)
+        const rawWeight = proximity * proximity
+        if (rawWeight === 0)
+          continue
 
-      this._biomeWeights[BIOME_INDEX_BY_ID[site.biome]] += rawWeight
-      totalWeight += rawWeight
-      temperature += site.temp * rawWeight
-      humidity += site.humidity * rawWeight
+        this._biomeWeights[BIOME_INDEX_BY_ID[site.biome]] += rawWeight
+        totalWeight += rawWeight
+        temperature += site.temp * rawWeight
+        humidity += site.humidity * rawWeight
+      }
     }
 
     const weights = {}

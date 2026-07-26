@@ -18,7 +18,7 @@ export const CHUNK_BASIC_CONFIG = {
 // 地形生成参数（影响噪声采样，变更后需全量重新生成）
 export const TERRAIN_PARAMS = {
   scale: 168, // 地形噪声缩放，控制地形的细节程度（范围: 5-120），值越大地形越平滑
-  magnitude: 6, // 地形振幅（方块层数），控制地形起伏的高度（范围: 0-32），值越大起伏越明显
+  magnitude: 12, // 地形振幅（方块层数），控制地形起伏的高度（范围: 0-32），值越大起伏越明显
   offset: 8, // 高度偏移（方块层数），地形基准高度（范围: 0-chunkHeight），默认放在中间偏下更像平原
   // fBm 参数（分形布朗运动）
   fbm: {
@@ -31,6 +31,9 @@ export const TERRAIN_PARAMS = {
     slopeThreshold: 2, // 邻居高度差阈值
   },
 }
+
+// 群系仍决定相对疏密；全局缩放用于控制花草的整体视觉占比。
+export const FLORA_DENSITY_SCALE = 0.5
 
 // 树生成参数（影响树木生成，变更后需全量重新生成）
 // Macro biome regions modify a shared terrain profile instead of owning height noise.
