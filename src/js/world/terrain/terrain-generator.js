@@ -16,9 +16,17 @@ import { getFloraSpawnDensity } from './flora-density.js'
 import {
   buildTerrainBiomeField,
   getCategoricalBiomeBlocks,
+  selectStrataBlock,
+  selectSurfaceVariant,
 } from './terrain-biome-field.js'
 import TerrainContainer from './terrain-container.js'
 import { placeTree } from './tree-shape.js'
+
+// 地表变体与条纹层使用独立噪声通道：不同尺度 + 大偏移，与地形噪声去相关
+const SURFACE_VARIANT_NOISE_SCALE = 18
+const SURFACE_VARIANT_NOISE_OFFSET = 4096
+const STRATA_NOISE_SCALE = 24
+const STRATA_NOISE_OFFSET = 8192
 
 export default class TerrainGenerator {
   constructor(options = {}) {
@@ -196,7 +204,7 @@ export default class TerrainGenerator {
       for (let x = 0; x < width; x++) {
         const columnHeight = this.heightMap[z][x]
         const biomeData = this.biomeDataMap[z][x]
-        this._fillColumnLayers(x, z, columnHeight, biomeData)
+        this._fillColumnLayers(x, z, columnHeight, biomeData, simplex)
       }
     }
   }
@@ -295,10 +303,12 @@ export default class TerrainGenerator {
    * @param {number} z - 局部 Z 坐标
    * @param {number} surfaceHeight - 表面高度
    * @param {object} biomeData - 群系数据（包含 biome, weights）
+   * @param {object} [simplex] - Simplex 噪声实例（地表变体 / 条纹层）
    */
-  _fillColumnLayers(x, z, surfaceHeight, biomeData = null) {
+  _fillColumnLayers(x, z, surfaceHeight, biomeData = null, simplex = null) {
     // 获取群系 ID（兼容旧调用方式）
     const biomeId = biomeData?.biome || this.biomeMap[z][x]
+    const biomeConfig = getBiomeConfig(biomeId)
 
     const soilDepth = Math.max(1, this.params.soilDepth)
     const stoneStart = Math.max(0, surfaceHeight - soilDepth)
@@ -319,6 +329,33 @@ export default class TerrainGenerator {
     const subsurfaceBlockId = columnBlocks.subsurface
     const deepBlockId = columnBlocks.deep
 
+    // 地表变体与条纹层（仅陆地列，且配置存在时）
+    const wx = this.origin.x + x
+    const wz = this.origin.z + z
+    const surfaceVariants = !isUnderwater && !isShore
+      ? biomeConfig?.blocks?.surfaceVariants
+      : null
+    const strata = !isUnderwater && !isShore
+      ? biomeConfig?.strata
+      : null
+
+    let variantNoise = 0
+    let strataNoise = 0
+    if (simplex && (surfaceVariants || strata)) {
+      if (surfaceVariants) {
+        variantNoise = simplex.noise(
+          (wx + SURFACE_VARIANT_NOISE_OFFSET) / SURFACE_VARIANT_NOISE_SCALE,
+          (wz + SURFACE_VARIANT_NOISE_OFFSET) / SURFACE_VARIANT_NOISE_SCALE,
+        )
+      }
+      if (strata) {
+        strataNoise = simplex.noise(
+          (wx + STRATA_NOISE_OFFSET) / STRATA_NOISE_SCALE,
+          (wz + STRATA_NOISE_OFFSET) / STRATA_NOISE_SCALE,
+        )
+      }
+    }
+
     // 1. 深层：统一填充石头（或其他深层块）
     for (let y = 0; y <= stoneStart; y++) {
       this.container.setBlockId(x, y, z, deepBlockId)
@@ -327,12 +364,21 @@ export default class TerrainGenerator {
     // 2. 表层与地表
     for (let y = stoneStart + 1; y <= surfaceHeight; y++) {
       if (y === surfaceHeight) {
-        this.container.setBlockId(x, y, z, surfaceBlockId)
+        // 地表方块：变体斑块优先，其次条纹层，最后默认地表
+        let topBlockId = surfaceBlockId
+        if (surfaceVariants)
+          topBlockId = selectSurfaceVariant(surfaceVariants, variantNoise)
+        else if (strata)
+          topBlockId = selectStrataBlock(strata, y, strataNoise)
+        this.container.setBlockId(x, y, z, topBlockId)
       }
       else {
         // 坡面裸岩判定（仅限非水域/沙滩的表层）
         if (!isUnderwater && !isShore && this._isRockExposed(x, y, z, surfaceHeight)) {
           this.container.setBlockId(x, y, z, BLOCK_IDS.STONE)
+        }
+        else if (strata) {
+          this.container.setBlockId(x, y, z, selectStrataBlock(strata, y, strataNoise))
         }
         else {
           this.container.setBlockId(x, y, z, subsurfaceBlockId)

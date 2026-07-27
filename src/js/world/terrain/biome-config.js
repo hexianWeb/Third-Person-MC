@@ -257,6 +257,11 @@ export const BIOMES = {
       surface: BLOCK_IDS.TERRACOTTA,
       subsurface: BLOCK_IDS.TERRACOTTA,
       deep: BLOCK_IDS.STONE,
+      // 水下与水岸使用红沙（Task 3 先行，Task 5 再补全其余丰富化字段）
+      underwater: {
+        surface: BLOCK_IDS.RED_SAND,
+        subsurface: BLOCK_IDS.RED_SAND,
+      },
     },
     vegetation: {
       enabled: false, // 无植被
@@ -292,6 +297,11 @@ export const BIOMES = {
       surface: BLOCK_IDS.ICE,
       subsurface: BLOCK_IDS.GRAVEL, // 水下使用沙砾
       deep: BLOCK_IDS.PACKED_ICE,
+      // 水下地表使用沙砾（Task 3 先行）
+      underwater: {
+        surface: BLOCK_IDS.GRAVEL,
+        subsurface: BLOCK_IDS.GRAVEL,
+      },
     },
     vegetation: {
       enabled: false, // 无树

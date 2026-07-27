@@ -4,7 +4,14 @@ import test from 'node:test'
 import {
   blendBiomeTerrainShape,
   calculateBiomeTerrainHeight,
+  validateBiomeDefinitions,
 } from '../../src/js/world/terrain/biome-terrain-profile.js'
+import { BLOCK_IDS } from '../../src/js/world/terrain/blocks-config.js'
+import {
+  getCategoricalBiomeBlocks,
+  selectStrataBlock,
+  selectSurfaceVariant,
+} from '../../src/js/world/terrain/terrain-biome-field.js'
 
 const SHAPED_BIOMES = {
   FLAT: {
@@ -83,4 +90,60 @@ test('plateau shaping quantizes noise into terraces', () => {
   assert.ok(high - low >= 2, `expected a terrace jump, got ${low} -> ${high}`)
   assert.ok(Math.abs(mid - high) <= 2 || high > mid)
   assert.ok(heightAt(1) <= 63 && heightAt(-1) >= 0)
+})
+
+test('surface variant buckets noise by cumulative weight', () => {
+  const variants = [
+    { blockId: BLOCK_IDS.ICE, weight: 3 },
+    { blockId: BLOCK_IDS.SNOW, weight: 1 },
+  ]
+  assert.equal(selectSurfaceVariant(variants, -0.5), BLOCK_IDS.ICE)
+  assert.equal(selectSurfaceVariant(variants, 0.9), BLOCK_IDS.SNOW)
+  assert.throws(() => selectSurfaceVariant([], 0), RangeError)
+  assert.throws(
+    () => selectSurfaceVariant([{ blockId: 1, weight: 0 }], 0),
+    RangeError,
+  )
+})
+
+test('strata bands cycle by height with wrap-around', () => {
+  const strata = { bands: [10, 11], bandHeight: 2, noiseAmplitude: 0 }
+  assert.equal(selectStrataBlock(strata, 0, 0), 10)
+  assert.equal(selectStrataBlock(strata, 2, 0), 11)
+  assert.equal(selectStrataBlock(strata, 4, 0), 10)
+  assert.equal(selectStrataBlock(strata, -1, 0), 11)
+  assert.throws(() => selectStrataBlock({ bands: [] }, 0, 0), RangeError)
+})
+
+test('underwater blocks use biome override when declared', () => {
+  assert.equal(
+    getCategoricalBiomeBlocks({ dominantBiome: 'badlands', underwater: true, shore: false }).surface,
+    BLOCK_IDS.RED_SAND,
+  )
+  assert.equal(
+    getCategoricalBiomeBlocks({ dominantBiome: 'frozenOcean', underwater: true, shore: false }).surface,
+    BLOCK_IDS.GRAVEL,
+  )
+  assert.equal(
+    getCategoricalBiomeBlocks({ dominantBiome: 'desert', underwater: true, shore: false }).surface,
+    BLOCK_IDS.SAND,
+  )
+})
+
+test('biome validation rejects malformed variants and strata', () => {
+  const base = {
+    id: 'x',
+    climate: { temperature: 0.5, humidity: 0.5 },
+    terrainParams: { heightOffset: 0, roughness: 1 },
+    blocks: { surface: 1, subsurface: 2, deep: 3 },
+  }
+  assert.throws(() => validateBiomeDefinitions({
+    X: { ...base, blocks: { ...base.blocks, surfaceVariants: [] } },
+  }), RangeError)
+  assert.throws(() => validateBiomeDefinitions({
+    X: { ...base, strata: { bands: [], bandHeight: 4 } },
+  }), RangeError)
+  assert.throws(() => validateBiomeDefinitions({
+    X: { ...base, terrainParams: { ...base.terrainParams, shape: { type: 'spiral' } } },
+  }), RangeError)
 })

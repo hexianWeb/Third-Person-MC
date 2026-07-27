@@ -3,6 +3,10 @@ import { getBiomeConfig } from './biome-config.js'
 import { calculateBiomeTerrainHeight } from './biome-terrain-profile.js'
 import { BLOCK_IDS } from './blocks-config.js'
 
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value))
+}
+
 /**
  * Build height and biome maps while preserving the generator's [x][z] contract.
  *
@@ -102,9 +106,10 @@ export function getCategoricalBiomeBlocks({
     throw new RangeError(`Unknown biome "${dominantBiome}"`)
 
   if (underwater || shore) {
+    const underwaterBlocks = biome.blocks.underwater
     return {
-      surface: BLOCK_IDS.SAND,
-      subsurface: BLOCK_IDS.SAND,
+      surface: underwaterBlocks?.surface ?? BLOCK_IDS.SAND,
+      subsurface: underwaterBlocks?.subsurface ?? underwaterBlocks?.surface ?? BLOCK_IDS.SAND,
       deep: biome.blocks.deep || BLOCK_IDS.STONE,
     }
   }
@@ -114,4 +119,50 @@ export function getCategoricalBiomeBlocks({
     subsurface: biome.blocks.subsurface || BLOCK_IDS.STONE,
     deep: biome.blocks.deep || BLOCK_IDS.STONE,
   }
+}
+
+/**
+ * Pick one surface block from weighted variants using a low-frequency noise
+ * value, so variants form coherent patches instead of per-block scatter.
+ *
+ * @param {Array<{ blockId: number, weight: number }>} variants
+ * @param {number} noiseValue Simplex noise in [-1, 1]
+ * @returns {number} Selected block ID
+ */
+export function selectSurfaceVariant(variants, noiseValue) {
+  if (!Array.isArray(variants) || variants.length === 0)
+    throw new RangeError('surfaceVariants must be a non-empty array')
+
+  const totalWeight = variants.reduce((sum, variant) => sum + variant.weight, 0)
+  if (totalWeight <= 0)
+    throw new RangeError('surfaceVariants weights must sum to a positive value')
+
+  const target = ((clamp(noiseValue, -1, 1) + 1) / 2) * totalWeight
+  let cumulative = 0
+  for (const variant of variants) {
+    cumulative += variant.weight
+    if (target < cumulative)
+      return variant.blockId
+  }
+  return variants[variants.length - 1].blockId
+}
+
+/**
+ * Pick a strata band block for one Y level. Bands cycle with wrap-around and
+ * are vertically perturbed by noise so layers look natural.
+ *
+ * @param {{ bands: number[], bandHeight?: number, noiseAmplitude?: number }} strata
+ * @param {number} y Block Y coordinate
+ * @param {number} noiseValue Simplex noise in [-1, 1]
+ * @returns {number} Band block ID
+ */
+export function selectStrataBlock(strata, y, noiseValue) {
+  const bands = strata?.bands
+  if (!Array.isArray(bands) || bands.length === 0)
+    throw new RangeError('strata.bands must be a non-empty array')
+
+  const bandHeight = Math.max(1, strata.bandHeight ?? 4)
+  const shifted = y + clamp(noiseValue, -1, 1) * (strata.noiseAmplitude ?? 6)
+  const band = Math.floor(shifted / bandHeight)
+  return bands[((band % bands.length) + bands.length) % bands.length]
 }

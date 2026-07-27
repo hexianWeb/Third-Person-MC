@@ -27,6 +27,30 @@ export function validateBiomeDefinitions(biomeDefinitions) {
       throw new TypeError(`Biome "${biome.id}" contains a non-finite profile value`)
     if (temperature < 0 || temperature > 1 || humidity < 0 || humidity > 1)
       throw new RangeError(`Biome "${biome.id}" climate anchors must be between 0 and 1`)
+
+    const surfaceVariants = biome.blocks?.surfaceVariants
+    if (surfaceVariants !== undefined) {
+      if (!Array.isArray(surfaceVariants) || surfaceVariants.length === 0)
+        throw new RangeError(`Biome "${biome.id}" surfaceVariants must be a non-empty array`)
+      for (const variant of surfaceVariants) {
+        if (!Number.isInteger(variant.blockId))
+          throw new TypeError(`Biome "${biome.id}" surfaceVariants blockId must be an integer`)
+        if (!Number.isFinite(variant.weight) || variant.weight <= 0)
+          throw new RangeError(`Biome "${biome.id}" surfaceVariants weight must be positive`)
+      }
+    }
+
+    const strata = biome.strata
+    if (strata !== undefined) {
+      if (!Array.isArray(strata.bands) || strata.bands.length === 0)
+        throw new RangeError(`Biome "${biome.id}" strata.bands must be a non-empty array`)
+      if (!Number.isInteger(strata.bandHeight) || strata.bandHeight < 1)
+        throw new RangeError(`Biome "${biome.id}" strata.bandHeight must be an integer >= 1`)
+    }
+
+    const shape = biome.terrainParams?.shape
+    if (shape !== undefined && shape.type !== 'plateau' && shape.type !== 'ridged')
+      throw new RangeError(`Biome "${biome.id}" terrainParams.shape.type must be "plateau" or "ridged"`)
   }
 }
 
