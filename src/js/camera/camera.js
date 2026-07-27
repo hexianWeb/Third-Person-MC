@@ -106,10 +106,15 @@ export default class Camera {
 
   setControls() {
     if (this.orbitControls) {
-      this.orbitControls.dispose()
+      // three 新版 dispose 要求 domElement 仍存在，做判空保护
+      if (this.orbitControls.domElement) {
+        this.orbitControls.dispose()
+      }
+      this.orbitControls = null
     }
     if (this.trackballControls) {
       this.trackballControls.dispose()
+      this.trackballControls = null
     }
 
     // OrbitControls 设置（默认绑定当前相机）
