@@ -196,6 +196,22 @@ export default [
     type: 'texture',
     path: 'textures/blocks/ice_packed.png',
   },
+  // ===== 蓝冰 / 白陶瓦 / 橙陶瓦（体素方块）=====
+  {
+    name: 'blueIce_Texture',
+    type: 'texture',
+    path: 'textures/blocks/blue_ice.png',
+  },
+  {
+    name: 'whiteTerracotta_Texture',
+    type: 'texture',
+    path: 'textures/blocks/white_terracotta.png',
+  },
+  {
+    name: 'orangeTerracotta_Texture',
+    type: 'texture',
+    path: 'textures/blocks/orange_terracotta.png',
+  },
   // ===== 砂砾 （体素方块）=====
   {
     name: 'gravel_Texture',

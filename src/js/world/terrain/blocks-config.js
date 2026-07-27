@@ -57,6 +57,11 @@ export const BLOCK_IDS = {
   // 合成系统新增
   OAK_PLANKS: 22,
   CRAFTING_TABLE: 23,
+  // 群系丰富化新增
+  BLUE_ICE: 24,
+  RED_TERRACOTTA: 25,
+  WHITE_TERRACOTTA: 26,
+  ORANGE_TERRACOTTA: 27,
 }
 
 // 植物 ID 常量（使用 200+ 区间与方块区分）
@@ -316,6 +321,39 @@ export const blocks = {
       top: 'craftingTable_TopTexture',
       bottom: 'oakPlanks_Texture',
       side: 'craftingTable_FrontTexture',
+    },
+  },
+  // ===== 群系丰富化新增 =====
+  blueIce: {
+    id: BLOCK_IDS.BLUE_ICE,
+    name: 'blue_ice',
+    visible: true,
+    textureKeys: {
+      all: 'blueIce_Texture',
+    },
+  },
+  redTerracotta: {
+    id: BLOCK_IDS.RED_TERRACOTTA,
+    name: 'red_terracotta',
+    visible: true,
+    textureKeys: {
+      all: 'terracotta_red', // 已在 sources.js 中加载
+    },
+  },
+  whiteTerracotta: {
+    id: BLOCK_IDS.WHITE_TERRACOTTA,
+    name: 'white_terracotta',
+    visible: true,
+    textureKeys: {
+      all: 'whiteTerracotta_Texture',
+    },
+  },
+  orangeTerracotta: {
+    id: BLOCK_IDS.ORANGE_TERRACOTTA,
+    name: 'orange_terracotta',
+    visible: true,
+    textureKeys: {
+      all: 'orangeTerracotta_Texture',
     },
   },
 }
