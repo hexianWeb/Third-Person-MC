@@ -31,6 +31,15 @@ export const CAMERA_RIG_CONFIG = {
     transitionDuration: 0.35, // 过渡时间 (秒)
   },
 
+  // ===== 第一人称配置 =====
+  firstPerson: {
+    eyeHeight: 1.62, // 视点相对脚底高度（MC 眼高）
+    forwardOffset: 0.15, // 相机沿视线前移，避免近裁剪面切到自身模型
+    pitchSensitivity: 0.0035, // 鼠标俯仰灵敏度（弧度/像素）
+    pitchMin: -Math.PI / 2 + 0.02, // 最大下俯
+    pitchMax: Math.PI / 2 - 0.02, // 最大上仰
+  },
+
   // ===== Tracking Shot 配置 =====
   trackingShot: {
     // 望远镜配置

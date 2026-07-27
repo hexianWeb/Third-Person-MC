@@ -151,6 +151,12 @@ export default class InputManager {
         }
         this.keys.r = isPressed
         break
+      case 'v':
+        if (isPressed && !this.keys.v) {
+          emitter.emit('input:toggle_first_person')
+        }
+        this.keys.v = isPressed
+        break
       case '`':
       case '·':
         this.keys.backtick = isPressed
