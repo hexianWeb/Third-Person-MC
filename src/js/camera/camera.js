@@ -22,9 +22,10 @@ export default class Camera {
     this.cameraHelper = null
     this.cameraHelperVisible = false
 
-    // 视角模式枚举（仅保留第三人称与鸟瞰）
+    // 视角模式枚举
     this.cameraModes = {
       THIRD_PERSON: 'third-person',
+      FIRST_PERSON: 'first-person',
       BIRD_PERSPECTIVE: 'bird-perspective',
     }
     this.currentMode = null
@@ -64,6 +65,9 @@ export default class Camera {
     emitter.on('input:toggle_camera_side', () => {
       this.toggleSide()
     })
+    emitter.on('input:toggle_first_person', () => {
+      this.toggleFirstPerson()
+    })
     emitter.on('terrain:data-ready', () => {
       this._terrainInfo = this._getTerrainInfo()
       if (this.currentMode !== this.cameraModes.THIRD_PERSON) {
@@ -85,6 +89,16 @@ export default class Camera {
       return
 
     this.rig.toggleSide()
+  }
+
+  /**
+   * 第一/第三人称互切（V 键）
+   */
+  toggleFirstPerson() {
+    const next = this.currentMode === this.cameraModes.FIRST_PERSON
+      ? this.cameraModes.THIRD_PERSON
+      : this.cameraModes.FIRST_PERSON
+    this.switchMode(next)
   }
 
   setInstances() {
@@ -166,8 +180,16 @@ export default class Camera {
       // 第三人称跟随：禁用 Orbit，使用自定义逻辑
       this.orbitControls.enabled = false
       this.trackballControls.enabled = false
+      this.rig?.setFirstPerson(false)
+    }
+    else if (mode === this.cameraModes.FIRST_PERSON) {
+      // 第一人称：禁用 Orbit，由 Rig 输出头部位姿
+      this.orbitControls.enabled = false
+      this.trackballControls.enabled = false
+      this.rig?.setFirstPerson(true)
     }
     else if (mode === this.cameraModes.BIRD_PERSPECTIVE) {
+      this.rig?.setFirstPerson(false)
       // 鸟瞰透视：启用 Orbit，允许旋转/缩放
       this._configureBirdViewOrbit()
       this._applyTopViewPlacement()
@@ -265,7 +287,11 @@ export default class Camera {
   }
 
   _translateMode(mode) {
-    return mode === this.cameraModes.THIRD_PERSON ? '第三人称' : '鸟瞰透视'
+    if (mode === this.cameraModes.THIRD_PERSON)
+      return '第三人称'
+    if (mode === this.cameraModes.FIRST_PERSON)
+      return '第一人称'
+    return '鸟瞰透视'
   }
 
   // #region
@@ -291,6 +317,12 @@ export default class Camera {
         title: '第三人称',
       }).on('click', () => {
         this.switchMode(this.cameraModes.THIRD_PERSON)
+      })
+
+      modeFolder.addButton({
+        title: '第一人称',
+      }).on('click', () => {
+        this.switchMode(this.cameraModes.FIRST_PERSON)
       })
 
       modeFolder.addButton({
@@ -437,7 +469,7 @@ export default class Camera {
    * @param {THREE.Vector3} desiredCameraPos - 錨點計算出的理想相機位置
    */
   _applyTerrainAdaptation(desiredCameraPos) {
-    if (!this.terrainAdapt.enabled || (this.rig && this.rig.isInCave)) {
+    if (!this.terrainAdapt.enabled || (this.rig && this.rig.isInCave) || this.rig?.isFirstPerson) {
       this._adaptiveY = desiredCameraPos.y
       return desiredCameraPos
     }
