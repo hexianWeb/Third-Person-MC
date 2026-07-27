@@ -130,6 +130,10 @@ export default class Player {
     this._handleSkinChange = this._handleSkinChange.bind(this)
     emitter.on('skin:changed', this._handleSkinChange)
 
+    // 第一人称切换：隐藏/恢复头部
+    this._handleFirstPersonChanged = this._handleFirstPersonChanged.bind(this)
+    emitter.on('camera:first-person-changed', this._handleFirstPersonChanged)
+
     // Shadow quality event listener
     this._handleShadowQuality = this._handleShadowQuality.bind(this)
     emitter.on('shadow:quality-changed', this._handleShadowQuality)
@@ -292,6 +296,40 @@ export default class Player {
         child.material.opacity = value
       }
     })
+  }
+
+  /**
+   * 第一人称切换事件处理
+   * @param {{ active: boolean }} payload
+   */
+  _handleFirstPersonChanged({ active }) {
+    this.setFirstPersonMode(active)
+  }
+
+  /**
+   * 第一人称模式：将 Head 骨骼缩放为 0 隐藏头部（蒙皮网格随骨骼塌陷），退出时恢复
+   * @param {boolean} active
+   */
+  setFirstPersonMode(active) {
+    if (!this._headBone && !this._headBoneSearched) {
+      this._headBoneSearched = true
+      this._headBone = this.model.getObjectByName('Head') || null
+      if (this._headBone) {
+        this._headBoneOriginalScale = this._headBone.scale.clone()
+      }
+    }
+    if (!this._headBone) {
+      return
+    }
+
+    if (active) {
+      this._headBone.scale.set(0, 0, 0)
+    }
+    else if (this._headBoneOriginalScale) {
+      this._headBone.scale.copy(this._headBoneOriginalScale)
+      // 兜底：退出第一人称时恢复不透明度（避免洞内半透明残留）
+      this.setOpacity(1.0)
+    }
   }
 
   /**
@@ -903,6 +941,7 @@ export default class Player {
     // 先使在途 _applySkinById 失效，避免 dispose 后异步回调再次贴图
     this._skinRequestId++
     emitter.off('skin:changed', this._handleSkinChange)
+    emitter.off('camera:first-person-changed', this._handleFirstPersonChanged)
     if (this._activeSkinTexture?.owned)
       disposeOwnedSkinTexture(this._activeSkinTexture.texture)
     this._activeSkinTexture = null
