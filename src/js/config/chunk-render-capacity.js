@@ -26,11 +26,16 @@ export const BLOCK_INSTANCE_CAPACITY = Object.freeze({
   // 合成系统：玩家放置方块（容量按树干量级）
   oakPlanks: 1024,
   craftingTable: 1024,
+  // 群系丰富化：蓝冰（冰刺核心，少量）与陶瓦变体（恶地条纹层，按地表量级）
+  blueIce: 1024,
+  redTerracotta: 4096,
+  whiteTerracotta: 4096,
+  orangeTerracotta: 4096,
 })
 
 export const PLANT_INSTANCE_CAPACITY = 512
-// 14 slots × (Σ blockCap × 68B + plantCap × 64B)；较基线 +2×1024 方块容量
-export const FIXED_INSTANCE_BUFFER_BYTES = 65544192
+// 14 slots × (Σ blockCap × 68B + plantCap × 64B + waterMesh 4096 × 64B)
+export const FIXED_INSTANCE_BUFFER_BYTES = 78217216
 
 /**
  * 检查区块视距是否符合固定渲染策略。
