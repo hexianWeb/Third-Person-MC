@@ -48,4 +48,11 @@ export const PLAYER_CONFIG = {
     fadeOutSpeed: 3.0,
     targetOpacity: 0.8,
   },
+  // 第一人称手部模型（挂在相机容器下，仅第一人称可见）
+  firstPersonHand: {
+    // 相机局部空间偏移：模型原点在脚底，手臂约 1.4 高，需下移并略微前移
+    offset: { x: 0, y: -1.45, z: 0.2 },
+    rotationY: Math.PI, // 与本体约定一致：旋转 PI 后面向 -Z（视线方向）
+    scale: 1.0,
+  },
 }

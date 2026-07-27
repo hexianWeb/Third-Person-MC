@@ -39,6 +39,12 @@ export default [
     type: 'gltfModel',
     path: 'models/character/player.glb',
   },
+  // 第一人称手部模型（仅手臂几何，动画与 player.glb 同名）
+  {
+    name: 'playerHandModel',
+    type: 'gltfModel',
+    path: 'models/character/player_hand.glb',
+  },
   {
     name: 'steveSkinTexture',
     type: 'texture',

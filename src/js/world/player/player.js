@@ -20,6 +20,7 @@ import {
   timeScaleConfig,
 } from './animation-config.js'
 import { resolveAirSwingAnimation } from './attack-animation-resolver.js'
+import FirstPersonHand from './first-person-hand.js'
 import HeldItemAttachment from './held-item-attachment.js'
 import { resolveDirectionInput } from './input-resolver.js'
 import { PlayerAnimationController } from './player-animation-controller.js'
@@ -124,6 +125,12 @@ export default class Player {
     // Animation Controller needs model
     this.animation = new PlayerAnimationController(this.model, this.resource.animations)
 
+    // 第一人称手部模型：挂在相机下，动画与本体状态机同步
+    const handGltf = this.resources.items.playerHandModel
+    this.firstPersonHand = handGltf
+      ? new FirstPersonHand(handGltf, this.config.firstPersonHand)
+      : null
+
     this.setupInputListeners()
 
     // 监听皮肤变更事件（保留绑定引用以便 destroy 时 off）
@@ -222,6 +229,8 @@ export default class Player {
 
       const previous = this._activeSkinTexture
       applySkinTextureToLayers(this._bodyLayers, prepared.texture)
+      // 第一人称手部同步换肤
+      this.firstPersonHand?.applySkin(prepared.texture)
       this._activeSkinTexture = prepared
       if (previous?.owned)
         disposeOwnedSkinTexture(previous.texture)
@@ -304,13 +313,53 @@ export default class Player {
    */
   _handleFirstPersonChanged({ active }) {
     this.setFirstPersonMode(active)
+    this.firstPersonHand?.setActive(active)
   }
 
   /**
-   * 第一人称模式：将 Head 骨骼缩放为 0 隐藏头部（蒙皮网格随骨骼塌陷），退出时恢复
+   * 第一人称模式：
+   * - 有手部模型时：主相机层（Layer 0）隐藏全身本体，改由手部模型呈现；
+   *   HUD 预览相机只渲染 Layer 1，不受影响
+   * - 无手部模型时：回退为将 Head 骨骼缩放为 0 隐藏头部
    * @param {boolean} active
    */
   setFirstPersonMode(active) {
+    if (this.firstPersonHand) {
+      // 先切换挂载目标，再调整本体可见性，避免 _setBodyMainLayerVisible 误伤工具 mesh 的 Layer
+      this.heldItemAttachment?.attach(active ? this.firstPersonHand.model : this.model)
+      this._setBodyMainLayerVisible(!active)
+    }
+    else {
+      this._setHeadBoneHidden(active)
+    }
+
+    if (!active) {
+      this.setOpacity(1.0)
+    }
+  }
+
+  /**
+   * 切换全身网格对主相机（Layer 0）的可见性，Layer 1（预览）保持不变
+   * @param {boolean} visible
+   */
+  _setBodyMainLayerVisible(visible) {
+    this.model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (visible) {
+          child.layers.enable(0)
+        }
+        else {
+          child.layers.disable(0)
+        }
+      }
+    })
+  }
+
+  /**
+   * 将 Head 骨骼缩放为 0 隐藏头部（蒙皮网格随骨骼塌陷），退出时恢复
+   * @param {boolean} hidden
+   */
+  _setHeadBoneHidden(hidden) {
     if (!this._headBone && !this._headBoneSearched) {
       this._headBoneSearched = true
       this._headBone = this.model.getObjectByName('Head') || null
@@ -322,13 +371,11 @@ export default class Player {
       return
     }
 
-    if (active) {
+    if (hidden) {
       this._headBone.scale.set(0, 0, 0)
     }
     else if (this._headBoneOriginalScale) {
       this._headBone.scale.copy(this._headBoneOriginalScale)
-      // 兜底：退出第一人称时恢复不透明度（避免洞内半透明残留）
-      this.setOpacity(1.0)
     }
   }
 
@@ -385,6 +432,7 @@ export default class Player {
     )
     this._airSwingSequenceIndex = nextIndex
     this.animation.triggerAttack(clip)
+    this.firstPersonHand?.triggerAttack(clip)
     this.handleAttack()
   }
 
@@ -401,6 +449,7 @@ export default class Player {
       if (this.movement.isGrounded && this.animation.stateMachine.currentState.name !== AnimationStates.COMBAT) {
         this.movement.jump()
         this.animation.triggerJump()
+        this.firstPersonHand?.triggerJump()
       }
     })
 
@@ -411,16 +460,19 @@ export default class Player {
     emitter.on('game:mining-start', () => {
       this.isMining = true
       this.animation.triggerAttack(AnimationClips.QUICK_COMBO)
+      this.firstPersonHand?.triggerAttack(AnimationClips.QUICK_COMBO)
     })
 
     emitter.on('game:mining-cancel', () => {
       this.isMining = false
       this.animation.stateMachine.setState(AnimationStates.LOCOMOTION)
+      this.firstPersonHand?.animation.stateMachine.setState(AnimationStates.LOCOMOTION)
     })
 
     emitter.on('game:mining-complete', () => {
       this.isMining = false
       this.animation.stateMachine.setState(AnimationStates.LOCOMOTION)
+      this.firstPersonHand?.animation.stateMachine.setState(AnimationStates.LOCOMOTION)
     })
 
     // ==================== 望远镜事件 ====================
@@ -634,6 +686,8 @@ export default class Player {
 
     // Update Animation
     this.animation.update(this.time.delta, playerState)
+    // 第一人称手部：同输入同步驱动，保持与本体状态一致
+    this.firstPersonHand?.update(this.time.delta, playerState)
 
     // ==================== 速度线控制 ====================
     this.updateSpeedLines(effectiveInput)
@@ -709,6 +763,7 @@ export default class Player {
 
   debugInit() {
     this.heldItemAttachment?.debugInit(this.debugFolder)
+    this.firstPersonHand?.debugInit(this.debugFolder)
 
     // ===== 朝向控制 =====
     this.debugFolder.addBinding(this.config, 'facingAngle', {
@@ -934,6 +989,9 @@ export default class Player {
   destroy() {
     this.heldItemAttachment?.destroy()
     this.heldItemAttachment = null
+
+    this.firstPersonHand?.destroy()
+    this.firstPersonHand = null
 
     emitter.off('hud:selected-block-update', this._onSelectedBlockUpdate)
     emitter.off('input:air_swing', this._handleAirSwing)
