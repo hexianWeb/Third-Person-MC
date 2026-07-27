@@ -251,23 +251,64 @@ export const BIOMES = {
     terrainParams: {
       heightOffset: 2, // 较高
       roughness: 1.35,
+      // 平顶山塑形：阶梯量化噪声，形成台地 + 陡崖
+      shape: { type: 'plateau', levels: 4, amount: 1 },
     },
     blocks: {
-      // 恶地使用陶瓦或红沙（随机选择，这里先使用陶瓦，后续可扩展）
       surface: BLOCK_IDS.TERRACOTTA,
       subsurface: BLOCK_IDS.TERRACOTTA,
       deep: BLOCK_IDS.STONE,
-      // 水下与水岸使用红沙（Task 3 先行，Task 5 再补全其余丰富化字段）
+      // 地表变体：陶瓦 + 红沙斑块
+      surfaceVariants: [
+        { blockId: BLOCK_IDS.TERRACOTTA, weight: 7 },
+        { blockId: BLOCK_IDS.RED_SAND, weight: 3 },
+      ],
+      // 水下与水岸使用红沙
       underwater: {
         surface: BLOCK_IDS.RED_SAND,
         subsurface: BLOCK_IDS.RED_SAND,
       },
     },
+    // 陶瓦条纹层：红黄白橙按高度成带，噪声扰动层界
+    strata: {
+      bands: [
+        BLOCK_IDS.RED_TERRACOTTA,
+        BLOCK_IDS.ORANGE_TERRACOTTA,
+        BLOCK_IDS.TERRACOTTA, // 黄
+        BLOCK_IDS.WHITE_TERRACOTTA,
+      ],
+      bandHeight: 4,
+      noiseAmplitude: 6,
+    },
     vegetation: {
-      enabled: false, // 无植被
-      density: 0,
-      types: [],
-      allowedSurface: [],
+      enabled: true,
+      density: 0.08, // 稀疏枯树与仙人掌
+      types: [
+        {
+          type: 'deadTree',
+          shape: 'none',
+          weight: 3,
+          trunkBlock: BLOCK_IDS.TREE_TRUNK,
+          leavesBlock: null, // 枯树无叶
+          heightRange: [2, 4],
+        },
+        {
+          type: 'cactus',
+          shape: 'none',
+          weight: 2,
+          trunkBlock: BLOCK_IDS.CACTUS,
+          leavesBlock: null,
+          heightRange: [1, 3],
+          allowedSurface: [BLOCK_IDS.RED_SAND], // 仙人掌仅长在红沙斑块
+        },
+      ],
+      allowedSurface: [
+        BLOCK_IDS.TERRACOTTA,
+        BLOCK_IDS.RED_TERRACOTTA,
+        BLOCK_IDS.ORANGE_TERRACOTTA,
+        BLOCK_IDS.WHITE_TERRACOTTA,
+        BLOCK_IDS.RED_SAND,
+      ],
     },
     // 恶地植物配置（枯草和死灌木）
     flora: {
@@ -277,7 +318,13 @@ export const BIOMES = {
         { type: 'deadBush', plantId: PLANT_IDS.DEAD_BUSH, weight: 1 },
         { type: 'shortDryGrass', plantId: PLANT_IDS.SHORT_DRY_GRASS, weight: 2 },
       ],
-      allowedSurface: [BLOCK_IDS.TERRACOTTA, BLOCK_IDS.RED_SAND],
+      allowedSurface: [
+        BLOCK_IDS.TERRACOTTA,
+        BLOCK_IDS.RED_TERRACOTTA,
+        BLOCK_IDS.ORANGE_TERRACOTTA,
+        BLOCK_IDS.WHITE_TERRACOTTA,
+        BLOCK_IDS.RED_SAND,
+      ],
     },
   },
 
@@ -291,23 +338,42 @@ export const BIOMES = {
     terrainParams: {
       heightOffset: 0, // 很低，大部分在水下
       roughness: 0.80,
+      // 脊状噪声塑形：尖锐冰山基底起伏
+      shape: { type: 'ridged', gain: 1.6, amount: 1 },
     },
     blocks: {
-      // 冻洋使用冰或压缩冰（随机选择，这里先使用冰）
       surface: BLOCK_IDS.ICE,
       subsurface: BLOCK_IDS.GRAVEL, // 水下使用沙砾
       deep: BLOCK_IDS.PACKED_ICE,
-      // 水下地表使用沙砾（Task 3 先行）
+      // 地表变体：冰 / 浮冰 / 雪盖斑块
+      surfaceVariants: [
+        { blockId: BLOCK_IDS.ICE, weight: 6 },
+        { blockId: BLOCK_IDS.PACKED_ICE, weight: 3 },
+        { blockId: BLOCK_IDS.SNOW, weight: 1 },
+      ],
+      // 水下地表使用沙砾
       underwater: {
         surface: BLOCK_IDS.GRAVEL,
         subsurface: BLOCK_IDS.GRAVEL,
       },
     },
     vegetation: {
-      enabled: false, // 无树
-      density: 0,
-      types: [],
-      allowedSurface: [],
+      enabled: true,
+      density: 0.3, // 冰刺（约每 chunk 个位数）
+      types: [
+        {
+          type: 'iceSpike',
+          shape: 'spike', // 底部 3x3 收分至 1x1 尖顶
+          weight: 1,
+          trunkBlock: BLOCK_IDS.PACKED_ICE,
+          coreBlock: BLOCK_IDS.BLUE_ICE, // 核心点缀蓝冰
+          coreChance: 0.35,
+          leavesBlock: null,
+          heightRange: [6, 14],
+          allowedSurface: [BLOCK_IDS.ICE, BLOCK_IDS.PACKED_ICE, BLOCK_IDS.SNOW],
+        },
+      ],
+      allowedSurface: [BLOCK_IDS.ICE, BLOCK_IDS.PACKED_ICE, BLOCK_IDS.SNOW],
     },
   },
 }
