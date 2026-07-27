@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import Experience from '../experience.js'
 import emitter from '../utils/event/event-bus.js'
 import { CAMERA_RIG_CONFIG } from './camera-rig-config.js'
+import { clampPitch, computeFirstPersonPose } from './first-person-math.js'
 
 /**
  * 帧率无关的指数阻尼函数
@@ -76,6 +77,10 @@ export default class CameraRig {
     // 后视镜因子 (0 = 正常, 1 = 完全镜像)
     this._rearViewFactor = 0
 
+    // 第一人称状态
+    this.isFirstPerson = false
+    this._pitch = 0
+
     // 洞内状态管理
     this.isInCave = false // 当前是否在洞内（头顶有方块）
     this._normalOffset = new THREE.Vector3(2, 1.5, 3.0) // 常规状态偏移
@@ -114,15 +119,26 @@ export default class CameraRig {
     })
 
     emitter.on('input:mouse_move', ({ movementY }) => {
+      // 望远镜模式下的鼠标灵敏度缩放（两种视角共用）
+      const sensitivityMultiplier = (this.isTelescopeActive && this.config.trackingShot.telescope?.enabled)
+        ? this.config.trackingShot.telescope.sensitivityMultiplier
+        : 1.0
+
+      // 第一人称：鼠标直接驱动俯仰角
+      if (this.isFirstPerson) {
+        const fp = this.config.firstPerson
+        this._pitch = clampPitch(
+          this._pitch - movementY * fp.pitchSensitivity * sensitivityMultiplier,
+          fp.pitchMin,
+          fp.pitchMax,
+        )
+        return
+      }
+
       const config = this.config.follow.mouseTargetY
       if (!config.enabled) {
         return
       }
-
-      // 望远镜模式下的鼠标灵敏度缩放
-      const sensitivityMultiplier = (this.isTelescopeActive && this.config.trackingShot.telescope?.enabled)
-        ? this.config.trackingShot.telescope.sensitivityMultiplier
-        : 1.0
 
       // 目标阻尼模型：直接调整目标值
       const sign = config.invertY ? -1 : 1
@@ -144,6 +160,10 @@ export default class CameraRig {
     })
 
     emitter.on('input:wheel', ({ deltaY }) => {
+      if (this.isFirstPerson) {
+        return
+      }
+
       // 滚轮控制相机高度 (常规偏移 Y)
       // 灵敏度因子，deltaY 通常是 100 左右
       const sensitivity = 0.012
@@ -219,6 +239,9 @@ export default class CameraRig {
   }
 
   setShoulderMode(mode) {
+    if (this.isFirstPerson) {
+      return
+    }
     if (this._shoulderMode === mode)
       return
     this._shoulderMode = mode
@@ -262,6 +285,9 @@ export default class CameraRig {
   }
 
   setRearView(active) {
+    if (this.isFirstPerson && active) {
+      return
+    }
     const duration = this.config.rearView.transitionDuration
     gsap.to(this, {
       _rearViewFactor: active ? 1 : 0,
@@ -269,6 +295,34 @@ export default class CameraRig {
       ease: active ? 'power2.out' : 'power2.in',
       overwrite: 'auto',
     })
+  }
+
+  /**
+   * 切换第一/第三人称
+   * @param {boolean} active - true 进入第一人称
+   */
+  setFirstPerson(active) {
+    if (this.isFirstPerson === active) {
+      return
+    }
+    this.isFirstPerson = active
+
+    if (active) {
+      // 进入第一人称：恢复透明度、退出后视镜，避免第三人称残留状态
+      this._currentOpacity = 1.0
+      if (this.target && typeof this.target.setOpacity === 'function') {
+        this.target.setOpacity(1.0)
+      }
+      this.setRearView(false)
+    }
+    else {
+      // 回到第三人称：俯仰与目标点偏移清零
+      this._pitch = 0
+      this.mouseYOffset = 0
+      this.mouseYOffsetTarget = 0
+    }
+
+    emitter.emit('camera:first-person-changed', { active })
   }
 
   /**
@@ -364,14 +418,39 @@ export default class CameraRig {
     // 2. Calculate Speed (Horizontal)
     const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
 
-    // 3. Update Mouse Y Offset (目标阻尼模型)
+    // 3. 第一人称：跳过第三人称全部锚点/洞内/透明度逻辑，直接输出头部位姿
+    if (this.isFirstPerson) {
+      this.isInCave = false
+      const pose = computeFirstPersonPose({
+        position: playerPos,
+        facingAngle,
+        pitch: this._pitch,
+        eyeHeight: this.config.firstPerson.eyeHeight,
+        forwardOffset: this.config.firstPerson.forwardOffset,
+      })
+      this._cameraWorldPos.copy(pose.cameraPos)
+      this._smoothedLookAtTarget.copy(pose.targetPos)
+
+      this._updateDynamicFov(speed, dt)
+      this._updateBobbing(speed, isMoving)
+
+      return {
+        cameraPos: this._cameraWorldPos,
+        targetPos: this._smoothedLookAtTarget,
+        fov: this._currentFov,
+        bobbingOffset: this._bobbingOffset.clone(),
+        bobbingRoll: this._bobbingRoll,
+      }
+    }
+
+    // 4. Update Mouse Y Offset (目标阻尼模型)
     this._updateMouseYOffset(dt)
 
-    // 4. 检测洞内状态并更新相机偏移 (直接驱动 anchor，无中间状态)
+    // 5. 检测洞内状态并更新相机偏移 (直接驱动 anchor，无中间状态)
     this.isInCave = this._checkBlockAbovePlayer(playerPos)
     this._updateCameraOffset(dt)
 
-    // 5. Smooth Follow (Position) - 帧率无关指数阻尼
+    // 6. Smooth Follow (Position) - 帧率无关指数阻尼
     // 使用 lambda = 12 对应约 100ms 的响应时间
     dampVec3(this._smoothedPosition, playerPos, 12, dt)
     this.group.position.copy(this._smoothedPosition)
@@ -380,15 +459,15 @@ export default class CameraRig {
     // Update matrices to ensure getWorldPosition is correct
     this.group.updateMatrixWorld(true)
 
-    // 6. Tracking Shot
+    // 7. Tracking Shot
     this._updateDynamicFov(speed, dt)
     this._updateBobbing(speed, isMoving)
 
-    // 7. Get World Positions (复用预分配向量，避免 GC)
+    // 8. Get World Positions (复用预分配向量，避免 GC)
     this.cameraAnchor.getWorldPosition(this._cameraWorldPos)
     this.targetAnchor.getWorldPosition(this._targetWorldPos)
 
-    // 8. LookAt Target - 直接 copy，无二次平滑 (FPS/MC 风格即时响应)
+    // 9. LookAt Target - 直接 copy，无二次平滑 (FPS/MC 风格即时响应)
     this._smoothedLookAtTarget.copy(this._targetWorldPos)
 
     return {
@@ -783,6 +862,43 @@ export default class CameraRig {
       min: 0,
       max: 0.02,
       step: 0.001,
+    })
+
+    // ===== 第一人称 =====
+    const fpFolder = debugFolder.addFolder({
+      title: '第一人称',
+      expanded: false,
+    })
+
+    fpFolder.addBinding(this, 'isFirstPerson', {
+      label: '当前第一人称',
+      readonly: true,
+    })
+
+    fpFolder.addBinding(this.config.firstPerson, 'eyeHeight', {
+      label: '视点高度',
+      min: 0.5,
+      max: 2.5,
+      step: 0.01,
+    })
+
+    fpFolder.addBinding(this.config.firstPerson, 'forwardOffset', {
+      label: '前移偏移',
+      min: 0,
+      max: 0.5,
+      step: 0.01,
+    })
+
+    fpFolder.addBinding(this.config.firstPerson, 'pitchSensitivity', {
+      label: '俯仰灵敏度',
+      min: 0.001,
+      max: 0.01,
+      step: 0.0005,
+    })
+
+    fpFolder.addBinding(this, '_pitch', {
+      label: '当前俯仰角',
+      readonly: true,
     })
 
     // ===== 洞内状态检测 =====
