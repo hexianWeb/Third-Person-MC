@@ -282,20 +282,12 @@ export const BIOMES = {
     },
     vegetation: {
       enabled: true,
-      density: 0.08, // 稀疏枯树与仙人掌
+      density: 0.15, // 与沙漠一致的仙人掌密度
       types: [
-        {
-          type: 'deadTree',
-          shape: 'none',
-          weight: 3,
-          trunkBlock: BLOCK_IDS.TREE_TRUNK,
-          leavesBlock: null, // 枯树无叶
-          heightRange: [2, 4],
-        },
         {
           type: 'cactus',
           shape: 'none',
-          weight: 2,
+          weight: 1,
           trunkBlock: BLOCK_IDS.CACTUS,
           leavesBlock: null,
           heightRange: [1, 3],
