@@ -465,7 +465,7 @@ export default class TerrainGenerator {
    * @param {object} stats - 统计对象（会被修改）
    */
   _generateVegetation(x, baseY, z, vegetationType, rng, stats) {
-    const { heightRange, trunkBlock, leavesBlock } = vegetationType
+    const { heightRange, trunkBlock, leavesBlock, coreBlock, coreChance } = vegetationType
     const shape = vegetationType.shape
       ?? (leavesBlock ? 'oak' : 'none')
     const { width, height } = this.container.getSize()
@@ -479,6 +479,8 @@ export default class TerrainGenerator {
       z,
       trunkBlock,
       leavesBlock,
+      coreBlock,
+      coreChance,
       heightRange,
       rng,
       bounds: { width, height },
@@ -518,13 +520,18 @@ export default class TerrainGenerator {
           continue
         }
 
-        // 检查地表方块是否允许
+        // 检查地表方块是否允许（群系级与类型级 allowedSurface 的并集先粗筛）
         const surfaceHeight = this.heightMap[baseZ]?.[baseX]
         if (surfaceHeight === undefined)
           continue
 
         const surfaceBlock = this.container.getBlock(baseX, surfaceHeight, baseZ)
-        if (!biomeConfig.vegetation.allowedSurface.includes(surfaceBlock.id)) {
+        const allowedSurfaces = new Set()
+        for (const type of biomeConfig.vegetation.types) {
+          const surfaces = type.allowedSurface ?? biomeConfig.vegetation.allowedSurface
+          surfaces.forEach(id => allowedSurfaces.add(id))
+        }
+        if (!allowedSurfaces.has(surfaceBlock.id)) {
           continue
         }
 
@@ -537,6 +544,13 @@ export default class TerrainGenerator {
         // 选择植被类型（根据权重）
         const vegetationType = this._selectVegetationType(biomeConfig.vegetation.types, rng)
         if (!vegetationType) {
+          continue
+        }
+
+        // 类型级 allowedSurface 覆盖（如仙人掌仅长在红沙斑块）
+        const typeAllowedSurface = vegetationType.allowedSurface
+          ?? biomeConfig.vegetation.allowedSurface
+        if (!typeAllowedSurface.includes(surfaceBlock.id)) {
           continue
         }
 

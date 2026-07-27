@@ -120,9 +120,42 @@ function placeLeafLayers(ctx, topY, profile, stats) {
 }
 
 /**
+ * Place a tapering spike: 3x3 base shrinking to a 1x1 column.
+ * When ctx.coreBlock is set, the center column uses it with probability
+ * ctx.coreChance (decided once per spike).
+ *
+ * @param {object} ctx
+ * @param {number} trunkHeight
+ * @param {{ trunkBlocks: number, leavesBlocks: number }} stats
+ */
+function placeSpike(ctx, trunkHeight, stats) {
+  const baseLayers = Math.max(1, Math.round(trunkHeight / 4))
+  const useCore = ctx.coreBlock != null
+    && ctx.rng.random() < (ctx.coreChance ?? 0.35)
+
+  for (let i = 0; i < trunkHeight; i++) {
+    const y = ctx.baseY + i
+
+    if (i >= baseLayers) {
+      const id = useCore ? ctx.coreBlock : ctx.trunkBlock
+      trySet(ctx, ctx.x, y, ctx.z, id, 'trunk', stats)
+      continue
+    }
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const isCenter = dx === 0 && dz === 0
+        const id = isCenter && useCore ? ctx.coreBlock : ctx.trunkBlock
+        trySet(ctx, ctx.x + dx, y, ctx.z + dz, id, 'trunk', stats)
+      }
+    }
+  }
+}
+
+/**
  * Place a small tree / cactus using a named shape template.
  *
- * @param {'oak' | 'birch' | 'cherry' | 'none'} shape
+ * @param {'oak' | 'birch' | 'cherry' | 'spike' | 'none'} shape
  * @param {{
  *   setBlockId: (x: number, y: number, z: number, id: number) => void,
  *   getBlockId: (x: number, y: number, z: number) => number,
@@ -135,6 +168,8 @@ function placeLeafLayers(ctx, topY, profile, stats) {
  *   heightRange: [number, number],
  *   rng: { random: () => number },
  *   bounds: { width: number, height: number },
+ *   coreBlock?: number,
+ *   coreChance?: number,
  * }} ctx
  * @returns {{ trunkBlocks: number, leavesBlocks: number }} placed block counts
  */
@@ -143,6 +178,11 @@ export function placeTree(shape, ctx) {
   let trunkHeight = randomIntInRange(ctx.heightRange, ctx.rng)
   if (trunkHeight <= 0)
     return stats
+
+  if (shape === 'spike') {
+    placeSpike(ctx, trunkHeight, stats)
+    return stats
+  }
 
   const profile = shape === 'none' || !ctx.leavesBlock
     ? null

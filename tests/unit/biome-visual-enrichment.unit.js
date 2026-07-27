@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { RNG } from '../../src/js/tools/rng.js'
 import {
   blendBiomeTerrainShape,
   calculateBiomeTerrainHeight,
@@ -12,6 +13,7 @@ import {
   selectStrataBlock,
   selectSurfaceVariant,
 } from '../../src/js/world/terrain/terrain-biome-field.js'
+import { placeTree } from '../../src/js/world/terrain/tree-shape.js'
 
 const SHAPED_BIOMES = {
   FLAT: {
@@ -146,4 +148,35 @@ test('biome validation rejects malformed variants and strata', () => {
   assert.throws(() => validateBiomeDefinitions({
     X: { ...base, terrainParams: { ...base.terrainParams, shape: { type: 'spiral' } } },
   }), RangeError)
+})
+
+test('spike shape tapers from a 3x3 base to a single tip', () => {
+  const width = 16
+  const height = 32
+  const data = new Map()
+  const key = (x, y, z) => `${x},${y},${z}`
+  const placed = placeTree('spike', {
+    setBlockId: (x, y, z, id) => data.set(key(x, y, z), id),
+    getBlockId: (x, y, z) => data.get(key(x, y, z)) ?? 0,
+    emptyId: 0,
+    x: 8,
+    baseY: 4,
+    z: 8,
+    trunkBlock: 18, // PACKED_ICE
+    coreBlock: 24, // BLUE_ICE
+    coreChance: 1, // 强制核心，便于断言
+    leavesBlock: null,
+    heightRange: [8, 8],
+    rng: new RNG(7),
+    bounds: { width, height },
+  })
+
+  // 底部两层为 3x3（高 8 → baseLayers = 2），其上为 1x1
+  assert.equal(data.get(key(7, 4, 7)), 18)
+  assert.equal(data.get(key(9, 5, 9)), 18)
+  assert.equal(data.get(key(8, 4, 8)), 24) // 核心蓝冰
+  assert.equal(data.get(key(8, 11, 8)), 24) // 尖顶核心
+  assert.equal(data.get(key(7, 6, 8)) ?? 0, 0) // 上部无 3x3
+  assert.ok(placed.trunkBlocks >= 8 * 1 + 2 * 8) // 中心柱 + 底部两圈 8 格
+  assert.equal(placed.leavesBlocks, 0)
 })
